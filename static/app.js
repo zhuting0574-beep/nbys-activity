@@ -11,6 +11,58 @@ document.addEventListener('click', (event) => {
   }
 });
 
+// V78: restore the page viewport after the soft keyboard closes in Android WeChat.
+(function () {
+  const root = document.documentElement;
+  const editableSelector = 'input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]';
+  let stableHeight = 0;
+  let focusScrollY = 0;
+  let settleTimer = null;
+
+  function viewportHeight() {
+    const visualHeight = window.visualViewport?.height || 0;
+    return Math.round(Math.max(visualHeight, window.innerHeight || 0, root.clientHeight || 0));
+  }
+
+  function syncViewport(force = false) {
+    const active = document.activeElement;
+    const editing = active && active.matches && active.matches(editableSelector);
+    const height = viewportHeight();
+    if (!height) return;
+    if (!editing || force) stableHeight = Math.max(stableHeight, height);
+    if (stableHeight) root.style.setProperty('--app-height', `${stableHeight}px`);
+  }
+
+  function settleAfterKeyboard() {
+    clearTimeout(settleTimer);
+    const startedAt = Date.now();
+    const restore = () => {
+      syncViewport(true);
+      const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo(0, Math.min(focusScrollY, maxScroll));
+      if (Date.now() - startedAt < 700) settleTimer = setTimeout(restore, 120);
+    };
+    settleTimer = setTimeout(restore, 80);
+  }
+
+  syncViewport(true);
+  window.addEventListener('load', () => syncViewport(true));
+  window.addEventListener('pageshow', () => syncViewport(true));
+  window.addEventListener('orientationchange', () => {
+    stableHeight = 0;
+    setTimeout(() => syncViewport(true), 250);
+  });
+  window.addEventListener('resize', () => syncViewport(false));
+  window.visualViewport?.addEventListener('resize', () => syncViewport(false));
+
+  document.addEventListener('focusin', (event) => {
+    if (event.target.matches?.(editableSelector)) focusScrollY = window.scrollY;
+  });
+  document.addEventListener('focusout', (event) => {
+    if (event.target.matches?.(editableSelector)) settleAfterKeyboard();
+  });
+})();
+
 // V8: 活动策划日期选择框，点击 + 新增日期，点击 - 删除日期。
 document.addEventListener('click', (event) => {
   const addBtn = event.target.closest('[data-add-date]');

@@ -8,7 +8,6 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for, f
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
 
 APP_TITLE = "宁波甬士活动管理系统"
 JOB_OPTIONS = ["突击兵", "支援兵", "医疗兵", "狙击手", "弹药兵", "填线兵"]
@@ -1136,9 +1135,28 @@ def get_launcher_rental_setting() -> LauncherRentalSetting:
     return setting
 
 
-def allowed_photo(filename: str) -> bool:
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return ext in {"jpg", "jpeg", "png", "gif", "webp"}
+PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+
+
+def uploaded_photo_extension(file_storage) -> str:
+    """Return a normalized extension after checking the uploaded image bytes."""
+    original_name = os.path.basename((file_storage.filename or "").strip())
+    ext = os.path.splitext(original_name)[1].lstrip(".").lower()
+    if ext not in PHOTO_EXTENSIONS:
+        raise ValueError("照片格式只支持 jpg、jpeg、png、gif、webp。")
+
+    header = file_storage.stream.read(16)
+    file_storage.stream.seek(0)
+    signatures = {
+        "jpg": header.startswith(b"\xff\xd8\xff"),
+        "jpeg": header.startswith(b"\xff\xd8\xff"),
+        "png": header.startswith(b"\x89PNG\r\n\x1a\n"),
+        "gif": header.startswith((b"GIF87a", b"GIF89a")),
+        "webp": header.startswith(b"RIFF") and header[8:12] == b"WEBP",
+    }
+    if not signatures[ext]:
+        raise ValueError("图片内容与文件扩展名不一致，请重新选择图片。")
+    return "jpg" if ext == "jpeg" else ext
 
 
 def save_uploaded_photo(file_storage, upload_subdir: str, stable_prefix: str):
@@ -1150,10 +1168,7 @@ def save_uploaded_photo(file_storage, upload_subdir: str, stable_prefix: str):
     """
     if not file_storage or not file_storage.filename:
         return None
-    filename = secure_filename(file_storage.filename)
-    if not filename or not allowed_photo(filename):
-        raise ValueError("照片格式只支持 jpg、jpeg、png、gif、webp。")
-    ext = filename.rsplit(".", 1)[-1].lower()
+    ext = uploaded_photo_extension(file_storage)
     upload_dir = os.path.join(BASE_DIR, "static", "uploads", upload_subdir)
     os.makedirs(upload_dir, exist_ok=True)
     final_name = f"{stable_prefix}.{ext}"
@@ -3527,8 +3542,8 @@ def extraction_items():
         if photo and photo.filename:
             try:
                 item.photo_filename = save_uploaded_photo(photo, "extraction_items", f"item_{item.id}")
-            except ValueError:
-                flash("照片只支持 jpg、jpeg、png、gif、webp。", "error")
+            except ValueError as exc:
+                flash(str(exc), "error")
                 db.session.rollback()
                 return redirect(url_for("extraction_items"))
         db.session.commit()
@@ -3695,8 +3710,8 @@ def extraction_seasons():
             return redirect(url_for("extraction_seasons"))
         try:
             banner_filename = save_uploaded_photo(banner, "extraction_banner", "yongcheng_banner")
-        except ValueError:
-            flash("主页图片只支持 jpg、jpeg、png、gif、webp。", "error")
+        except ValueError as exc:
+            flash(str(exc), "error")
             return redirect(url_for("extraction_seasons"))
         setting = get_extraction_ui_setting()
         setting.banner_filename = banner_filename

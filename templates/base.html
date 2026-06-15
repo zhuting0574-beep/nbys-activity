@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{{ APP_TITLE }}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=76">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=78">
 </head>
 <body>
   <nav class="topbar">
@@ -36,7 +36,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <script src="{{ url_for('static', filename='app.js') }}?v=76"></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=78"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
