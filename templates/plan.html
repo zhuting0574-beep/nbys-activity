@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="activity-header">
+  <div>
+    <h1>{{ plan.name }}</h1>
+    <p class="muted">投票截止：{{ plan.vote_deadline.strftime('%Y-%m-%d %H:%M') }} · 发起人：{{ plan.created_by.callsign if plan.created_by else '-' }}</p>
+    <div class="info-line">
+      <span class="status {{ status_class }}">{{ status_text }}</span>
+      <span>已参与投票：<strong>{{ voters_count }}</strong> 人</span>
+      {% if can_view_visibility_info %}<span>可见范围：{{ visibility_label }}</span>{% endif %}
+      {% if plan.converted_activity %}<span>已转正式活动：{{ plan.converted_activity.name }}</span>{% endif %}
+    </div>
+    {% if current_user.is_admin %}
+    <div class="info-actions plan-info-actions">
+      <button type="button" class="button secondary" data-open-modal="editPlanModal">策划编辑</button>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if current_user.is_admin %}
+<div id="editPlanModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>编辑活动策划</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <form method="post" action="{{ url_for('edit_plan', plan_id=plan.id) }}" class="form-grid">
+      <label>活动名称<input name="name" value="{{ plan.name }}" required></label>
+      <label>投票截止时间<input type="datetime-local" name="vote_deadline" value="{{ plan.vote_deadline.strftime('%Y-%m-%dT%H:%M') }}" required></label>
+      <fieldset class="full checkbox-box activity-visibility-box">
+        <legend>活动策划可见范围</legend>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_only" {% if plan.visibility_type == 'official_only' %}checked{% endif %}> 仅正式队员可见</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="all" {% if not plan.visibility_type or plan.visibility_type == 'all' %}checked{% endif %}> 对所有人公开</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_plus_invite" {% if plan.visibility_type == 'official_plus_invite' %}checked{% endif %}> 正式队员和邀请队员可见</label>
+        <div class="invitee-select-box compact-invitee-picker">
+          <div class="muted small-text">邀请队员：正式队员自动可见；这里仅显示非正式队员。</div>
+          <div class="invitee-picker-row">
+            <button type="button" class="secondary small" data-open-modal="inviteePickerPlanEdit">选择邀请队员</button>
+            <span class="invitee-count" data-invitee-count>已选择 0 人</span>
+          </div>
+        </div>
+        <div id="inviteePickerPlanEdit" class="modal" aria-hidden="true">
+          <div class="modal-backdrop" data-close-modal></div>
+          <div class="modal-panel large invitee-picker-modal">
+            <div class="modal-head">
+              <h2>选择邀请队员</h2>
+              <button type="button" class="icon-btn" data-close-modal>×</button>
+            </div>
+            <div class="invitee-search-wrap"><input type="search" placeholder="搜索呼号或用户名" data-invitee-search></div>
+            <div class="invitee-list-panel" data-invitee-list>
+              {% for u in users %}
+              {% if not u.is_admin and not u.is_regular_member %}
+              <label class="invitee-list-item" data-invitee-item data-search-text="{{ (u.callsign ~ ' ' ~ u.username)|lower }}">
+                <input type="checkbox" name="invitee_ids" value="{{ u.id }}" data-invitee-checkbox {% if u.id in invited_plan_ids %}checked{% endif %}>
+                <span class="invitee-main">{{ u.callsign }}</span>
+                <span class="invitee-sub">{{ u.username }}</span>
+              </label>
+              {% endif %}
+              {% endfor %}
+            </div>
+            <div class="form-actions"><button type="button" class="secondary" data-close-modal>完成</button></div>
+          </div>
+        </div>
+      </fieldset>
+      <div class="full form-actions">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button class="primary" type="submit">保存修改</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<section class="management-grid plan-grid">
+  <div class="panel">
+    <div class="section-head"><h2>我的投票</h2><span class="muted">可多选，保存后会覆盖之前的投票。</span></div>
+    {% if status_text == '策划中' %}
+    <form method="post" action="{{ url_for('vote_plan', plan_id=plan.id) }}" class="vote-form">
+      <div class="vote-compact-grid">
+        <div>
+          <h3>可选日期</h3>
+          <div class="checkbox-box stacked compact-options">
+            {% for o in plan.date_options %}
+            <label class="vote-option-row vote-option-row-fixed"><input class="vote-checkbox-fixed" type="checkbox" name="date_ids" value="{{ o.id }}" {% if o.id in my_votes.date %}checked{% endif %}><span class="vote-option-text-fixed">{{ format_plan_date_option(o) }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div>
+          <h3>可选场地</h3>
+          <div class="checkbox-box stacked compact-options">
+            {% for o in plan.venue_options %}
+            <label class="vote-option-row vote-option-row-fixed"><input class="vote-checkbox-fixed" type="checkbox" name="venue_ids" value="{{ o.venue_id }}" {% if o.venue_id in my_votes.venue %}checked{% endif %}><span class="vote-option-text-fixed">{{ o.venue.name }}</span></label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <h3>指定游戏模式</h3>
+      <div class="mode-list compact-mode-list">
+        {% for o in plan.mode_options %}
+        <div class="mode-card compact-mode-card"><div><strong>{{ o.game_mode.name }}</strong><span class="muted">适合人数：{{ o.game_mode.suitable_people }}</span></div></div>
+        {% endfor %}
+      </div>
+      <div class="form-actions"><button class="primary" type="submit">保存投票</button></div>
+    </form>
+    {% else %}
+    <div class="empty-state">投票已截止或策划已隐藏，不能继续投票。</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="section-head"><h2>投票统计</h2><span class="muted">所有人可见</span></div>
+    <h3>日期统计</h3>
+    <div class="stat-list">
+      {% for o in plan.date_options %}<div><strong>{{ format_plan_date_option(o) }}</strong><span>{{ stats.date.get(o.id, 0) }} 票</span></div>{% endfor %}
+    </div>
+    <h3>场地统计</h3>
+    <div class="stat-list">
+      {% for o in plan.venue_options %}<div><strong>{{ o.venue.name }}</strong><span>{{ stats.venue.get(o.venue_id, 0) }} 票</span></div>{% endfor %}
+    </div>
+    <h3>投票明细</h3>
+    {% if vote_details %}
+    <div class="vote-detail-list">
+      {% for row in vote_details %}
+      <div class="vote-detail-row">
+        <strong class="vote-detail-callsign">{{ row.callsign }}</strong>
+        <div class="vote-detail-cols">
+          <div><span class="field-title">日期</span>{{ row.dates|join('、') if row.dates else '-' }}</div>
+          <div><span class="field-title">场地</span>{{ row.venues|join('、') if row.venues else '-' }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state compact-empty">暂时还没有人投票。</div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>游戏模式玩法</h2></div>
+  <div class="mode-list">
+    {% for o in plan.mode_options %}
+    <div class="mode-card"><div><strong>{{ o.game_mode.name }}</strong><span class="muted">适合人数：{{ o.game_mode.suitable_people }}</span></div><p>{{ o.game_mode.rules }}</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if current_user.is_admin %}
+<section class="panel compact-admin-panel">
+  <div class="section-head">
+    <div>
+      <h2>创建正式活动</h2>
+      <span class="muted">创建成功后，此活动策划会自动隐藏；可在活动管理页面恢复。</span>
+    </div>
+    <button class="primary" type="button" data-open-modal="convertPlanModal">创建正式活动</button>
+  </div>
+</section>
+
+<div id="convertPlanModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>创建正式活动</h2>
+      <button class="icon-btn" type="button" data-close-modal>×</button>
+    </div>
+    <form method="post" action="{{ url_for('convert_plan_to_activity', plan_id=plan.id) }}" class="form-grid">
+      <label>正式活动日期
+        <select name="date_option_id" required>{% for o in plan.date_options %}<option value="{{ o.id }}">{{ format_plan_date_option(o) }}</option>{% endfor %}</select>
+      </label>
+      <label>正式活动场地
+        <select name="venue_id" required>{% for o in plan.venue_options %}<option value="{{ o.venue_id }}">{{ o.venue.name }}</option>{% endfor %}</select>
+      </label>
+      <label>开始时间<input type="time" name="start_time" value="09:00" required></label>
+      <label>结束时间<input type="time" name="end_time" value="17:00" required></label>
+      <label>活动开启人数<input type="number" min="1" name="open_min" required></label>
+      <label>阵营数<input type="number" min="1" name="camp_count" value="2" required></label>
+      <label>阵营人数上限<input type="number" min="1" name="camp_limit" required></label>
+      <label>小队数<input type="number" min="1" name="squad_count" value="4" required></label>
+      <label>小队人数上限<input type="number" min="1" name="squad_limit" required></label>
+      <label>活动地区
+        <select name="activity_region" required>
+          {% for r in ACTIVITY_REGION_OPTIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+
+      <fieldset class="full checkbox-box activity-visibility-box">
+        <legend>活动可见范围</legend>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_only"> 仅正式队员可见</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="all" checked> 对所有人公开</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_plus_invite"> 正式队员和邀请队员可见</label>
+        <div class="invitee-select-box compact-invitee-picker">
+          <div class="muted small-text">邀请队员：正式队员自动可见；这里仅显示非正式队员。</div>
+          <div class="invitee-picker-row">
+            <button type="button" class="secondary small" data-open-modal="inviteePickerPlanCreate">选择邀请队员</button>
+            <span class="invitee-count" data-invitee-count>已选择 0 人</span>
+          </div>
+        </div>
+        <div id="inviteePickerPlanCreate" class="modal" aria-hidden="true">
+          <div class="modal-backdrop" data-close-modal></div>
+          <div class="modal-panel large invitee-picker-modal">
+            <div class="modal-head">
+              <h2>选择邀请队员</h2>
+              <button type="button" class="icon-btn" data-close-modal>×</button>
+            </div>
+            <div class="invitee-search-wrap">
+              <input type="search" placeholder="搜索呼号或用户名" data-invitee-search>
+            </div>
+            <div class="invitee-list-panel" data-invitee-list>
+              {% for u in users %}
+              {% if not u.is_admin and not u.is_regular_member %}
+              <label class="invitee-list-item" data-invitee-item data-search-text="{{ (u.callsign ~ ' ' ~ u.username)|lower }}">
+                <input type="checkbox" name="invitee_ids" value="{{ u.id }}" data-invitee-checkbox>
+                <span class="invitee-main">{{ u.callsign }}</span>
+                <span class="invitee-sub">{{ u.username }}</span>
+              </label>
+              {% endif %}
+              {% endfor %}
+            </div>
+            <div class="form-actions">
+              <button type="button" class="secondary" data-close-modal>完成</button>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+      <fieldset class="full checkbox-box"><legend>正式活动游戏模式</legend>{% for o in plan.mode_options %}<label class="checkbox-inline"><input type="checkbox" name="mode_ids" value="{{ o.game_mode_id }}" checked> {{ o.game_mode.name }}</label>{% endfor %}</fieldset>
+
+      <fieldset class="full checkbox-box"><legend>开放租赁发射器</legend>{% for l in launchers %}<label class="checkbox-inline"><input type="checkbox" name="launcher_ids" value="{{ l.id }}"> {{ l.name }}{% if l.owner_type %}（{{ l.owner_type }}）{% endif %}{% if l.rent_fee %} · {{ l.rent_fee }}{% endif %}</label>{% else %}<span class="muted">暂无可用租赁发射器。</span>{% endfor %}</fieldset>
+      <fieldset class="full checkbox-box"><legend>开放职业</legend>{% for job in JOB_OPTIONS %}<label class="checkbox-inline"><input type="checkbox" name="allowed_jobs" value="{{ job }}" checked> {{ job }}</label>{% endfor %}</fieldset>
+      <div class="full form-actions">
+        <button class="secondary" type="button" data-close-modal>取消</button>
+        <button class="primary" type="submit" onclick="return confirm('确认创建正式活动并隐藏当前策划？')">确认创建</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

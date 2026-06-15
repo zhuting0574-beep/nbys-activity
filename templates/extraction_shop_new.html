@@ -1,0 +1,22 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head">
+    <h2>商店添加新货品</h2>
+    <a class="secondary small" href="{{ url_for('extraction_shop') }}">返回商店</a>
+  </div>
+  <form method="post" class="form-grid">
+    <label>分类<select name="category"><option value="storage">仓库扩充</option><option value="item">常规物品</option><option value="weapon">武器</option></select></label>
+    <label>商品名称<input name="name" required></label>
+    <label>单个价格<input type="number" name="price" min="0" value="0"></label>
+    <label>库存数量<input type="number" name="stock" min="0" value="1"></label>
+    <label>下架日期<input type="date" name="shelf_until"></label>
+    <label>仓库纵向尺寸<input type="number" name="storage_rows" min="1" value="6"></label>
+    <label>仓库横向尺寸<input type="number" name="storage_cols" min="1" value="10"></label>
+    <div class="form-actions">
+      <button class="primary" type="submit">新增商品</button>
+      <a class="secondary" href="{{ url_for('extraction_shop') }}">取消</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

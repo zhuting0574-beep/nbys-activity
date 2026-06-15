@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <div>
+    <h1>{{ APP_TITLE }}</h1>
+    <p class="muted">当前用户呼号：<strong>{{ current_user.callsign }}</strong></p>
+  </div>
+  <div class="stats">
+    <div><strong>{{ users_count }}</strong><span>注册人数</span></div>
+    <div><strong>{{ online_count }}</strong><span>在线人数</span></div>
+  </div>
+</section>
+
+
+{% if can_access_extraction_nav %}
+<a class="xipie-banner-plain" href="{{ url_for('extraction_home') }}" aria-label="进入逃离西撇镇">
+  {% if extraction_setting and extraction_setting.banner_filename %}
+  <img class="xipie-banner-plain-img" src="{{ url_for('static', filename='uploads/extraction_banner/' ~ extraction_setting.banner_filename) }}" alt="逃离西撇镇">
+  {% endif %}
+</a>
+{% endif %}
+
+{% if is_manager %}
+<div class="actions-row">
+  <a class="button primary" href="{{ url_for('new_activity') }}">创建活动</a>
+  <a class="button primary" href="{{ url_for('new_plan') }}">发起活动策划</a>
+</div>
+{% endif %}
+
+{% if plan_cards %}
+<section class="section-head standalone-head"><h2>活动策划 / 投票</h2><span class="muted">状态为“策划中”的活动可以点开投票。</span></section>
+<section class="cards-grid">
+  {% for item in plan_cards %}
+  {% set p = item.plan %}
+  <a class="activity-card plan-card" href="{{ url_for('plan_detail', plan_id=p.id) }}">
+    <div class="card-head">
+      <h2>{{ p.name }}</h2>
+      <span class="status {{ item.status_class }}">{{ item.status_text }}</span>
+    </div>
+    <div class="card-meta">
+      <span>投票截止：{{ p.vote_deadline.strftime('%Y-%m-%d %H:%M') }}</span>
+      <span>可选日期：{{ p.date_options|length }} 个</span>
+      <span>可选场地：{{ p.venue_options|length }} 个</span>
+    </div>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="section-head standalone-head"><h2>正式活动</h2></section>
+<section class="cards-grid">
+  {% for item in activity_cards %}
+  {% set a = item.activity %}
+  <a class="activity-card" href="{{ url_for('activity_detail', activity_id=a.id) }}">
+    <div class="card-head">
+      <h2>{{ a.name }}</h2>
+      {% if a.visibility_type and a.visibility_type != 'all' %}
+      <span class="status locked">非公开活动</span>
+      {% else %}
+      <span class="status {{ item.status_class }}">{{ item.status_text }}</span>
+      {% endif %}
+    </div>
+    <div class="card-meta">
+      <span>时间：{{ a.start_at.strftime('%Y-%m-%d %H:%M') }} - {{ a.end_at.strftime('%H:%M') }}</span>
+      <span>地点：{{ a.location }}</span>
+      <span>报名：{{ item.count }}/{{ a.open_min }}（达到开启人数）</span>
+    </div>
+  </a>
+  {% else %}
+  <div class="empty-state">当前没有活动。{% if current_user.is_admin %}点击上方“创建活动”开始创建。{% endif %}</div>
+  {% endfor %}
+</section>
+
+{% if is_manager %}
+<div id="createActivityModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>创建军推活动</h2>
+      <button class="icon-btn" data-close-modal>×</button>
+    </div>
+    <form method="post" action="{{ url_for('create_activity') }}" class="form-grid">
+      <label>活动名称<input name="name" required></label>
+      <label>预设场地
+        <select name="venue_id">
+          <option value="">手动输入地点</option>
+          {% for v in venues %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="full">手动地点<input name="location" placeholder="未选择预设场地时填写"></label>
+      <label>活动开始时间<input type="datetime-local" name="start_at" required></label>
+      <label>活动结束时间<input type="datetime-local" name="end_at" required></label>
+      <label>活动开启人数<input type="number" min="1" name="open_min" required></label>
+      <label>阵营数<input type="number" min="1" name="camp_count" value="2" required></label>
+      <label>阵营人数上限<input type="number" min="1" name="camp_limit" required></label>
+      <label>小队数<input type="number" min="1" name="squad_count" value="4" required></label>
+      <label>小队人数上限<input type="number" min="1" name="squad_limit" required></label>
+      <fieldset class="full checkbox-box">
+        <legend>游戏模式（可多选）</legend>
+        {% for m in game_modes %}
+        <label class="checkbox-inline"><input type="checkbox" name="game_mode_ids" value="{{ m.id }}"> {{ m.name }}</label>
+        {% else %}<span class="muted">暂无预设游戏模式，可先到“模式管理”创建。</span>{% endfor %}
+      </fieldset>
+      <fieldset class="full checkbox-box">
+        <legend>开放职业</legend>
+        {% for job in JOB_OPTIONS %}
+        <label class="checkbox-inline"><input type="checkbox" name="allowed_jobs" value="{{ job }}" checked> {{ job }}</label>
+        {% endfor %}
+      </fieldset>
+      <div class="full form-actions">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button class="primary" type="submit">创建活动</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="createPlanModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>发起活动策划</h2>
+      <button class="icon-btn" data-close-modal>×</button>
+    </div>
+    <form method="post" action="{{ url_for('create_plan') }}" class="form-grid">
+      <label>活动名称<input name="name" required></label>
+      <label>投票截止时间<input type="datetime-local" name="vote_deadline" required></label>
+      <div class="full date-list-field" data-date-list>
+        <div class="field-label">可选日期</div>
+        <div class="date-list-items" data-date-list-items>
+          <div class="date-input-row"><input type="date" name="dates" required><input type="text" name="date_notes" maxlength="80" placeholder="备注，可选" class="date-note-input"><button type="button" class="button secondary small" data-add-date>+</button></div>
+        </div>
+      </div>
+      <fieldset class="full checkbox-box">
+        <legend>开放可选场地</legend>
+        {% for v in venues %}<label class="checkbox-inline"><input type="checkbox" name="venue_ids" value="{{ v.id }}"> {{ v.name }}</label>
+        {% else %}<span class="muted">暂无预设场地，请先创建预设场地。</span>{% endfor %}
+      </fieldset>
+      <fieldset class="full checkbox-box">
+        <legend>指定游戏模式</legend>
+        {% for m in game_modes %}<label class="checkbox-inline"><input type="checkbox" name="mode_ids" value="{{ m.id }}"> {{ m.name }}</label>
+        {% else %}<span class="muted">暂无预设游戏模式，请先创建预设游戏模式。</span>{% endfor %}
+      </fieldset>
+      <div class="full form-actions">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button class="primary" type="submit">发起策划</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

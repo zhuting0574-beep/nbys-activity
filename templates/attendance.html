@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim">
+  <div>
+    <h1>出勤率统计</h1>
+    <p class="muted">普通用户只显示自己参加过的活动；超级管理员和出勤率管理可以查看并修改完整出勤记录。</p>
+  </div>
+  <div class="hero-actions attendance-filter-actions">
+    <form method="get" action="{{ url_for('attendance') }}" class="inline-filter-form attendance-filter-form">
+      <div class="filter-field year-field">
+        <span class="filter-label">自然年度</span>
+        <select name="year" onchange="this.form.submit()">
+          <option value="">全部年度</option>
+          {% for y in available_years %}
+          <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field region-field">
+        <span class="filter-label">活动地区</span>
+        <select name="region" onchange="this.form.submit()">
+          <option value="">全部地区</option>
+          {% for r in ACTIVITY_REGION_OPTIONS %}
+          <option value="{{ r }}" {% if selected_region == r %}selected{% endif %}>{{ r }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% if not is_personal_attendance %}<label class="checkbox-line compact-check filter-check"><input type="checkbox" name="regular" value="1" {% if regular_only %}checked{% endif %} onchange="this.form.submit()"> <span>只看正式队员</span></label>{% endif %}
+      <button class="button secondary filter-submit" type="submit">筛选</button>
+    </form>
+  </div>
+</section>
+
+{% if current_user.can_manage_attendance %}
+<section class="panel compact-admin-panel attendance-manual-shortcut">
+  <div class="section-head">
+    <div>
+      <h2>历史活动记录</h2>
+      <span class="muted">用于补录非平台组织的活动；创建后可在下方表格手动点选出勤。</span>
+    </div>
+    <button class="primary" type="button" data-open-modal="createAttendanceEventModal">手动增加历史活动</button>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel attendance-summary-panel">
+  <div class="section-head">
+    <div>
+      <h2>出勤统计概览</h2>
+      <span class="muted">{{ attendance_summary.scope_label }}{% if selected_region %} · {{ selected_region }}{% endif %}</span>
+    </div>
+  </div>
+  <div class="attendance-summary-grid {% if is_personal_attendance %}personal-summary-grid{% endif %}">
+    <div class="attendance-summary-card">
+      <span class="summary-label">{% if is_personal_attendance %}我参加的活动总数{% else %}活动总次数{% endif %}</span>
+      <strong>{{ attendance_summary.total_events }}</strong>
+    </div>
+    {% if not is_personal_attendance %}
+    <div class="attendance-summary-card">
+      <span class="summary-label">前三出勤正式队员</span>
+      {% if attendance_summary.top_regular_attendance %}
+      <ol class="summary-rank-list">
+        {% for name, count in attendance_summary.top_regular_attendance %}
+        <li><span>{{ name }}</span><b>{{ count }}</b></li>
+        {% endfor %}
+      </ol>
+      {% else %}<span class="muted">暂无</span>{% endif %}
+    </div>
+    <div class="attendance-summary-card">
+      <span class="summary-label">最多组织活动队员</span>
+      {% if attendance_summary.top_organizers %}
+      <ol class="summary-rank-list">
+        {% for name, count in attendance_summary.top_organizers %}
+        <li><span>{{ name }}</span><b>{{ count }}</b></li>
+        {% endfor %}
+      </ol>
+      {% else %}<span class="muted">暂无</span>{% endif %}
+    </div>
+    <div class="attendance-summary-card">
+      <span class="summary-label">最受欢迎场地</span>
+      {% if attendance_summary.top_locations %}
+      <ol class="summary-rank-list">
+        {% for name, count in attendance_summary.top_locations %}
+        <li><span>{{ name }}</span><b>{{ count }}</b></li>
+        {% endfor %}
+      </ol>
+      {% else %}<span class="muted">暂无</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="panel attendance-panel">
+  <div class="section-head">
+    <h2>出勤表</h2>
+    <span class="muted">{% if is_personal_attendance %}这里只显示你已参加的活动。{% else %}实心圆点表示出勤。活动横向显示：名称 / 日期 / 场地 / 组织人。{% endif %}</span>
+  </div>
+  <div class="attendance-table-wrap">
+    <table class="attendance-table">
+      <thead>
+        <tr>
+          <th class="sticky-col user-col">人员</th>
+          <th class="sticky-col count-col">出勤次数</th>
+          {% for e in events %}
+          <th class="event-col">
+            <div class="event-title">{{ e.name }}</div>
+            <div class="event-meta">{{ e.event_date.strftime('%Y-%m-%d') }}</div>
+            <div class="event-meta">{{ e.location or '-' }}</div>
+            <div class="event-meta">{{ e.organizer or '-' }}</div>
+            <div class="event-region {{ 'region-outside' if (e.activity_region or '宁波') == '外地' else 'region-ningbo' }}">{{ e.activity_region or '宁波' }}</div>
+            <div class="event-attendance-counts">总: {{ event_total_counts.get(e.id, 0) }}</div>
+            <div class="event-attendance-counts">正式: {{ event_regular_counts.get(e.id, 0) }}</div>
+            {% if current_user.can_manage_attendance %}
+            <div class="event-tools">
+              <button class="mini-button" type="button" data-open-modal="editAttendanceEvent{{ e.id }}">编辑</button>
+              <form method="post" action="{{ url_for('delete_attendance_event', event_id=e.id) }}" onsubmit="return confirm('确定删除这个出勤活动记录吗？对应出勤记录也会删除。自动生成的记录删除后不会自动重新生成。');">
+                <button class="mini-button danger" type="submit">删除</button>
+              </form>
+            </div>
+            {% endif %}
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="sticky-col user-col"><strong>{{ u.callsign }}</strong>{% if u.is_regular_member %}<span class="badge tiny">正式</span>{% endif %}</td>
+          <td class="sticky-col count-col"><strong data-attendance-count="{{ u.id }}">{{ attendance_counts.get(u.id, 0) }}</strong></td>
+          {% for e in events %}
+          <td class="attendance-cell">
+            {% if current_user.can_manage_attendance %}
+            <form method="post" action="{{ url_for('toggle_attendance_record', event_id=e.id, user_id=u.id) }}" data-attendance-toggle data-user-id="{{ u.id }}">
+              <button class="dot-button {{ 'present' if present_map.get((u.id, e.id)) else '' }}" type="submit" title="点击切换出勤"></button>
+            </form>
+            {% else %}
+            <span class="attendance-dot {{ 'present' if present_map.get((u.id, e.id)) else '' }}"></span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 2 + events|length }}" class="muted">暂无人员。</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if not events %}<div class="empty-state">{% if is_personal_attendance %}当前筛选条件下暂无你的出勤记录。{% else %}暂无出勤活动。正式活动成功结束后会自动出现在这里，也可以手动增加历史活动。{% endif %}</div>{% endif %}
+</section>
+
+
+{% if current_user.can_manage_attendance %}
+<div class="modal" id="createAttendanceEventModal">
+  <div class="modal-card">
+    <button class="modal-close" type="button" data-close-modal>&times;</button>
+    <h2>手动增加历史活动</h2>
+    <form method="post" action="{{ url_for('create_manual_attendance_event') }}" class="form-grid">
+      <label>活动名称<input name="name" required></label>
+      <label>日期<input type="date" name="event_date" required></label>
+      <label>场地<input name="location"></label>
+      <label>组织人
+        <select name="organizer">
+          <option value="">请选择正式队员</option>
+          {% for m in regular_members %}<option value="{{ m.callsign }}">{{ m.callsign }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>活动地区
+        <select name="activity_region">
+          {% for r in ACTIVITY_REGION_OPTIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="full form-actions"><button class="primary" type="submit">增加历史活动</button></div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if current_user.can_manage_attendance %}
+{% for e in events %}
+<div class="modal" id="editAttendanceEvent{{ e.id }}">
+  <div class="modal-card">
+    <button class="modal-close" type="button" data-close-modal>&times;</button>
+    <h2>编辑出勤活动记录</h2>
+    <form method="post" action="{{ url_for('edit_attendance_event', event_id=e.id) }}" class="form-grid">
+      <label>活动名称<input name="name" value="{{ e.name }}" required></label>
+      <label>日期<input type="date" name="event_date" value="{{ e.event_date.strftime('%Y-%m-%d') }}" required></label>
+      <label>场地<input name="location" value="{{ e.location or '' }}"></label>
+      <label>组织人
+        <select name="organizer">
+          <option value="">请选择正式队员</option>
+          {% if e.organizer %}<option value="{{ e.organizer }}" selected>当前：{{ e.organizer }}</option>{% endif %}
+          {% for m in regular_members %}<option value="{{ m.callsign }}">{{ m.callsign }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>活动地区
+        <select name="activity_region">
+          {% for r in ACTIVITY_REGION_OPTIONS %}<option value="{{ r }}" {% if (e.activity_region or '宁波') == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="full form-actions"><button class="primary" type="submit">保存修改</button></div>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}

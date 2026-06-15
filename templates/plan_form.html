@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section-head standalone-head">
+  <h1>发起活动策划</h1>
+  <a class="button secondary" href="{{ url_for('dashboard') }}">返回主界面</a>
+</section>
+
+<section class="panel-card">
+  <form method="post" action="{{ url_for('create_plan') }}" class="form-grid">
+    <label>活动名称<input name="name" required></label>
+    <label>投票截止时间<input type="datetime-local" name="vote_deadline" required></label>
+    <div class="full date-list-field" data-date-list>
+      <div class="field-label">可选日期</div>
+      <div class="date-list-items" data-date-list-items>
+        <div class="date-input-row">
+          <input type="date" name="dates" required>
+          <input type="text" name="date_notes" maxlength="80" placeholder="备注，可选" class="date-note-input">
+          <button type="button" class="button secondary small" data-add-date>+</button>
+        </div>
+      </div>
+      <p class="muted compact-help">点击 + 可以继续添加可选日期。</p>
+    </div>
+
+    <fieldset class="full checkbox-box">
+      <legend>开放可选场地</legend>
+      {% for v in venues %}
+      <label class="checkbox-inline"><input type="checkbox" name="venue_ids" value="{{ v.id }}"> {{ v.name }}</label>
+      {% else %}
+      <span class="muted">暂无预设场地，请先到“场地管理”创建。</span>
+      {% endfor %}
+    </fieldset>
+
+    <fieldset class="full checkbox-box">
+      <legend>指定游戏模式</legend>
+      {% for m in game_modes %}
+      <label class="checkbox-inline"><input type="checkbox" name="mode_ids" value="{{ m.id }}"> {{ m.name }}{% if m.suitable_people %}（{{ m.suitable_people }}）{% endif %}</label>
+      {% else %}
+      <span class="muted">暂无预设游戏模式，请先到“模式管理”创建。</span>
+      {% endfor %}
+    </fieldset>
+
+
+    <fieldset class="full checkbox-box activity-visibility-box">
+      <legend>活动策划可见范围</legend>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_only"> 仅正式队员可见</label>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="all" checked> 对所有人公开</label>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_plus_invite"> 正式队员和邀请队员可见</label>
+      <div class="invitee-select-box compact-invitee-picker">
+        <div class="muted small-text">邀请队员：正式队员自动可见；这里仅显示非正式队员。</div>
+        <div class="invitee-picker-row">
+          <button type="button" class="secondary small" data-open-modal="inviteePickerPlanForm">选择邀请队员</button>
+          <span class="invitee-count" data-invitee-count>已选择 0 人</span>
+        </div>
+      </div>
+      <div id="inviteePickerPlanForm" class="modal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <div class="modal-panel large invitee-picker-modal">
+          <div class="modal-head">
+            <h2>选择邀请队员</h2>
+            <button type="button" class="icon-btn" data-close-modal>×</button>
+          </div>
+          <div class="invitee-search-wrap">
+            <input type="search" placeholder="搜索呼号或用户名" data-invitee-search>
+          </div>
+          <div class="invitee-list-panel" data-invitee-list>
+            {% for u in users %}
+            {% if not u.is_admin and not u.is_regular_member %}
+            <label class="invitee-list-item" data-invitee-item data-search-text="{{ (u.callsign ~ ' ' ~ u.username)|lower }}">
+              <input type="checkbox" name="invitee_ids" value="{{ u.id }}" data-invitee-checkbox>
+              <span class="invitee-main">{{ u.callsign }}</span>
+              <span class="invitee-sub">{{ u.username }}</span>
+            </label>
+            {% endif %}
+            {% endfor %}
+          </div>
+          <div class="form-actions">
+            <button type="button" class="secondary" data-close-modal>完成</button>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="full form-actions">
+      <a class="button secondary" href="{{ url_for('dashboard') }}">取消</a>
+      <button class="primary" type="submit">发起策划</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

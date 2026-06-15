@@ -1,0 +1,27 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+
+<section class="panel">
+  <h2>逃离西撇镇入口图片</h2>
+  <p class="muted">图片会显示在活动管理主界面的“逃离西撇镇”入口卡片中。建议保留：<code>static/uploads/extraction_banner/</code></p>
+  {% if ui_setting and ui_setting.banner_filename %}
+    <div class="battle-banner-preview"><img src="{{ url_for('static', filename='uploads/extraction_banner/' ~ ui_setting.banner_filename) }}" alt="入口图片"></div>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" class="inline-form">
+    <input type="hidden" name="action" value="banner">
+    <input type="file" name="banner" accept="image/*" required>
+    <button class="primary" type="submit">上传入口图片</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>赛季设置</h2>
+  <form method="post" class="form-grid">
+    <label>赛季名称<input name="name" required></label>
+    <label>开始日期<input type="date" name="start_date" required></label>
+    <label>结束日期<input type="date" name="end_date" required></label>
+    <button class="primary" type="submit">新增赛季</button>
+  </form>
+</section>
+<section class="panel"><h2>赛季列表</h2><div class="table-wrap"><table><thead><tr><th>名称</th><th>开始</th><th>结束</th><th>状态</th><th>操作</th></tr></thead><tbody>{% for s in seasons %}<tr><td>{{ s.name }}</td><td>{{ s.start_date }}</td><td>{{ s.end_date }}</td><td>{{ '启用' if s.active else '停用' }}</td><td><form method="post" action="{{ url_for('extraction_toggle_season', season_id=s.id) }}"><button class="secondary small">{{ '停用' if s.active else '启用' }}</button></form></td></tr>{% else %}<tr><td colspan="5" class="muted">暂无赛季。</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

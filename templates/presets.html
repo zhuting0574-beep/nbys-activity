@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim">
+  <div>
+    <h1>预设场地 / 游戏模式</h1>
+    <p class="muted">管理员可以提前维护场地和游戏模式，创建正式活动或活动策划时直接选择。</p>
+  </div>
+</section>
+
+<section class="management-grid">
+  <div class="panel">
+    <div class="section-head"><h2>创建预设场地</h2></div>
+    <form method="post" action="{{ url_for('create_venue') }}" class="form-grid">
+      <label>场地名称<input name="name" required placeholder="例如：甬士一号场"></label>
+      <label>地址<input name="address" required placeholder="例如：宁波市……"></label>
+      <div class="full form-actions"><button class="primary" type="submit">保存场地</button></div>
+    </form>
+    <div class="table-wrap small-table">
+      <table>
+        <thead><tr><th>名称</th><th>地址</th><th>创建时间</th></tr></thead>
+        <tbody>
+          {% for v in venues %}<tr><td>{{ v.name }}</td><td>{{ v.address }}</td><td>{{ v.created_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+          {% else %}<tr><td colspan="3" class="muted">暂无预设场地。</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="section-head"><h2>创建预设游戏模式</h2></div>
+    <form method="post" action="{{ url_for('create_game_mode') }}" class="form-grid">
+      <label>模式名称<input name="name" required placeholder="例如：据点争夺"></label>
+      <label>适合人数<input name="suitable_people" required placeholder="例如：20-40人"></label>
+      <label class="full">玩法<textarea name="rules" rows="7" required placeholder="输入玩法说明、胜负规则、复活规则等"></textarea></label>
+      <div class="full form-actions"><button class="primary" type="submit">保存游戏模式</button></div>
+    </form>
+    <div class="mode-list">
+      {% for m in game_modes %}
+      <div class="mode-card">
+        <div><strong>{{ m.name }}</strong><span class="muted">适合人数：{{ m.suitable_people }}</span></div>
+        <p>{{ m.rules }}</p>
+      </div>
+      {% else %}<div class="empty-state">暂无预设游戏模式。</div>{% endfor %}
+    </div>
+  </div>
+</section>
+{% endblock %}

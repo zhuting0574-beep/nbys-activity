@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim"><div><h1>活动管理</h1><p class="muted">查看正式活动、已取消活动记录和活动策划；隐藏的活动策划可以在这里恢复。</p></div></section>
+<section class="management-grid">
+  <div class="panel">
+    <div class="section-head"><h2>正式活动记录</h2></div>
+    <div class="table-wrap small-table"><table><thead><tr><th>活动</th><th>时间</th><th>地点</th><th>报名</th><th>状态</th><th>取消时间</th><th>操作</th></tr></thead><tbody>
+      {% for a in activities %}{% set st = activity_status(a) %}<tr class="{{ 'deleted-row' if a.deleted_at else '' }}">
+        <td>{% if a.deleted_at %}{{ a.name }}{% else %}<a href="{{ url_for('activity_detail', activity_id=a.id) }}">{{ a.name }}</a>{% endif %}</td>
+        <td>{{ a.start_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>{{ a.location }}</td>
+        <td>{{ enrollment_count(a.id) }}/{{ a.open_min }}</td>
+        <td><span class="status {{ st[1] }}">{{ st[0] }}</span></td>
+        <td>{% if a.deleted_at %}{{ a.deleted_at.strftime('%Y-%m-%d %H:%M') }}{% if a.deleted_by %}<br><span class="muted">{{ a.deleted_by.callsign }}</span>{% endif %}{% else %}-{% endif %}</td>
+        <td>
+          <div class="inline-actions">
+            {% if not a.deleted_at %}
+            <form method="post" action="{{ url_for('delete_activity', activity_id=a.id) }}" onsubmit="return confirm('确定要取消活动《{{ a.name }}》吗？活动会从用户界面隐藏，但记录会保留在活动管理中。');"><button class="danger" type="submit">取消活动</button></form>
+            {% endif %}
+            {% if current_user.is_superadmin %}
+            <form method="post" action="{{ url_for('hard_delete_activity', activity_id=a.id) }}" onsubmit="return confirm('确认彻底删除活动记录《{{ a.name }}》？该操作会删除报名、租赁、阵营小队设置和相关出勤记录，且不可恢复。');"><button class="danger outline" type="submit">彻底删除记录</button></form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="7" class="muted">暂无正式活动。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+  <div class="panel">
+    <div class="section-head"><h2>活动策划</h2></div>
+    <div class="table-wrap small-table"><table><thead><tr><th>策划</th><th>投票截止</th><th>状态</th><th>操作</th></tr></thead><tbody>
+      {% for p in plans %}{% set st = plan_status(p) %}<tr><td><a href="{{ url_for('plan_detail', plan_id=p.id) }}">{{ p.name }}</a></td><td>{{ p.vote_deadline.strftime('%Y-%m-%d %H:%M') }}</td><td><span class="status {{ st[1] }}">{{ st[0] }}</span></td><td><div class="inline-actions"><form method="post" action="{{ url_for('toggle_plan_hidden', plan_id=p.id) }}"><button class="secondary" type="submit">{{ '恢复显示' if p.hidden else '隐藏' }}</button></form>{% if current_user.is_superadmin %}<form method="post" action="{{ url_for('delete_plan', plan_id=p.id) }}" onsubmit="return confirm('确定要删除活动策划《{{ p.name }}》吗？该操作会同时删除投票记录，且不可恢复。');"><button class="danger" type="submit">删除</button></form>{% endif %}</div></td></tr>
+      {% else %}<tr><td colspan="4" class="muted">暂无活动策划。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</section>
+{% endblock %}

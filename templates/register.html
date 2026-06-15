@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="auth-card wide">
+  <h1>注册</h1>
+  <form method="post" class="form-stack">
+    <label>用户名<input name="username" autocomplete="username" required></label>
+    <label>呼号<input name="callsign" required></label>
+    <label>密码<input type="password" name="password" autocomplete="new-password" required minlength="6"></label>
+    <label>确认密码<input type="password" name="password2" autocomplete="new-password" required minlength="6"></label>
+    <label>邀请码<input name="invite_code" placeholder="例如：YS-ABCDEFGH" required></label>
+    <button class="primary" type="submit">注册</button>
+  </form>
+  <p class="muted">已有账号？<a href="{{ url_for('login') }}">返回登录</a></p>
+</div>
+{% endblock %}

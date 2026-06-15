@@ -1,0 +1,58 @@
+{% extends "extraction_base.html" %}
+{% macro readonly_grid(title, subtitle, rows, cols, items) %}
+<div class="panel warehouse-panel">
+  <div class="section-head"><h2>{{ title }}</h2><span class="muted">{{ subtitle }}</span></div>
+  <div class="inventory-grid-wrap">
+    <div class="inventory-grid asset-grid" data-location="storage" data-rows="{{ rows }}" data-cols="{{ cols }}" style="--rows: {{ rows }}; --cols: {{ cols }};">
+      {% for r in range(1, rows + 1) %}{% for c in range(1, cols + 1) %}<div class="inventory-cell" style="grid-row: {{ r }}; grid-column: {{ c }};"></div>{% endfor %}{% endfor %}
+      {% for it in items %}
+        {% set trend = trends.get(it.item_def_id, ('equal', '=')) %}
+        <div class="inventory-grid-item level-{{ it.item_def.level }}" data-inventory-item data-item-id="{{ it.id }}" data-location="storage" data-row="{{ it.row or 1 }}" data-col="{{ it.col or 1 }}" data-width="{{ it.item_def.width }}" data-height="{{ it.item_def.height }}" style="grid-row: {{ it.row or 1 }} / span {{ it.item_def.height }}; grid-column: {{ it.col or 1 }} / span {{ it.item_def.width }};" data-name="{{ it.item_def.name }}" data-level="{{ it.item_def.level }}" data-price="{{ prices[it.item_def_id] }}" data-trend="{{ trend[0] }}" data-trend-symbol="{{ trend[1] }}">
+          <div class="grid-item-bg">{% if it.item_def.photo_filename %}<img draggable="false" src="{{ url_for('static', filename='uploads/extraction_items/' ~ it.item_def.photo_filename) }}">{% else %}<span>{{ it.item_def.name[:2] }}</span>{% endif %}</div>
+          <div class="grid-item-label"><strong>{{ it.item_def.name }}</strong><small>{{ it.item_def.level }} {{ it.item_def.height }}×{{ it.item_def.width }}</small><small>￥{{ prices[it.item_def_id] }} <b class="trend {{ trend[0] }}">{{ trend[1] }}</b></small></div>
+          <div class="item-hover-card">
+            <div>物品名称：{{ it.item_def.name }}</div>
+            <div>等级：{{ it.item_def.level }}</div>
+            <div>价格：{{ prices[it.item_def_id] }} <b class="trend {{ trend[0] }}">{{ trend[1] }}</b></div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% if not items %}<p class="muted warehouse-empty">暂无物品。</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head"><h2>用户资产管理</h2><span class="muted">仅超级管理员可查看。</span></div>
+  <form method="get" class="inline-form">
+    <label class="inline-label">选择用户
+      <select name="user_id" onchange="this.form.submit()">
+        {% for u in users %}<option value="{{ u.id }}" {% if selected_user and selected_user.id == u.id %}selected{% endif %}>{{ u.callsign }}（{{ u.username }}）</option>{% endfor %}
+      </select>
+    </label>
+    <button class="secondary" type="submit">查看</button>
+  </form>
+</section>
+{% if selected_user and profile %}
+<section class="panel extraction-profile">
+  <div class="stats-row">
+    <div><span class="muted">呼号</span><strong>{{ selected_user.callsign }}</strong></div>
+    <div><span class="muted">现金</span><strong>{{ profile.cash }}</strong></div>
+    <div><span class="muted">参加逃离西撇镇次数</span><strong>{{ profile.runs_count }}</strong></div>
+    <div><span class="muted">当前赛季</span><strong>{{ season.name if season else '未设置' }}</strong></div>
+  </div>
+</section>
+<section class="panel">
+  <div class="section-head"><h2>赛季统计</h2></div>
+  <div class="stats-row compact">
+    {% for level, count in level_counts.items() %}<div><span class="muted">{{ level }}物品</span><strong>{{ count }}</strong></div>{% endfor %}
+    <div><span class="muted">赛季获取现金</span><strong>{{ season_cash }}</strong></div>
+  </div>
+</section>
+{{ readonly_grid('个人仓库', profile.storage_rows ~ '×' ~ profile.storage_cols, profile.storage_rows, profile.storage_cols, storage_items) }}
+{% else %}
+<section class="panel"><p class="muted">暂无可查看用户。</p></section>
+{% endif %}
+{% endblock %}

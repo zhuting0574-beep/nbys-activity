@@ -1,0 +1,21 @@
+services:
+  yongshi-activity-manager:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: docker.1ms.run/python:3.12-slim
+    container_name: yongshi-activity-manager
+    restart: unless-stopped
+    ports:
+      - "0574:5000"
+    environment:
+      TZ: Asia/Shanghai
+      SECRET_KEY: "please-change-this-secret-key"
+      SUPERADMIN_USERNAME: "admin"
+      SUPERADMIN_PASSWORD: "admin123456"
+      SUPERADMIN_CALLSIGN: "超级管理员"
+      DATA_DIR: "/app/data"
+    volumes:
+      - ./data:/app/data
+      # 所有用户上传图片统一落地到项目目录，重新部署时保留这个文件夹即可
+      - ./static/uploads:/app/static/uploads

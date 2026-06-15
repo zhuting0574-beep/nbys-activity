@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim">
+  <div>
+    <h1>发射器租赁管理</h1>
+    <p class="muted">管理员和超级管理员可以创建、修改和停用可租赁发射器。照片为非必填。</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>租赁说明</h2></div>
+  <form method="post" action="{{ url_for('update_launcher_setting') }}" class="form-stack">
+    <label>显示在活动发射器租赁界面的说明
+      <textarea name="note" rows="5" placeholder="例如：租赁前请确认电池、弹匣和押金规则……">{{ setting.note or '' }}</textarea>
+    </label>
+    <div class="form-actions"><button class="primary" type="submit">保存说明</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>新增租赁发射器</h2></div>
+  <form method="post" action="{{ url_for('create_launcher') }}" class="form-grid" enctype="multipart/form-data">
+    <label>发射器所有人
+<input name="owner_type" required placeholder="例如：公发、张三、老王">
+    </label>
+    <label>名称<input name="name" required placeholder="例如：M4 公发 01"></label>
+    <label>发射器说明（50字内）<input name="description" maxlength="50" placeholder="只在活动租赁界面显示"></label>
+    <label>租金<input name="rent_fee" required placeholder="例如：50 元 / 次"></label>
+    <label>照片（非必须）<input type="file" name="photo" accept="image/*"></label>
+    <div class="full form-actions"><button class="primary" type="submit">保存发射器</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>已有发射器</h2></div>
+  <div class="launcher-admin-list">
+    {% for item in launchers %}
+    <article class="preset-card launcher-admin-card {% if not item.active %}inactive{% endif %}">
+      <div class="launcher-admin-row">
+        <div class="launcher-photo-box">
+          {% if item.photo_filename %}
+          <img src="{{ url_for('static', filename='uploads/launchers/' ~ item.photo_filename) }}" alt="{{ item.name }}">
+          {% else %}
+          <span class="muted">无照片</span>
+          {% endif %}
+        </div>
+        <div>
+          <span class="field-title">名称</span>
+          <strong>{{ item.name }}</strong>
+          <div class="muted small-text">{{ '启用中' if item.active else '已停用' }}</div>
+        </div>
+        <div>
+          <span class="field-title">所有人 / 租金</span>
+          <div>{{ item.owner_type }}</div>
+          <div class="muted small-text">{{ item.rent_fee }}</div>
+        </div>
+        <div class="venue-actions">
+          <span class="field-title">管理</span>
+          <button class="secondary small" type="button" data-open-modal="editLauncherModal{{ item.id }}">修改</button>
+          {% if current_user.is_superadmin %}
+          <form method="post" action="{{ url_for('delete_launcher', launcher_id=item.id) }}" onsubmit="return confirm('确认删除这个发射器吗？已有租赁记录时不能删除，建议停用。');">
+            <button class="danger small" type="submit">删除</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+
+    <div class="modal" id="editLauncherModal{{ item.id }}" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h2>修改发射器</h2>
+          <button class="icon-button" type="button" data-close-modal>×</button>
+        </div>
+        <form method="post" action="{{ url_for('update_launcher', launcher_id=item.id) }}" class="form-stack" enctype="multipart/form-data">
+          <label>发射器所有人
+<input name="owner_type" value="{{ item.owner_type }}" required>
+          </label>
+          <label>名称<input name="name" value="{{ item.name }}" required></label>
+          <label>发射器说明（50字内）<input name="description" maxlength="50" value="{{ item.description or '' }}" placeholder="只在活动租赁界面显示"></label>
+          <label>租金<input name="rent_fee" value="{{ item.rent_fee }}" required></label>
+          <label>状态
+            <select name="active">
+              <option value="1" {% if item.active %}selected{% endif %}>启用</option>
+              <option value="0" {% if not item.active %}selected{% endif %}>停用</option>
+            </select>
+          </label>
+          <label>更换照片（非必须）<input type="file" name="photo" accept="image/*"></label>
+          <div class="form-actions">
+            <button class="ghost" type="button" data-close-modal>取消</button>
+            <button class="primary" type="submit">保存修改</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% else %}<div class="empty-state">暂无租赁发射器。</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

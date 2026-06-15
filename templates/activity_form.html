@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="section-head standalone-head">
+  <h1>创建军推活动</h1>
+  <a class="button secondary" href="{{ url_for('dashboard') }}">返回主界面</a>
+</section>
+
+<section class="panel-card">
+  <form method="post" action="{{ url_for('create_activity') }}" class="form-grid">
+    <label>活动名称<input name="name" required></label>
+    <label>预设场地
+      <select name="venue_id">
+        <option value="">手动输入地点</option>
+        {% for v in venues %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="full">手动地点<input name="location" placeholder="未选择预设场地时填写"></label>
+    <label>活动开始时间<input type="datetime-local" name="start_at" required></label>
+    <label>活动结束时间<input type="datetime-local" name="end_at" required></label>
+    <label>活动开启人数<input type="number" min="1" name="open_min" required></label>
+    <label>阵营数<input type="number" min="1" name="camp_count" value="2" required></label>
+    <label>阵营人数上限<input type="number" min="1" name="camp_limit" required></label>
+    <label>小队数<input type="number" min="1" name="squad_count" value="4" required></label>
+    <label>小队人数上限<input type="number" min="1" name="squad_limit" required></label>
+    <label>活动地区
+      <select name="activity_region" required>
+        {% for r in ACTIVITY_REGION_OPTIONS %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+      </select>
+    </label>
+
+    <fieldset class="full checkbox-box activity-visibility-box">
+      <legend>活动可见范围</legend>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_only"> 仅正式队员可见</label>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="all" checked> 对所有人公开</label>
+      <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_plus_invite"> 正式队员和邀请队员可见</label>
+      <div class="invitee-select-box compact-invitee-picker">
+        <div class="muted small-text">邀请队员：正式队员自动可见；这里仅显示非正式队员。</div>
+        <div class="invitee-picker-row">
+          <button type="button" class="secondary small" data-open-modal="inviteePickerCreate">选择邀请队员</button>
+          <span class="invitee-count" data-invitee-count>已选择 0 人</span>
+        </div>
+      </div>
+    </fieldset>
+
+    <div id="inviteePickerCreate" class="modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel large invitee-picker-modal">
+        <div class="modal-head">
+          <h2>选择邀请队员</h2>
+          <button type="button" class="icon-btn" data-close-modal>×</button>
+        </div>
+        <div class="invitee-search-wrap">
+          <input type="search" placeholder="搜索呼号或用户名" data-invitee-search>
+        </div>
+        <div class="invitee-list-panel" data-invitee-list>
+          {% for u in users %}
+          {% if not u.is_admin and not u.is_regular_member %}
+          <label class="invitee-list-item" data-invitee-item data-search-text="{{ (u.callsign ~ ' ' ~ u.username)|lower }}">
+            <input type="checkbox" name="invitee_ids" value="{{ u.id }}" data-invitee-checkbox>
+            <span class="invitee-main">{{ u.callsign }}</span>
+            <span class="invitee-sub">{{ u.username }}</span>
+          </label>
+          {% endif %}
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <button type="button" class="secondary" data-close-modal>完成</button>
+        </div>
+      </div>
+    </div>
+
+    <fieldset class="full checkbox-box">
+      <legend>游戏模式（可多选）</legend>
+      {% for m in game_modes %}
+      <label class="checkbox-inline"><input type="checkbox" name="game_mode_ids" value="{{ m.id }}"> {{ m.name }}{% if m.suitable_people %}（{{ m.suitable_people }}）{% endif %}</label>
+      {% else %}
+      <span class="muted">暂无预设游戏模式，可先到“模式管理”创建。</span>
+      {% endfor %}
+    </fieldset>
+
+
+    <fieldset class="full checkbox-box">
+      <legend>开放租赁发射器（可多选）</legend>
+      {% for l in launchers %}
+      <label class="checkbox-inline"><input type="checkbox" name="launcher_ids" value="{{ l.id }}"> {{ l.name }}{% if l.owner_type %}（{{ l.owner_type }}）{% endif %}{% if l.rent_fee %} · {{ l.rent_fee }}{% endif %}</label>
+      {% else %}
+      <span class="muted">暂无可用租赁发射器，可先到“发射器管理”创建。</span>
+      {% endfor %}
+    </fieldset>
+
+    <fieldset class="full checkbox-box">
+      <legend>开放职业</legend>
+      {% for job in JOB_OPTIONS %}
+      <label class="checkbox-inline"><input type="checkbox" name="allowed_jobs" value="{{ job }}" checked> {{ job }}</label>
+      {% endfor %}
+    </fieldset>
+
+    <div class="full form-actions">
+      <a class="button secondary" href="{{ url_for('dashboard') }}">取消</a>
+      <button class="primary" type="submit">创建活动</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

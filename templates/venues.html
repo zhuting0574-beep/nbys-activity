@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim">
+  <div>
+    <h1>场地管理</h1>
+    <p class="muted">管理员和超级管理员可以创建、查看和修改预设场地。创建活动或活动策划时可以直接选择。</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>新增预设场地</h2></div>
+  <form method="post" action="{{ url_for('create_venue') }}" class="form-grid">
+    <label>场地名称<input name="name" required placeholder="例如：甬士一号场"></label>
+    <label>地址<input name="address" required placeholder="例如：宁波市……"></label>
+    <div class="full form-actions"><button class="primary" type="submit">保存场地</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>已有场地</h2></div>
+  <div class="preset-list">
+    {% for v in venues %}
+    <article class="preset-card venue-display-card">
+      <div class="venue-row">
+        <div>
+          <span class="field-title">场地名称</span>
+          <strong>{{ v.name }}</strong>
+        </div>
+        <div class="venue-address-box">
+          <span class="field-title">地址</span>
+          <div>{{ v.address }}</div>
+        </div>
+        <div class="venue-actions">
+          <span class="field-title">创建时间</span>
+          <div class="muted small-text">{{ v.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+          <button class="secondary small" type="button" data-open-modal="editVenueModal{{ v.id }}">修改</button>
+        </div>
+      </div>
+    </article>
+
+    <div class="modal" id="editVenueModal{{ v.id }}" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h2>修改场地</h2>
+          <button class="icon-button" type="button" data-close-modal>×</button>
+        </div>
+        <form method="post" action="{{ url_for('update_venue', venue_id=v.id) }}" class="form-stack">
+          <label>场地名称<input name="name" value="{{ v.name }}" required></label>
+          <label>地址<input name="address" value="{{ v.address }}" required></label>
+          <div class="form-actions">
+            <button class="ghost" type="button" data-close-modal>取消</button>
+            <button class="primary" type="submit">保存修改</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% else %}<div class="empty-state">暂无预设场地。</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

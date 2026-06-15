@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="activity-header">
+  <div>
+    <h1>{{ activity.name }}</h1>
+    <p class="muted">{{ activity.start_at.strftime('%Y-%m-%d %H:%M') }} - {{ activity.end_at.strftime('%Y-%m-%d %H:%M') }} · {{ activity.location }}</p>
+    <div class="activity-info-stack">
+      <div class="info-line">
+        <span class="status {{ status_class }}" id="statusText">{{ status_text }}</span>
+        <span>报名人数：<strong id="signupCount">{{ signup_count }}</strong>/{{ activity.open_min }}</span>
+        <span>开放职业：{{ activity.allowed_job_list|join('、') }}</span>
+      </div>
+      <div class="info-line activity-info-third-row">
+        <span>人员列表：<strong id="lockState">{{ '管理员已锁定' if activity.list_locked else '未锁定' }}</strong></span>
+        {% if activity.game_mode_list %}<span>游戏模式：{{ activity.game_mode_list|join('、') }}</span>{% endif %}
+      </div>
+      {% if current_user.is_admin %}
+      <div class="admin-quick-settings-box">
+        <div class="admin-quick-settings-title">活动快速设置</div>
+        <div class="admin-quick-settings">
+          <button class="secondary small" type="button" data-open-modal="launcherOptionsModal">开放租赁设置</button>
+          <button class="secondary small" type="button" data-open-modal="orgEditModal">修改阵营/小队</button>
+          <button class="secondary small" type="button" id="toggleLockBtn">{{ '解除锁定人员列表' if activity.list_locked else '锁定人员列表' }}</button>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="actions-row compact">
+    {% if not my_enrollment and can_join %}
+    <button class="primary" type="button" id="signupDirectBtn">报名</button>
+    {% elif my_enrollment %}
+      {% if can_cancel or current_user.is_admin %}
+      <form class="inline-cancel-form" id="cancelSignupForm" method="post" action="{{ url_for('cancel_activity_signup', activity_id=activity.id) }}">
+        <button type="submit" class="danger" id="cancelSignupButton">取消报名</button>
+      </form>
+      {% else %}
+      <button class="secondary" disabled>已报名（已锁定）</button>
+      {% endif %}
+    {% else %}
+    <button class="secondary" disabled>当前不可报名</button>
+    {% endif %}
+    <button class="secondary" type="button" data-open-modal="launcherRentalModal">发射器租赁</button>
+    {% if current_user.is_admin %}<button class="secondary" type="button" data-open-modal="activityEditModal">编辑活动</button>{% endif %}
+  </div>
+</section>
+
+<div class="notice" id="pageNotice" style="display:none;"></div>
+
+<section class="roster-section">
+  <div class="section-head">
+    <h2>阵营 / 小队 / 人员列表</h2>
+    <span class="muted">点击某个小队即可自动加入对应阵营和小队。职业会自动保存。</span>
+  </div>
+  <div id="organizationBoard" class="organization-board"></div>
+</section>
+
+<section class="roster-section roster-stats-section">
+  <div class="section-head">
+    <h2>活动统计</h2>
+    <span class="muted">按当前人员列表自动统计。</span>
+  </div>
+  <div id="activityStats" class="activity-stats-grid"></div>
+</section>
+
+
+<section class="roster-section launcher-rental-section">
+  <div class="section-head">
+    <h2>发射器租赁列表</h2>
+    <span class="muted">活动结束后发射器会自动释放。</span>
+  </div>
+  <div class="launcher-rental-list">
+    <div class="launcher-rental-row launcher-rental-header">
+      <strong>用户呼号</strong>
+      <span>发射器名称</span>
+      <span>发射器所有人</span>
+      <span>租金</span>
+      <span>操作</span>
+    </div>
+    {% for rental in launcher_rentals %}
+    <div class="launcher-rental-row">
+      <strong>{{ rental.user.callsign }}</strong>
+      <span>{{ rental.launcher.name }}</span>
+      <span>{{ rental.launcher.owner_type }}</span>
+      <span>{{ rental.launcher.rent_fee }}</span>
+      {% if current_user.is_admin or rental.user_id == current_user.id %}
+      <form method="post" action="{{ url_for('cancel_launcher_rental', activity_id=activity.id, rental_id=rental.id) }}" onsubmit="return confirm('确认取消这个发射器租赁吗？');">
+        <button class="danger small" type="submit">取消租赁</button>
+      </form>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-squad muted">暂无发射器租赁记录。</div>
+    {% endfor %}
+  </div>
+</section>
+
+<div id="launcherRentalModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>发射器租赁</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    {% if rental_setting.note %}<div class="notice launcher-note">{{ rental_setting.note|replace('\n', '<br>')|safe }}</div>{% endif %}
+    {% if not my_enrollment %}
+      <div class="notice warning compact-warning">请先报名活动，再租赁发射器。</div>
+    {% elif my_launcher_rental %}
+      <div class="notice">你已租赁：{{ my_launcher_rental.launcher.name }}（{{ my_launcher_rental.launcher.owner_type }}，{{ my_launcher_rental.launcher.rent_fee }}）</div>
+    {% endif %}
+    <div class="launcher-grid">
+      {% for launcher in launchers %}
+      {% set unavailable = launcher.id in unavailable_launcher_ids %}
+      {% set mine = my_launcher_rental and my_launcher_rental.launcher_id == launcher.id %}
+      <article class="launcher-card {% if unavailable and not mine %}unavailable{% endif %}">
+        <div class="launcher-card-photo">
+          {% if launcher.photo_filename %}
+          {% set photo_url = url_for('static', filename='uploads/launchers/' ~ launcher.photo_filename) %}
+          <button type="button" class="launcher-photo-preview-btn" data-preview-img="{{ photo_url }}" data-preview-title="{{ launcher.name }}">
+            <img src="{{ photo_url }}" alt="{{ launcher.name }}">
+          </button>
+          {% else %}
+          <span class="muted">无照片</span>
+          {% endif %}
+        </div>
+        <div class="launcher-card-body">
+          <strong>{{ launcher.name }}</strong>
+          <div class="muted small-text">所有人：{{ launcher.owner_type }} · 租金：{{ launcher.rent_fee }}</div>
+          {% if launcher.description %}<div class="launcher-description">{{ launcher.description }}</div>{% endif %}
+          {% if mine %}
+            <button class="secondary small" type="button" disabled>已租赁</button>
+          {% elif unavailable %}
+            <button class="secondary small" type="button" disabled>已被选择</button>
+          {% elif not my_enrollment or my_launcher_rental or status_text in ['活动结束', '活动取消'] %}
+            <button class="secondary small" type="button" disabled>不可租赁</button>
+          {% else %}
+            <form method="post" action="{{ url_for('rent_launcher_for_activity', activity_id=activity.id) }}" onsubmit="return confirm('确认租赁这个发射器吗？');">
+              <input type="hidden" name="launcher_id" value="{{ launcher.id }}">
+              <button class="primary small" type="submit">租赁</button>
+            </form>
+          {% endif %}
+        </div>
+      </article>
+      {% else %}
+      <div class="empty-state">暂无可租赁发射器。</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+
+{% if current_user.is_admin %}
+<div id="activityEditModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large activity-edit-panel">
+    <div class="modal-head">
+      <h2>编辑活动</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+
+    <form method="post" action="{{ url_for('update_activity_basic_info', activity_id=activity.id) }}" class="form-grid">
+      <label>活动名称<input name="name" value="{{ activity.name }}" required></label>
+      <label>预设场地
+        <select name="venue_id">
+          <option value="">手动输入地点</option>
+          {% for v in venues %}<option value="{{ v.id }}" {% if activity.location == v.name %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="full">活动地点<input name="location" value="{{ activity.location }}" required></label>
+      <label>活动开始时间<input type="datetime-local" name="start_at" value="{{ activity.start_at.strftime('%Y-%m-%dT%H:%M') }}" required></label>
+      <label>活动结束时间<input type="datetime-local" name="end_at" value="{{ activity.end_at.strftime('%Y-%m-%dT%H:%M') }}" required></label>
+      <label>活动开启人数<input type="number" min="1" name="open_min" value="{{ activity.open_min }}" required></label>
+      <label>活动地区
+        <select name="activity_region">
+          {% for r in ACTIVITY_REGION_OPTIONS %}<option value="{{ r }}" {% if (activity.activity_region or '宁波') == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+      </label>
+      <fieldset class="full checkbox-box">
+        <legend>游戏模式</legend>
+        {% for m in game_modes %}
+        <label class="checkbox-inline"><input type="checkbox" name="game_mode_ids" value="{{ m.id }}" {% if m.name in activity.game_mode_list %}checked{% endif %}> {{ m.name }}</label>
+        {% else %}<span class="muted">暂无预设游戏模式。</span>{% endfor %}
+      </fieldset>
+      <fieldset class="full checkbox-box">
+        <legend>开放职业</legend>
+        {% for job in JOB_OPTIONS %}
+        <label class="checkbox-inline"><input type="checkbox" name="allowed_jobs" value="{{ job }}" {% if job in activity.allowed_job_list %}checked{% endif %}> {{ job }}</label>
+        {% endfor %}
+      </fieldset>
+      <div class="form-actions full">
+        <button class="primary" type="submit">保存活动基本信息</button>
+      </div>
+    </form>
+
+    <div class="edit-shortcuts">
+      <button class="secondary" type="button" data-open-modal="visibilityModal">可见范围设置</button>
+    </div>
+
+    {% if not activity.deleted_at %}
+    <form method="post" action="{{ url_for('delete_activity', activity_id=activity.id) }}" class="cancel-activity-form" onsubmit="return confirm('确认取消活动《{{ activity.name }}》吗？取消后普通活动列表中不再显示，但活动管理里会保留记录。');">
+      <button class="danger" type="submit">取消活动</button>
+    </form>
+    {% else %}
+    <div class="notice warning compact-warning">该活动已经取消，记录仍保留在活动管理中。</div>
+    {% endif %}
+  </div>
+</div>
+
+<div id="imagePreviewModal" class="modal image-preview-modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel image-preview-panel">
+    <div class="modal-head">
+      <h2 id="imagePreviewTitle">照片预览</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <img id="imagePreviewImg" class="image-preview-img" src="" alt="照片预览">
+  </div>
+</div>
+
+
+<div id="visibilityModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>活动可见范围设置</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <form method="post" action="{{ url_for('update_activity_visibility', activity_id=activity.id) }}" class="form-stack visibility-mini-form">
+      <fieldset class="checkbox-box activity-visibility-box">
+        <legend>活动可见范围</legend>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_only" {% if activity.visibility_type == 'official_only' %}checked{% endif %}> 仅正式队员可见</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="all" {% if (activity.visibility_type or 'all') == 'all' %}checked{% endif %}> 对所有人公开</label>
+        <label class="checkbox-inline"><input type="radio" name="visibility_type" value="official_plus_invite" {% if activity.visibility_type == 'official_plus_invite' %}checked{% endif %}> 正式队员和邀请队员可见</label>
+        {% set selected_invitee_ids = activity.invitee_ids.split(',') if activity.invitee_ids else [] %}
+        <div class="invitee-select-box compact-invitee-picker">
+          <div class="muted small-text">邀请队员：正式队员自动可见；这里仅显示非正式队员。普通被邀请用户不会看到此可见范围设置。</div>
+          <div class="invitee-picker-row">
+            <button type="button" class="secondary small" data-open-modal="inviteePickerActivity">选择邀请队员</button>
+            <span class="invitee-count" data-invitee-count>已选择 0 人</span>
+          </div>
+        </div>
+        <div id="inviteePickerActivity" class="modal" aria-hidden="true">
+          <div class="modal-backdrop" data-close-modal></div>
+          <div class="modal-panel large invitee-picker-modal">
+            <div class="modal-head">
+              <h2>选择邀请队员</h2>
+              <button type="button" class="icon-btn" data-close-modal>×</button>
+            </div>
+            <div class="invitee-search-wrap">
+              <input type="search" placeholder="搜索呼号或用户名" data-invitee-search>
+            </div>
+            <div class="invitee-list-panel" data-invitee-list>
+              {% for u in users %}
+              {% if not u.is_admin and not u.is_regular_member %}
+              <label class="invitee-list-item" data-invitee-item data-search-text="{{ (u.callsign ~ ' ' ~ u.username)|lower }}">
+                <input type="checkbox" name="invitee_ids" value="{{ u.id }}" {% if u.id|string in selected_invitee_ids %}checked{% endif %} data-invitee-checkbox>
+                <span class="invitee-main">{{ u.callsign }}</span>
+                <span class="invitee-sub">{{ u.username }}</span>
+              </label>
+              {% endif %}
+              {% endfor %}
+            </div>
+            <div class="form-actions">
+              <button type="button" class="secondary" data-close-modal>完成</button>
+            </div>
+          </div>
+        </div>
+      </fieldset>
+      <div class="form-actions">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button class="primary" type="submit">保存可见范围</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="launcherOptionsModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>本活动开放租赁发射器</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <div class="notice compact-warning">勾选后，用户只能在本活动中租赁这些发射器。取消勾选会同步取消本活动中对应发射器的租赁记录。</div>
+    <form method="post" action="{{ url_for('update_activity_launcher_options', activity_id=activity.id) }}" class="form-stack">
+      <fieldset class="checkbox-box">
+        <legend>开放发射器</legend>
+        {% for l in all_launchers %}
+        <label class="checkbox-inline"><input type="checkbox" name="launcher_ids" value="{{ l.id }}" {% if l.id in allowed_launcher_ids %}checked{% endif %}> {{ l.name }}{% if l.owner_type %}（{{ l.owner_type }}）{% endif %}{% if l.rent_fee %} · {{ l.rent_fee }}{% endif %}</label>
+        {% else %}
+        <span class="muted">暂无启用的租赁发射器，请先到“发射器管理”创建。</span>
+        {% endfor %}
+      </fieldset>
+      <div class="form-actions">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button class="primary" type="submit">保存开放租赁设置</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div id="cancelModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>确认取消报名</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <p>确认要取消本次活动报名吗？确认后你会从当前加入的阵营和小队中移除。</p>
+    <div class="form-actions">
+      <button type="button" class="secondary" data-close-modal>返回</button>
+      <button type="button" class="danger" id="confirmCancelJoin">确认取消报名</button>
+    </div>
+  </div>
+</div>
+
+
+{% if current_user.is_admin %}
+<div id="orgEditModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head">
+      <h2>修改阵营 / 小队设置</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <div class="notice warning compact-warning">
+      修改后，当前所有已报名人员都会被重置为“未分配”，管理员需要重新分配阵营和小队。职业信息会保留。
+    </div>
+    <form id="orgEditForm" class="form-grid org-edit-grid">
+      <label>阵营数
+        <input type="number" name="camp_count" min="1" max="20" value="{{ activity.camp_count }}" required>
+      </label>
+      <label>小队数
+        <input type="number" name="squad_count" min="1" max="30" value="{{ activity.squad_count }}" required>
+      </label>
+      <label>每个阵营人数上限
+        <input type="number" name="camp_limit" min="1" value="{{ activity.camp_limit }}" required>
+      </label>
+      <label>每个小队人数上限
+        <input type="number" name="squad_limit" min="1" value="{{ activity.squad_limit }}" required>
+      </label>
+      <div class="form-actions full">
+        <button type="button" class="secondary" data-close-modal>取消</button>
+        <button type="submit" class="danger">确认修改并重置人员分配</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+window.ACTIVITY_ID = {{ activity.id }};
+</script>
+<script src="{{ url_for('static', filename='activity.js') }}"></script>
+{% endblock %}

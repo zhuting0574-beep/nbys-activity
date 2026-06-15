@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero slim">
+  <div>
+    <h1>模式管理</h1>
+    <p class="muted">管理员和超级管理员可以创建、查看和修改预设游戏模式。创建活动或活动策划时可以多选。</p>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>新增预设游戏模式</h2></div>
+  <form method="post" action="{{ url_for('create_game_mode') }}" class="form-grid">
+    <label>模式名称<input name="name" required placeholder="例如：据点争夺"></label>
+    <label>适合人数<input name="suitable_people" required placeholder="例如：20-40人"></label>
+    <label class="full">玩法<textarea name="rules" rows="7" required placeholder="输入玩法说明、胜负规则、复活规则等"></textarea></label>
+    <div class="full form-actions"><button class="primary" type="submit">保存游戏模式</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-head"><h2>已有游戏模式</h2></div>
+  <div class="preset-list">
+    {% for m in game_modes %}
+    <article class="preset-card game-mode-display-card">
+      <div class="preset-row">
+        <div class="preset-meta-vertical">
+          <div>
+            <span class="field-title">模式名称</span>
+            <strong>{{ m.name }}</strong>
+          </div>
+          <div>
+            <span class="field-title">适合人数</span>
+            <strong>{{ m.suitable_people }}</strong>
+          </div>
+          <button class="secondary small" type="button" data-open-modal="editModeModal{{ m.id }}">修改</button>
+        </div>
+        <div class="preset-rules-wide">
+          <span class="field-title">玩法</span>
+          <div class="rules-display-box">{{ m.rules }}</div>
+        </div>
+      </div>
+    </article>
+
+    <div class="modal" id="editModeModal{{ m.id }}" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel large">
+        <div class="modal-head">
+          <h2>修改游戏模式</h2>
+          <button class="icon-button" type="button" data-close-modal>×</button>
+        </div>
+        <form method="post" action="{{ url_for('update_game_mode', mode_id=m.id) }}" class="form-grid">
+          <label>模式名称<input name="name" value="{{ m.name }}" required></label>
+          <label>适合人数<input name="suitable_people" value="{{ m.suitable_people }}" required></label>
+          <label class="full">玩法<textarea name="rules" rows="10" required>{{ m.rules }}</textarea></label>
+          <div class="full form-actions">
+            <button class="ghost" type="button" data-close-modal>取消</button>
+            <button class="primary" type="submit">保存修改</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% else %}<div class="empty-state">暂无预设游戏模式。</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

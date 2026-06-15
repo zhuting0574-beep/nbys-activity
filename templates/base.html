@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ APP_TITLE }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=76">
+</head>
+<body>
+  <nav class="topbar">
+    <div class="topbar-main">
+      <a class="brand" href="{{ url_for('dashboard') if current_user.is_authenticated else url_for('login') }}"><img class="brand-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="宁波甬士 Logo"><span>{{ APP_TITLE }}</span></a>
+      {% if current_user.is_authenticated %}<button type="button" class="mobile-menu-btn" data-mobile-menu aria-label="打开菜单">菜单</button>{% endif %}
+    </div>
+    {% if current_user.is_authenticated %}
+    <div class="nav-right" data-mobile-nav>
+      <span class="user-pill">{{ current_user.callsign }} · {{ {'user':'用户','admin':'管理员','superadmin':'超级管理员'}.get(current_user.role, current_user.role) }}</span>
+      <a href="{{ url_for('dashboard') }}">主界面</a>
+      {% if is_manager %}<a href="{{ url_for('activity_management') }}">活动管理</a><a href="{{ url_for('venue_management') }}">场地管理</a><a href="{{ url_for('mode_management') }}">模式管理</a><a href="{{ url_for('launcher_management') }}">发射器管理</a><a href="{{ url_for('users') }}">管理用户</a>{% endif %}{% if can_view_attendance_nav %}<a href="{{ url_for('attendance') }}">出勤统计</a>{% endif %}
+      <a href="{{ url_for('settings') }}">账户设置</a>
+      <a href="{{ url_for('logout') }}">退出</a>
+    </div>
+    {% endif %}
+  </nav>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-wrap">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='app.js') }}?v=76"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

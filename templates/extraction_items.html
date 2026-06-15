@@ -1,0 +1,40 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="management-grid single">
+  <div class="panel">
+    <h2>新增物品</h2>
+    <form method="post" enctype="multipart/form-data" class="form-grid">
+      <label>物品名称<input name="name" required></label>
+      <label>等级<select name="level"><option>超凡</option><option>史诗</option><option>精品</option><option selected>普通</option></select></label>
+      <label>物品分类<select name="item_category"><option selected>常规物品</option><option>武器</option></select></label>
+      <label>最低价格<input type="number" name="min_price" min="1" value="1"></label>
+      <label>最高价格<input type="number" name="max_price" min="1" value="100"></label>
+      <label>横向体积<input type="number" name="width" min="1" max="30" value="1"></label>
+      <label>纵向体积<input type="number" name="height" min="1" max="12" value="1"></label>
+      <label>照片<input type="file" name="photo" accept="image/*"></label>
+      <button class="primary" type="submit">新增物品</button>
+    </form>
+  </div>
+  <div class="panel">
+    <h2>已录入物品</h2>
+    <div class="table-wrap"><table><thead><tr><th>名称</th><th>分类</th><th>等级</th><th>价格区间</th><th>今日价格</th><th>体积</th><th>图标</th><th>操作</th></tr></thead><tbody>
+      {% for item in item_defs %}
+      <tr>
+        <td>{{ item.name }}</td>
+        <td>{{ item.item_category or '常规物品' }}</td>
+        <td>{{ item.level }}</td>
+        <td>{{ item.min_price }} - {{ item.max_price }}</td>
+        <td>{{ today_prices.get(item.id, '-') }}</td>
+        <td>{{ item.height }}×{{ item.width }}</td>
+        <td><div class="item-icon level-{{ item.level }}" style="--w:{{ item.width }};--h:{{ item.height }}">{% if item.photo_filename %}<img src="{{ url_for('static', filename='uploads/extraction_items/' ~ item.photo_filename) }}">{% else %}{{ item.name[:2] }}{% endif %}</div></td>
+        <td>
+          <form method="post" action="{{ url_for('extraction_delete_item', item_id=item.id) }}" onsubmit="return confirm('确认删除物品《{{ item.name }}》？删除后会从所有用户仓库中消失，且不可恢复。');">
+            <button class="danger small" type="submit">删除</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}<tr><td colspan="8" class="muted">暂无物品。</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+</section>
+{% endblock %}
