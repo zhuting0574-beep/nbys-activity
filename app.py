@@ -4,9 +4,11 @@ import string
 from datetime import datetime, timedelta, time
 from functools import wraps
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, url_for, flash
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import inspect
 from werkzeug.security import check_password_hash, generate_password_hash
 
 APP_TITLE = "宁波甬士活动管理系统"
@@ -19,6 +21,7 @@ ACTIVITY_VISIBILITY_OPTIONS = {
 }
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env.local"))
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -31,7 +34,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join(BASE_DIR, "static", "uploads", "launchers")
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-# SQLite 在 NAS / Docker 场景下足够轻量，后续可平滑迁移到 PostgreSQL。
+# 默认使用 SQLite；设置 DATABASE_URL 后可切换到 MySQL 等 SQLAlchemy 支持的数据库。
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -1507,29 +1510,36 @@ def generate_invite_code() -> str:
 
 
 def ensure_schema_compatibility():
-    """为已有 SQLite 数据库补齐新版本字段，避免升级时必须删除旧数据。"""
+    """为已有数据库补齐新版本字段，兼容 SQLite 和 MySQL。"""
     with db.engine.begin() as conn:
-        user_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(users)").fetchall()}
+        inspector = inspect(conn)
+
+        def columns(table_name):
+            if not inspector.has_table(table_name):
+                return set()
+            return {column["name"] for column in inspector.get_columns(table_name)}
+
+        user_cols = columns("users")
         if "disabled" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT FALSE")
         if "is_regular_member" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN is_regular_member BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN is_regular_member BOOLEAN NOT NULL DEFAULT FALSE")
         if "attendance_manager" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN attendance_manager BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN attendance_manager BOOLEAN NOT NULL DEFAULT FALSE")
         if "extraction_authorized" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN extraction_authorized BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN extraction_authorized BOOLEAN NOT NULL DEFAULT FALSE")
         if "extraction_manager" not in user_cols:
-            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN extraction_manager BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE users ADD COLUMN extraction_manager BOOLEAN NOT NULL DEFAULT FALSE")
         if "invited_by_id" not in user_cols:
             conn.exec_driver_sql("ALTER TABLE users ADD COLUMN invited_by_id INTEGER")
         if "invite_code_id" not in user_cols:
             conn.exec_driver_sql("ALTER TABLE users ADD COLUMN invite_code_id INTEGER")
 
-        activity_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(activities)").fetchall()}
+        activity_cols = columns("activities")
         if "game_modes" not in activity_cols:
             conn.exec_driver_sql("ALTER TABLE activities ADD COLUMN game_modes TEXT")
         if "attendance_enabled" not in activity_cols:
-            conn.exec_driver_sql("ALTER TABLE activities ADD COLUMN attendance_enabled BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE activities ADD COLUMN attendance_enabled BOOLEAN NOT NULL DEFAULT FALSE")
         if "activity_region" not in activity_cols:
             conn.exec_driver_sql("ALTER TABLE activities ADD COLUMN activity_region VARCHAR(20) NOT NULL DEFAULT '宁波'")
         if "visibility_type" not in activity_cols:
@@ -1541,22 +1551,22 @@ def ensure_schema_compatibility():
         if "deleted_by_id" not in activity_cols:
             conn.exec_driver_sql("ALTER TABLE activities ADD COLUMN deleted_by_id INTEGER")
 
-        plan_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(activity_plans)").fetchall()}
+        plan_cols = columns("activity_plans")
         if plan_cols and "visibility_type" not in plan_cols:
             conn.exec_driver_sql("ALTER TABLE activity_plans ADD COLUMN visibility_type VARCHAR(32) NOT NULL DEFAULT 'all'")
         if plan_cols and "invitee_ids" not in plan_cols:
             conn.exec_driver_sql("ALTER TABLE activity_plans ADD COLUMN invitee_ids TEXT")
 
         # V73：活动策划可选日期增加备注。
-        plan_date_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(plan_date_options)").fetchall()}
+        plan_date_cols = columns("plan_date_options")
         if plan_date_cols and "note" not in plan_date_cols:
             conn.exec_driver_sql("ALTER TABLE plan_date_options ADD COLUMN note VARCHAR(80)")
 
-        attendance_event_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(attendance_events)").fetchall()}
+        attendance_event_cols = columns("attendance_events")
         if attendance_event_cols and "activity_region" not in attendance_event_cols:
             conn.exec_driver_sql("ALTER TABLE attendance_events ADD COLUMN activity_region VARCHAR(20) NOT NULL DEFAULT '宁波'")
 
-        invite_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(invite_codes)").fetchall()}
+        invite_cols = columns("invite_codes")
         if "max_uses" not in invite_cols:
             conn.exec_driver_sql("ALTER TABLE invite_codes ADD COLUMN max_uses INTEGER NOT NULL DEFAULT 1")
         if "used_count" not in invite_cols:
@@ -1573,17 +1583,17 @@ def ensure_schema_compatibility():
             """)
 
         # V23：为已有小队配置补齐 locked 字段，支持管理员锁定小队。
-        squad_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(squad_settings)").fetchall()}
+        squad_cols = columns("squad_settings")
         if squad_cols and "locked" not in squad_cols:
-            conn.exec_driver_sql("ALTER TABLE squad_settings ADD COLUMN locked BOOLEAN NOT NULL DEFAULT 0")
+            conn.exec_driver_sql("ALTER TABLE squad_settings ADD COLUMN locked BOOLEAN NOT NULL DEFAULT FALSE")
 
         # V25：发射器增加 50 字说明字段，历史 owner_type 字段界面改为“发射器所有人”。
-        launcher_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(launcher_rental_items)").fetchall()}
+        launcher_cols = columns("launcher_rental_items")
         if launcher_cols and "description" not in launcher_cols:
             conn.exec_driver_sql("ALTER TABLE launcher_rental_items ADD COLUMN description VARCHAR(50)")
 
         # V56：逃离西撇镇物品增加分类：常规物品 / 武器。
-        extraction_item_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_item_defs)").fetchall()}
+        extraction_item_cols = columns("extraction_item_defs")
         if extraction_item_cols and "item_category" not in extraction_item_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_item_defs ADD COLUMN item_category VARCHAR(20) NOT NULL DEFAULT '常规物品'")
 
@@ -1593,17 +1603,17 @@ def ensure_schema_compatibility():
             conn.exec_driver_sql("UPDATE extraction_item_defs SET level='精品' WHERE level='稀有'")
             conn.exec_driver_sql("UPDATE extraction_item_defs SET level='普通' WHERE level='特定'")
 
-        extraction_inv_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_inventory_items)").fetchall()}
+        extraction_inv_cols = columns("extraction_inventory_items")
         if extraction_inv_cols and "durability_percent" not in extraction_inv_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN durability_percent INTEGER NOT NULL DEFAULT 100")
         if extraction_inv_cols and "match_participant_id" not in extraction_inv_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN match_participant_id INTEGER")
 
-        extraction_season_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_seasons)").fetchall()}
+        extraction_season_cols = columns("extraction_seasons")
         if extraction_season_cols and "kill_reward_cash" not in extraction_season_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_seasons ADD COLUMN kill_reward_cash INTEGER NOT NULL DEFAULT 0")
 
-        extraction_participant_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_match_participants)").fetchall()}
+        extraction_participant_cols = columns("extraction_match_participants")
         if extraction_participant_cols and "kill_reward_cash" not in extraction_participant_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_match_participants ADD COLUMN kill_reward_cash INTEGER NOT NULL DEFAULT 0")
 
