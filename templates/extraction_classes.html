@@ -1,0 +1,12 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <h2>兵种管理</h2>
+  <form method="post">
+    <div class="table-wrap"><table><thead><tr><th>兵种名称</th><th>兵种血量</th><th>装备维护费用/局</th></tr></thead><tbody>
+      {% for rule in rules %}<tr><td><input name="name_{{ rule.id }}" value="{{ rule.name }}" required></td><td><input type="number" min="1" name="health_{{ rule.id }}" value="{{ rule.health }}"></td><td><input type="number" min="0" name="fee_{{ rule.id }}" value="{{ rule.maintenance_fee }}"></td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="form-actions"><button class="primary">保存兵种设置</button></div>
+  </form>
+</section>
+{% endblock %}

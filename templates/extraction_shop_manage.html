@@ -1,0 +1,14 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head"><h2>商店物品管理</h2><a class="primary small" href="{{ url_for('extraction_shop_new') }}">新增货品</a></div>
+  <div class="table-wrap"><table><thead><tr><th>名称</th><th>分类</th><th>价格</th><th>库存</th><th>下架日期</th><th>状态</th><th>操作</th></tr></thead><tbody>
+    {% for item in shop_items %}
+    <tr>
+      <td>{{ item.name }}</td><td>{{ '仓库扩充' if item.category == 'storage' else ('武器' if item.category == 'weapon' else '常规物品') }}</td><td>{{ item.price }}</td><td>{{ item.stock }}</td><td>{{ item.shelf_until or '-' }}</td><td>{{ '上架' if item.active else '下架' }}</td>
+      <td class="inline-actions"><a class="secondary small" href="{{ url_for('extraction_shop_edit', shop_item_id=item.id) }}">编辑</a><form method="post" action="{{ url_for('extraction_shop_delete', shop_item_id=item.id) }}" onsubmit="return confirm('确认删除这个商店货品？');"><button class="danger small">删除</button></form></td>
+    </tr>
+    {% else %}<tr><td colspan="7" class="muted">暂无商品。</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

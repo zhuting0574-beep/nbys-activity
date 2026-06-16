@@ -8,7 +8,6 @@ from flask import Flask, jsonify, redirect, render_template, request, url_for, f
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
 
 APP_TITLE = "宁波甬士活动管理系统"
 JOB_OPTIONS = ["突击兵", "支援兵", "医疗兵", "狙击手", "弹药兵", "填线兵"]
@@ -324,6 +323,7 @@ class ExtractionSeason(db.Model):
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
     active = db.Column(db.Boolean, default=True, nullable=False)
+    kill_reward_cash = db.Column(db.Integer, default=0, nullable=False)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
@@ -384,6 +384,8 @@ class ExtractionInventoryItem(db.Model):
     col = db.Column(db.Integer, nullable=True)
     sold_at = db.Column(db.DateTime, nullable=True)
     sold_price = db.Column(db.Integer, nullable=True)
+    durability_percent = db.Column(db.Integer, default=100, nullable=False)
+    match_participant_id = db.Column(db.Integer, db.ForeignKey("extraction_match_participants.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
 
     user = db.relationship("User")
@@ -419,6 +421,76 @@ class ExtractionRunRecord(db.Model):
     user = db.relationship("User")
     __table_args__ = (db.UniqueConstraint("activity_id", "user_id", name="uq_extraction_run_activity_user"),)
 
+
+
+
+class ExtractionClassRule(db.Model):
+    __tablename__ = "extraction_class_rules"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(80), nullable=False, unique=True)
+    health = db.Column(db.Integer, nullable=False, default=100)
+    maintenance_fee = db.Column(db.Integer, nullable=False, default=0)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+
+class ExtractionWeaponRule(db.Model):
+    __tablename__ = "extraction_weapon_rules"
+    id = db.Column(db.Integer, primary_key=True)
+    weapon_type = db.Column(db.String(20), nullable=False, default="knife")  # knife/regular/special
+    name = db.Column(db.String(120), nullable=False)
+    item_def_id = db.Column(db.Integer, db.ForeignKey("extraction_item_defs.id"), nullable=True, index=True)
+    usage_fee = db.Column(db.Integer, nullable=False, default=0)
+    durability_cost_percent = db.Column(db.Integer, nullable=False, default=0)
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+
+    item_def = db.relationship("ExtractionItemDef")
+
+
+class ExtractionMatch(db.Model):
+    __tablename__ = "extraction_matches"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(160), nullable=False)
+    venue_name = db.Column(db.String(160), nullable=True)
+    squad_count = db.Column(db.Integer, nullable=False, default=1)
+    squad_limit = db.Column(db.Integer, nullable=False, default=5)
+    status = db.Column(db.String(20), nullable=False, default="preparing")  # preparing/started/ended/cancelled
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    started_at = db.Column(db.DateTime, nullable=True)
+    ended_at = db.Column(db.DateTime, nullable=True)
+
+    created_by = db.relationship("User")
+    participants = db.relationship("ExtractionMatchParticipant", back_populates="match", cascade="all, delete-orphan")
+
+
+class ExtractionMatchParticipant(db.Model):
+    __tablename__ = "extraction_match_participants"
+    id = db.Column(db.Integer, primary_key=True)
+    match_id = db.Column(db.Integer, db.ForeignKey("extraction_matches.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    squad_no = db.Column(db.Integer, nullable=True)
+    class_rule_id = db.Column(db.Integer, db.ForeignKey("extraction_class_rules.id"), nullable=True)
+    weapon_rule_id = db.Column(db.Integer, db.ForeignKey("extraction_weapon_rules.id"), nullable=True)
+    weapon_inventory_item_id = db.Column(db.Integer, db.ForeignKey("extraction_inventory_items.id"), nullable=True)
+    locked = db.Column(db.Boolean, default=False, nullable=False)
+    paid_cash = db.Column(db.Integer, nullable=False, default=0)
+    evacuated = db.Column(db.Boolean, nullable=True)
+    kills = db.Column(db.Integer, nullable=False, default=0)
+    kill_reward_cash = db.Column(db.Integer, nullable=False, default=0)
+    earned_cash = db.Column(db.Integer, nullable=False, default=0)
+    settled_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    match = db.relationship("ExtractionMatch", back_populates="participants")
+    user = db.relationship("User")
+    class_rule = db.relationship("ExtractionClassRule")
+    weapon_rule = db.relationship("ExtractionWeaponRule")
+    weapon_inventory_item = db.relationship("ExtractionInventoryItem", foreign_keys=[weapon_inventory_item_id])
+    __table_args__ = (db.UniqueConstraint("match_id", "user_id", name="uq_extraction_match_user"),)
 
 class ExtractionUiSetting(db.Model):
     __tablename__ = "extraction_ui_settings"
@@ -651,6 +723,142 @@ def extraction_trend(item_def: ExtractionItemDef):
     return "down", "▼"
 
 
+
+
+def ensure_default_extraction_rules() -> None:
+    defaults = [("跑刀仔", 100, 0, 1), ("拖鞋军", 120, 50, 2), ("正规军", 150, 100, 3), ("重装兵", 200, 200, 4)]
+    changed = False
+    for name, health, fee, order in defaults:
+        rule = ExtractionClassRule.query.filter_by(name=name).first()
+        if not rule:
+            db.session.add(ExtractionClassRule(name=name, health=health, maintenance_fee=fee, sort_order=order))
+            changed = True
+    knife = ExtractionWeaponRule.query.filter_by(weapon_type="knife", name="刀", item_def_id=None).first()
+    if not knife:
+        db.session.add(ExtractionWeaponRule(weapon_type="knife", name="刀", usage_fee=0, durability_cost_percent=0))
+        changed = True
+    regular = ExtractionWeaponRule.query.filter_by(weapon_type="regular", name="常规武器", item_def_id=None).first()
+    if not regular:
+        db.session.add(ExtractionWeaponRule(weapon_type="regular", name="常规武器", usage_fee=50, durability_cost_percent=0))
+        changed = True
+    db.session.flush()
+    for item in ExtractionItemDef.query.filter_by(active=True, item_category="武器").all():
+        rule = ExtractionWeaponRule.query.filter_by(weapon_type="special", item_def_id=item.id).first()
+        if not rule:
+            db.session.add(ExtractionWeaponRule(weapon_type="special", name=item.name, item_def_id=item.id, usage_fee=0, durability_cost_percent=10))
+            changed = True
+        elif rule.name != item.name:
+            rule.name = item.name
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+def extraction_match_status_label(status: str) -> str:
+    return {"preparing": "开局整备", "started": "对局进行中", "ended": "已终局", "cancelled": "已取消"}.get(status, status)
+
+
+def get_user_weapon_choices(user_id: int):
+    ensure_default_extraction_rules()
+    base_rules = ExtractionWeaponRule.query.filter(ExtractionWeaponRule.active.is_(True), ExtractionWeaponRule.weapon_type.in_(["knife", "regular"])).order_by(ExtractionWeaponRule.weapon_type.asc()).all()
+    choices = []
+    for rule in base_rules:
+        choices.append({"value": f"rule:{rule.id}", "label": f"{rule.name}（使用费 {rule.usage_fee}）", "rule": rule, "inventory_item": None})
+    special_items = ExtractionInventoryItem.query.join(ExtractionItemDef).filter(
+        ExtractionInventoryItem.user_id == user_id,
+        ExtractionInventoryItem.sold_at.is_(None),
+        ExtractionInventoryItem.location == "storage",
+        ExtractionItemDef.active.is_(True),
+        ExtractionItemDef.item_category == "武器",
+    ).order_by(ExtractionItemDef.name.asc(), ExtractionInventoryItem.id.asc()).all()
+    for inv in special_items:
+        rule = ExtractionWeaponRule.query.filter_by(weapon_type="special", item_def_id=inv.item_def_id, active=True).first()
+        if rule:
+            choices.append({"value": f"special:{inv.id}", "label": f"特殊武器：{inv.item_def.name}（耐久 {inv.durability_percent}%）", "rule": rule, "inventory_item": inv})
+    return choices
+
+
+def parse_weapon_choice(user_id: int, raw: str):
+    ensure_default_extraction_rules()
+    raw = (raw or "").strip()
+    if raw.startswith("special:"):
+        try:
+            inv_id = int(raw.split(":", 1)[1])
+        except ValueError:
+            return None, None
+        inv = db.session.get(ExtractionInventoryItem, inv_id)
+        if not inv or inv.user_id != user_id or inv.sold_at or inv.location != "storage" or inv.item_def.item_category != "武器":
+            return None, None
+        rule = ExtractionWeaponRule.query.filter_by(weapon_type="special", item_def_id=inv.item_def_id, active=True).first()
+        return rule, inv
+    if raw.startswith("rule:"):
+        try:
+            rule_id = int(raw.split(":", 1)[1])
+        except ValueError:
+            return None, None
+        rule = db.session.get(ExtractionWeaponRule, rule_id)
+        if rule and rule.active and rule.weapon_type in {"knife", "regular"}:
+            return rule, None
+    return None, None
+
+
+def participant_cost(participant: ExtractionMatchParticipant) -> int:
+    total = 0
+    if participant.class_rule:
+        total += int(participant.class_rule.maintenance_fee or 0)
+    if participant.weapon_rule and participant.weapon_rule.weapon_type == "regular":
+        total += int(participant.weapon_rule.usage_fee or 0)
+    return max(0, total)
+
+
+def average_item_def_value(item_def: ExtractionItemDef) -> int:
+    """用于对局统计：单个物品价值按最高价和最低价的平均数计算。"""
+    try:
+        low = int(item_def.min_price or 0)
+        high = int(item_def.max_price or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, int(round((low + high) / 2)))
+
+
+def get_user_extraction_match_stats(user_id: int, season: ExtractionSeason | None = None) -> dict:
+    """按已结束对局统计个人逃离西撇镇数据。"""
+    query = ExtractionMatchParticipant.query.join(ExtractionMatch).filter(
+        ExtractionMatchParticipant.user_id == user_id,
+        ExtractionMatch.status == "ended",
+    )
+    if season:
+        query = query.filter(ExtractionMatch.ended_at >= datetime.combine(season.start_date, datetime.min.time()),
+                             ExtractionMatch.ended_at <= datetime.combine(season.end_date, datetime.max.time()))
+    participants = query.all()
+    match_count = len(participants)
+    evac_count = sum(1 for p in participants if bool(p.evacuated))
+    total_cash = sum(int(p.earned_cash or 0) + int(getattr(p, "kill_reward_cash", 0) or 0) for p in participants)
+    participant_ids = [p.id for p in participants]
+    total_item_value = 0
+    if participant_ids:
+        reward_items = ExtractionInventoryItem.query.filter(ExtractionInventoryItem.match_participant_id.in_(participant_ids)).all()
+        total_item_value = sum(average_item_def_value(it.item_def) for it in reward_items if it.item_def)
+    return {
+        "match_count": match_count,
+        "evac_count": evac_count,
+        "evac_rate": (round(evac_count * 100 / match_count, 1) if match_count else 0),
+        "avg_cash": (round(total_cash / match_count, 1) if match_count else 0),
+        "avg_item_value": (round(total_item_value / match_count, 1) if match_count else 0),
+        "total_cash": total_cash,
+        "total_item_value": total_item_value,
+    }
+
+
+def find_storage_slot_for_item(user_id: int, item_def: ExtractionItemDef):
+    profile = get_extraction_profile(user_id)
+    return first_free_slot(user_id, "storage", profile.storage_rows, profile.storage_cols, item_def.width, item_def.height)
+
+
+def active_extraction_matches_query():
+    # 对局管理首页只显示未结束的对局卡片；已终局对局放到“对局记录”页面查看。
+    return ExtractionMatch.query.filter(ExtractionMatch.status.in_(["preparing", "started"])).order_by(ExtractionMatch.created_at.desc())
+
 def can_place_extraction_item(user_id: int, location: str, rows: int, cols: int, item_w: int, item_h: int, row: int, col: int, exclude_item_id: int | None = None) -> bool:
     """Check warehouse boundary and collision by occupied grid cells. Rows/cols are 1-based."""
     try:
@@ -728,6 +936,7 @@ def auto_sell_extraction_buffers() -> None:
 
 def sync_extraction_runtime() -> None:
     deactivate_expired_extraction_seasons()
+    ensure_default_extraction_rules()
     refresh_extraction_prices()
     auto_sell_extraction_buffers()
     sync_extraction_run_counts()
@@ -1136,9 +1345,28 @@ def get_launcher_rental_setting() -> LauncherRentalSetting:
     return setting
 
 
-def allowed_photo(filename: str) -> bool:
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return ext in {"jpg", "jpeg", "png", "gif", "webp"}
+PHOTO_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+
+
+def uploaded_photo_extension(file_storage) -> str:
+    """Return a normalized extension after checking the uploaded image bytes."""
+    original_name = os.path.basename((file_storage.filename or "").strip())
+    ext = os.path.splitext(original_name)[1].lstrip(".").lower()
+    if ext not in PHOTO_EXTENSIONS:
+        raise ValueError("照片格式只支持 jpg、jpeg、png、gif、webp。")
+
+    header = file_storage.stream.read(16)
+    file_storage.stream.seek(0)
+    signatures = {
+        "jpg": header.startswith(b"\xff\xd8\xff"),
+        "jpeg": header.startswith(b"\xff\xd8\xff"),
+        "png": header.startswith(b"\x89PNG\r\n\x1a\n"),
+        "gif": header.startswith((b"GIF87a", b"GIF89a")),
+        "webp": header.startswith(b"RIFF") and header[8:12] == b"WEBP",
+    }
+    if not signatures[ext]:
+        raise ValueError("图片内容与文件扩展名不一致，请重新选择图片。")
+    return "jpg" if ext == "jpeg" else ext
 
 
 def save_uploaded_photo(file_storage, upload_subdir: str, stable_prefix: str):
@@ -1150,10 +1378,7 @@ def save_uploaded_photo(file_storage, upload_subdir: str, stable_prefix: str):
     """
     if not file_storage or not file_storage.filename:
         return None
-    filename = secure_filename(file_storage.filename)
-    if not filename or not allowed_photo(filename):
-        raise ValueError("照片格式只支持 jpg、jpeg、png、gif、webp。")
-    ext = filename.rsplit(".", 1)[-1].lower()
+    ext = uploaded_photo_extension(file_storage)
     upload_dir = os.path.join(BASE_DIR, "static", "uploads", upload_subdir)
     os.makedirs(upload_dir, exist_ok=True)
     final_name = f"{stable_prefix}.{ext}"
@@ -1368,6 +1593,20 @@ def ensure_schema_compatibility():
             conn.exec_driver_sql("UPDATE extraction_item_defs SET level='精品' WHERE level='稀有'")
             conn.exec_driver_sql("UPDATE extraction_item_defs SET level='普通' WHERE level='特定'")
 
+        extraction_inv_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_inventory_items)").fetchall()}
+        if extraction_inv_cols and "durability_percent" not in extraction_inv_cols:
+            conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN durability_percent INTEGER NOT NULL DEFAULT 100")
+        if extraction_inv_cols and "match_participant_id" not in extraction_inv_cols:
+            conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN match_participant_id INTEGER")
+
+        extraction_season_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_seasons)").fetchall()}
+        if extraction_season_cols and "kill_reward_cash" not in extraction_season_cols:
+            conn.exec_driver_sql("ALTER TABLE extraction_seasons ADD COLUMN kill_reward_cash INTEGER NOT NULL DEFAULT 0")
+
+        extraction_participant_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(extraction_match_participants)").fetchall()}
+        if extraction_participant_cols and "kill_reward_cash" not in extraction_participant_cols:
+            conn.exec_driver_sql("ALTER TABLE extraction_match_participants ADD COLUMN kill_reward_cash INTEGER NOT NULL DEFAULT 0")
+
 
     # 为已有活动补齐默认阵营/小队配置。新表由 db.create_all 自动创建。
     try:
@@ -1419,6 +1658,7 @@ def init_db():
             if new_gm != gm:
                 activity.game_modes = new_gm
         db.session.commit()
+        ensure_default_extraction_rules()
 
 
 @app.route("/")
@@ -3351,6 +3591,8 @@ def extraction_home():
     sync_extraction_runtime()
     profile = get_extraction_profile(current_user.id)
     season = current_extraction_season()
+    match_stats = get_user_extraction_match_stats(current_user.id, season)
+    profile.runs_count = int(match_stats["match_count"] or 0)
     season_items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, season_id=season.id if season else None).all() if season else []
     levels = ["超凡", "史诗", "精品", "普通"]
     level_counts = {level: 0 for level in levels}
@@ -3366,7 +3608,7 @@ def extraction_home():
     storage_items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, location="storage", sold_at=None).order_by(ExtractionInventoryItem.row.asc(), ExtractionInventoryItem.col.asc(), ExtractionInventoryItem.created_at.desc()).all()
     prices = {it.item_def_id: extraction_today_price(it.item_def) for it in buffer_items + storage_items}
     trends = {it.item_def_id: extraction_trend(it.item_def) for it in buffer_items + storage_items}
-    return render_template("extraction_home.html", profile=profile, season=season, level_counts=level_counts, season_cash=season_cash, buffer_items=buffer_items, storage_items=storage_items, prices=prices, trends=trends, buffer_rows=12, buffer_cols=30)
+    return render_template("extraction_home.html", profile=profile, season=season, match_stats=match_stats, level_counts=level_counts, season_cash=season_cash, buffer_items=buffer_items, storage_items=storage_items, prices=prices, trends=trends, buffer_rows=12, buffer_cols=30)
 
 
 @app.route("/extraction/exit")
@@ -3527,8 +3769,8 @@ def extraction_items():
         if photo and photo.filename:
             try:
                 item.photo_filename = save_uploaded_photo(photo, "extraction_items", f"item_{item.id}")
-            except ValueError:
-                flash("照片只支持 jpg、jpeg、png、gif、webp。", "error")
+            except ValueError as exc:
+                flash(str(exc), "error")
                 db.session.rollback()
                 return redirect(url_for("extraction_items"))
         db.session.commit()
@@ -3684,6 +3926,397 @@ def extraction_buy(shop_item_id):
     return redirect(url_for("extraction_shop"))
 
 
+
+
+@app.route("/extraction/shop/manage")
+@login_required
+@extraction_manage_required
+def extraction_shop_manage():
+    sync_extraction_runtime()
+    items = ExtractionShopItem.query.order_by(ExtractionShopItem.active.desc(), ExtractionShopItem.created_at.desc()).all()
+    return render_template("extraction_shop_manage.html", shop_items=items)
+
+
+@app.route("/extraction/shop/<int:shop_item_id>/edit", methods=["GET", "POST"])
+@login_required
+@extraction_manage_required
+def extraction_shop_edit(shop_item_id):
+    item = db.session.get(ExtractionShopItem, shop_item_id)
+    if not item:
+        flash("商品不存在。", "error")
+        return redirect(url_for("extraction_shop_manage"))
+    if request.method == "POST":
+        item.category = request.form.get("category", item.category)
+        if item.category not in {"storage", "item", "weapon"}:
+            item.category = "item"
+        item.name = request.form.get("name", "").strip() or item.name
+        try:
+            item.price = max(0, int(request.form.get("price", item.price)))
+            item.stock = max(0, int(request.form.get("stock", item.stock)))
+            if item.category == "storage":
+                item.storage_rows = max(1, int(request.form.get("storage_rows", item.storage_rows or 6)))
+                item.storage_cols = max(1, int(request.form.get("storage_cols", item.storage_cols or 10)))
+            else:
+                item.storage_rows = None
+                item.storage_cols = None
+        except ValueError:
+            flash("价格、库存和仓库尺寸必须是整数。", "error")
+            return redirect(url_for("extraction_shop_edit", shop_item_id=item.id))
+        shelf_until_raw = request.form.get("shelf_until", "").strip()
+        item.shelf_until = datetime.strptime(shelf_until_raw, "%Y-%m-%d").date() if shelf_until_raw else None
+        item.active = request.form.get("active") == "1"
+        db.session.commit()
+        flash("商品已更新。", "success")
+        return redirect(url_for("extraction_shop_manage"))
+    return render_template("extraction_shop_edit.html", item=item)
+
+
+@app.route("/extraction/shop/<int:shop_item_id>/delete", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_shop_delete(shop_item_id):
+    item = db.session.get(ExtractionShopItem, shop_item_id)
+    if item:
+        db.session.delete(item)
+        db.session.commit()
+        flash("商品已删除。", "success")
+    else:
+        flash("商品不存在。", "error")
+    return redirect(url_for("extraction_shop_manage"))
+
+
+@app.route("/extraction/classes", methods=["GET", "POST"])
+@login_required
+@extraction_manage_required
+def extraction_classes():
+    ensure_default_extraction_rules()
+    if request.method == "POST":
+        for rule in ExtractionClassRule.query.order_by(ExtractionClassRule.sort_order.asc(), ExtractionClassRule.id.asc()).all():
+            rule.name = request.form.get(f"name_{rule.id}", rule.name).strip() or rule.name
+            try:
+                rule.health = max(1, int(request.form.get(f"health_{rule.id}", rule.health)))
+                rule.maintenance_fee = max(0, int(request.form.get(f"fee_{rule.id}", rule.maintenance_fee)))
+            except ValueError:
+                flash("血量和装备维护费用必须是整数。", "error")
+                return redirect(url_for("extraction_classes"))
+        db.session.commit()
+        flash("兵种设置已保存。", "success")
+        return redirect(url_for("extraction_classes"))
+    rules = ExtractionClassRule.query.order_by(ExtractionClassRule.sort_order.asc(), ExtractionClassRule.id.asc()).all()
+    return render_template("extraction_classes.html", rules=rules)
+
+
+@app.route("/extraction/weapons", methods=["GET", "POST"])
+@login_required
+@extraction_manage_required
+def extraction_weapons():
+    ensure_default_extraction_rules()
+    if request.method == "POST":
+        for rule in ExtractionWeaponRule.query.filter_by(active=True).order_by(ExtractionWeaponRule.weapon_type.asc(), ExtractionWeaponRule.name.asc()).all():
+            try:
+                rule.usage_fee = max(0, int(request.form.get(f"usage_fee_{rule.id}", rule.usage_fee)))
+                rule.durability_cost_percent = max(0, min(100, int(request.form.get(f"durability_{rule.id}", rule.durability_cost_percent))))
+            except ValueError:
+                flash("使用费和耐久消耗必须是整数。", "error")
+                return redirect(url_for("extraction_weapons"))
+        db.session.commit()
+        flash("武器设置已保存。", "success")
+        return redirect(url_for("extraction_weapons"))
+    rules = ExtractionWeaponRule.query.filter_by(active=True).order_by(ExtractionWeaponRule.weapon_type.asc(), ExtractionWeaponRule.name.asc()).all()
+    return render_template("extraction_weapons.html", rules=rules)
+
+
+@app.route("/extraction/matches", methods=["GET", "POST"])
+@login_required
+@extraction_access_required
+def extraction_matches():
+    sync_extraction_runtime()
+    if request.method == "POST":
+        if not current_user.can_manage_extraction:
+            flash("需要管理员权限。", "error")
+            return redirect(url_for("extraction_matches"))
+        name = request.form.get("name", "").strip()
+        venue_name = request.form.get("venue_name", "").strip()
+        try:
+            squad_count = max(1, min(20, int(request.form.get("squad_count", "2"))))
+            squad_limit = max(1, min(50, int(request.form.get("squad_limit", "5"))))
+        except ValueError:
+            flash("小队数和人数上限必须是整数。", "error")
+            return redirect(url_for("extraction_matches"))
+        if not name:
+            flash("请输入对局名称。", "error")
+        else:
+            db.session.add(ExtractionMatch(name=name, venue_name=venue_name, squad_count=squad_count, squad_limit=squad_limit, created_by_id=current_user.id))
+            db.session.commit()
+            flash("对局已创建。", "success")
+        return redirect(url_for("extraction_matches"))
+    matches = active_extraction_matches_query().all()
+    venues = Venue.query.order_by(Venue.name.asc()).all()
+    return render_template("extraction_matches.html", matches=matches, venues=venues, status_label=extraction_match_status_label)
+
+
+@app.route("/extraction/match-records")
+@login_required
+@extraction_access_required
+def extraction_match_records():
+    sync_extraction_runtime()
+    only_mine = request.args.get("mine") == "1"
+    query = ExtractionMatch.query.filter(ExtractionMatch.status == "ended")
+    if not current_user.can_manage_extraction or only_mine:
+        query = query.join(ExtractionMatchParticipant).filter(ExtractionMatchParticipant.user_id == current_user.id)
+    matches = query.order_by(ExtractionMatch.ended_at.desc().nullslast(), ExtractionMatch.created_at.desc()).all()
+    return render_template("extraction_match_records.html", matches=matches, only_mine=only_mine, status_label=extraction_match_status_label)
+
+
+
+
+@app.route("/extraction/matches/<int:match_id>/enter")
+@login_required
+@extraction_access_required
+def extraction_match_enter(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status == "cancelled":
+        flash("对局不存在。", "error")
+        return redirect(url_for("extraction_matches"))
+    if match.status == "preparing" and not ExtractionMatchParticipant.query.filter_by(match_id=match.id, user_id=current_user.id).first():
+        db.session.add(ExtractionMatchParticipant(match_id=match.id, user_id=current_user.id))
+        db.session.commit()
+        flash("已自动加入对局，请选择小队、兵种和武器。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
+@app.route("/extraction/matches/<int:match_id>")
+@login_required
+@extraction_access_required
+def extraction_match_detail(match_id):
+    sync_extraction_runtime()
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status == "cancelled":
+        flash("对局不存在。", "error")
+        return redirect(url_for("extraction_matches"))
+    participant = ExtractionMatchParticipant.query.filter_by(match_id=match.id, user_id=current_user.id).first()
+    participants = ExtractionMatchParticipant.query.filter_by(match_id=match.id).order_by(ExtractionMatchParticipant.squad_no.asc(), ExtractionMatchParticipant.created_at.asc()).all()
+    class_rules = ExtractionClassRule.query.filter_by(active=True).order_by(ExtractionClassRule.sort_order.asc(), ExtractionClassRule.id.asc()).all()
+    weapon_choices = get_user_weapon_choices(current_user.id)
+    item_defs = ExtractionItemDef.query.filter_by(active=True).order_by(ExtractionItemDef.item_category.desc(), ExtractionItemDef.name.asc()).all()
+    venues = Venue.query.order_by(Venue.name.asc()).all()
+    return render_template("extraction_match_detail.html", match=match, participant=participant, participants=participants, class_rules=class_rules, weapon_choices=weapon_choices, item_defs=item_defs, venues=venues, season=current_extraction_season(), status_label=extraction_match_status_label, participant_cost=participant_cost)
+
+
+@app.route("/extraction/matches/<int:match_id>/edit", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_match_edit(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status != "preparing":
+        flash("只有开局整备中的对局可以编辑。", "error")
+        return redirect(url_for("extraction_matches"))
+    match.name = request.form.get("name", "").strip() or match.name
+    match.venue_name = request.form.get("venue_name", "").strip()
+    try:
+        match.squad_count = max(1, min(20, int(request.form.get("squad_count", match.squad_count))))
+        match.squad_limit = max(1, min(50, int(request.form.get("squad_limit", match.squad_limit))))
+    except ValueError:
+        flash("小队数和人数上限必须是整数。", "error")
+    db.session.commit()
+    flash("对局已更新。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
+
+@app.route("/extraction/matches/<int:match_id>/join", methods=["POST"])
+@login_required
+@extraction_access_required
+def extraction_match_join(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status != "preparing":
+        flash("当前对局不能加入。", "error")
+        return redirect(url_for("extraction_matches"))
+    participant = ExtractionMatchParticipant.query.filter_by(match_id=match.id, user_id=current_user.id).first()
+    if not participant:
+        db.session.add(ExtractionMatchParticipant(match_id=match.id, user_id=current_user.id))
+        db.session.commit()
+        flash("已加入对局，请选择小队、兵种和武器。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
+
+@app.route("/extraction/matches/<int:match_id>/configure", methods=["POST"])
+@login_required
+@extraction_access_required
+def extraction_match_configure(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    participant = ExtractionMatchParticipant.query.filter_by(match_id=match_id, user_id=current_user.id).first()
+    if not match or not participant or match.status != "preparing":
+        flash("当前对局不能修改。", "error")
+        return redirect(url_for("extraction_matches"))
+    if participant.locked:
+        flash("你已经锁定，不能修改。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    try:
+        squad_no = int(request.form.get("squad_no", "0"))
+        class_rule_id = int(request.form.get("class_rule_id", "0"))
+    except ValueError:
+        flash("请选择小队和兵种。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    if squad_no < 1 or squad_no > match.squad_count:
+        flash("小队无效。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    squad_used = ExtractionMatchParticipant.query.filter(ExtractionMatchParticipant.match_id == match.id, ExtractionMatchParticipant.squad_no == squad_no, ExtractionMatchParticipant.id != participant.id).count()
+    if squad_used >= match.squad_limit:
+        flash("该小队人数已满。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    class_rule = db.session.get(ExtractionClassRule, class_rule_id)
+    weapon_rule, inv = parse_weapon_choice(current_user.id, request.form.get("weapon_choice", ""))
+    if not class_rule or not class_rule.active or not weapon_rule:
+        flash("请选择有效兵种和武器。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    if class_rule.name == "跑刀仔" and weapon_rule.weapon_type != "knife":
+        flash("跑刀仔只能选择刀。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    participant.squad_no = squad_no
+    participant.class_rule_id = class_rule.id
+    participant.weapon_rule_id = weapon_rule.id
+    participant.weapon_inventory_item_id = inv.id if inv else None
+    db.session.commit()
+    flash("整备信息已保存。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
+
+@app.route("/extraction/matches/<int:match_id>/lock", methods=["POST"])
+@login_required
+@extraction_access_required
+def extraction_match_lock(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    participant = ExtractionMatchParticipant.query.filter_by(match_id=match_id, user_id=current_user.id).first()
+    if not match or not participant or match.status != "preparing":
+        flash("当前对局不能锁定。", "error")
+    elif not participant.squad_no or not participant.class_rule_id or not participant.weapon_rule_id:
+        flash("请先选择小队、兵种和武器。", "error")
+    else:
+        participant.locked = True
+        db.session.commit()
+        flash("已锁定。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match_id))
+
+
+@app.route("/extraction/matches/<int:match_id>/unlock/<int:participant_id>", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_match_unlock(match_id, participant_id):
+    participant = db.session.get(ExtractionMatchParticipant, participant_id)
+    if participant and participant.match_id == match_id and participant.match.status == "preparing":
+        participant.locked = False
+        db.session.commit()
+        flash("已解除锁定。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match_id))
+
+
+@app.route("/extraction/matches/<int:match_id>/start", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_match_start(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status != "preparing":
+        flash("当前对局不能开局。", "error")
+        return redirect(url_for("extraction_matches"))
+    participants = ExtractionMatchParticipant.query.filter_by(match_id=match.id).all()
+    if not participants:
+        flash("无人加入，不能开局。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    if any(not p.locked for p in participants):
+        flash("还有用户未锁定，不能开局。", "error")
+        return redirect(url_for("extraction_match_detail", match_id=match.id))
+    for p in participants:
+        cost = participant_cost(p)
+        profile = get_extraction_profile(p.user_id)
+        if p.weapon_rule and p.weapon_rule.weapon_type == "special":
+            inv = p.weapon_inventory_item
+            if not inv or inv.sold_at or inv.location != "storage" or inv.user_id != p.user_id:
+                flash(f"{p.user.callsign} 的特殊武器已不可用，不能开局。", "error")
+                return redirect(url_for("extraction_match_detail", match_id=match.id))
+        if profile.cash < cost:
+            flash(f"{p.user.callsign} 现金不足，不能开局。", "error")
+            return redirect(url_for("extraction_match_detail", match_id=match.id))
+    for p in participants:
+        cost = participant_cost(p)
+        profile = get_extraction_profile(p.user_id)
+        profile.cash -= cost
+        p.paid_cash = cost
+        if p.weapon_rule and p.weapon_rule.weapon_type == "special" and p.weapon_inventory_item:
+            p.weapon_inventory_item.location = "in_match"
+            p.weapon_inventory_item.row = None
+            p.weapon_inventory_item.col = None
+    match.status = "started"
+    match.started_at = datetime.now()
+    db.session.commit()
+    flash("对局已开始，已扣除装备维护费用和武器使用费。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
+
+@app.route("/extraction/matches/<int:match_id>/settle", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_match_settle(match_id):
+    match = db.session.get(ExtractionMatch, match_id)
+    if not match or match.status != "started":
+        flash("只有进行中的对局可以终局结算。", "error")
+        return redirect(url_for("extraction_matches"))
+    participants = ExtractionMatchParticipant.query.filter_by(match_id=match.id).all()
+    season = current_extraction_season()
+    kill_reward_unit = int(season.kill_reward_cash or 0) if season else 0
+    for p in participants:
+        p.evacuated = request.form.get(f"evacuated_{p.id}") == "1"
+        try:
+            p.kills = max(0, int(request.form.get(f"kills_{p.id}", "0")))
+            p.earned_cash = max(0, int(request.form.get(f"cash_{p.id}", "0")))
+        except ValueError:
+            p.kills = 0
+            p.earned_cash = 0
+        p.kill_reward_cash = int(p.kills or 0) * kill_reward_unit
+        profile = get_extraction_profile(p.user_id)
+        profile.cash += int(p.earned_cash or 0) + int(p.kill_reward_cash or 0)
+        reward_item_ids = request.form.getlist(f"reward_item_{p.id}[]")
+        reward_qtys = request.form.getlist(f"reward_qty_{p.id}[]")
+        # Backward compatibility with the older single-item settlement form.
+        if not reward_item_ids:
+            single_item = request.form.get(f"reward_item_{p.id}")
+            single_qty = request.form.get(f"reward_qty_{p.id}")
+            if single_item:
+                reward_item_ids = [single_item]
+                reward_qtys = [single_qty or "0"]
+        for idx, raw_item_id in enumerate(reward_item_ids):
+            try:
+                reward_item_id = int(raw_item_id or 0)
+            except (TypeError, ValueError):
+                reward_item_id = 0
+            try:
+                reward_qty = int(reward_qtys[idx]) if idx < len(reward_qtys) else 0
+            except (TypeError, ValueError):
+                reward_qty = 0
+            reward_qty = max(0, min(reward_qty, 99))
+            if reward_item_id and reward_qty > 0:
+                item_def = db.session.get(ExtractionItemDef, reward_item_id)
+                if item_def:
+                    for _ in range(reward_qty):
+                        db.session.add(ExtractionInventoryItem(user_id=p.user_id, item_def_id=item_def.id, season_id=season.id if season else None, location="buffer", match_participant_id=p.id))
+        if p.weapon_rule and p.weapon_rule.weapon_type == "special" and p.weapon_inventory_item:
+            inv = p.weapon_inventory_item
+            if p.evacuated:
+                inv.durability_percent = int(inv.durability_percent or 100) - int(p.weapon_rule.durability_cost_percent or 0)
+                if inv.durability_percent <= 0:
+                    db.session.delete(inv)
+                else:
+                    inv.location = "storage"
+                    row, col = find_storage_slot_for_item(p.user_id, inv.item_def)
+                    inv.row = row
+                    inv.col = col
+            else:
+                db.session.delete(inv)
+        p.settled_at = datetime.now()
+    match.status = "ended"
+    match.ended_at = datetime.now()
+    db.session.commit()
+    flash("对局已终局结算。", "success")
+    return redirect(url_for("extraction_match_detail", match_id=match.id))
+
 @app.route("/extraction/seasons", methods=["GET", "POST"])
 @login_required
 @extraction_manage_required
@@ -3695,8 +4328,8 @@ def extraction_seasons():
             return redirect(url_for("extraction_seasons"))
         try:
             banner_filename = save_uploaded_photo(banner, "extraction_banner", "yongcheng_banner")
-        except ValueError:
-            flash("主页图片只支持 jpg、jpeg、png、gif、webp。", "error")
+        except ValueError as exc:
+            flash(str(exc), "error")
             return redirect(url_for("extraction_seasons"))
         setting = get_extraction_ui_setting()
         setting.banner_filename = banner_filename
@@ -3711,12 +4344,17 @@ def extraction_seasons():
         except Exception:
             flash("请选择有效的开始和结束日期。", "error")
             return redirect(url_for("extraction_seasons"))
+        try:
+            kill_reward_cash = max(0, int(request.form.get("kill_reward_cash", "0") or 0))
+        except ValueError:
+            flash("每个人头现金奖励必须是整数。", "error")
+            return redirect(url_for("extraction_seasons"))
         if not name:
             flash("赛季名称不能为空。", "error")
         elif end_date < start_date:
             flash("结束日期不能早于开始日期。", "error")
         else:
-            db.session.add(ExtractionSeason(name=name, start_date=start_date, end_date=end_date, created_by_id=current_user.id))
+            db.session.add(ExtractionSeason(name=name, start_date=start_date, end_date=end_date, kill_reward_cash=kill_reward_cash, created_by_id=current_user.id))
             db.session.commit()
             flash("赛季已创建。", "success")
         return redirect(url_for("extraction_seasons"))
@@ -3734,6 +4372,24 @@ def extraction_toggle_season(season_id):
         season.active = not season.active
         db.session.commit()
         flash("赛季状态已更新。", "success")
+    return redirect(url_for("extraction_seasons"))
+
+
+@app.route("/extraction/seasons/<int:season_id>/reward", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_update_season_reward(season_id):
+    season = db.session.get(ExtractionSeason, season_id)
+    if not season:
+        flash("赛季不存在。", "error")
+        return redirect(url_for("extraction_seasons"))
+    try:
+        season.kill_reward_cash = max(0, int(request.form.get("kill_reward_cash", season.kill_reward_cash or 0)))
+    except ValueError:
+        flash("每个人头现金奖励必须是整数。", "error")
+        return redirect(url_for("extraction_seasons"))
+    db.session.commit()
+    flash("击杀奖励已更新。", "success")
     return redirect(url_for("extraction_seasons"))
 
 
@@ -3886,7 +4542,7 @@ def api_extraction_profile():
         return jsonify({"ok": False, "message": "未授权访问逃离西撇镇。"}), 403
     deactivate_expired_extraction_seasons()
     refresh_extraction_prices()
-    auto_sell_buffer_items()
+    auto_sell_extraction_buffers()
     profile = get_extraction_profile(current_user.id)
     items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, sold_at=None).all()
     return jsonify({
@@ -3894,8 +4550,8 @@ def api_extraction_profile():
         "profile": {
             "cash": profile.cash,
             "runs_count": profile.runs_count,
-            "warehouse_rows": profile.warehouse_rows,
-            "warehouse_cols": profile.warehouse_cols,
+            "warehouse_rows": profile.storage_rows,
+            "warehouse_cols": profile.storage_cols,
         },
         "items": [
             {
@@ -3908,7 +4564,7 @@ def api_extraction_profile():
                 "col": item.col,
                 "width": item.item_def.width,
                 "height": item.item_def.height,
-                "image_path": item.item_def.image_path,
+                "image_path": item.item_def.photo_filename,
                 "price": extraction_today_price(item.item_def),
                 "trend": extraction_trend(item.item_def)[1],
             }

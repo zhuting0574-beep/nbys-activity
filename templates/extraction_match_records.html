@@ -1,0 +1,32 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head extraction-match-section-head">
+    <div>
+      <h2>对局记录</h2>
+      <span class="muted">普通用户只显示自己参加过的对局；管理员可查看全部，也可切换只看自己参加过的对局。</span>
+    </div>
+    <div class="inline-actions">
+      <a class="secondary button" href="{{ url_for('extraction_matches') }}">返回对局管理</a>
+      {% if current_user.can_manage_extraction %}
+        {% if only_mine %}
+          <a class="secondary button" href="{{ url_for('extraction_match_records') }}">查看全部记录</a>
+        {% else %}
+          <a class="secondary button" href="{{ url_for('extraction_match_records', mine=1) }}">只看我参加过的</a>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  <div class="cards">
+    {% for match in matches %}
+    <a class="activity-card extraction-match-card" href="{{ url_for('extraction_match_detail', match_id=match.id) }}">
+      <div class="card-head"><h3>{{ match.name }}</h3><span class="badge">{{ status_label(match.status) }}</span></div>
+      <p>场地：{{ match.venue_name or '-' }}</p>
+      <p>小队：{{ match.squad_count }} 个，每队上限 {{ match.squad_limit }} 人</p>
+      <p>人数：{{ match.participants|length }}</p>
+      <p>结束时间：{{ match.ended_at.strftime('%Y-%m-%d %H:%M') if match.ended_at else '-' }}</p>
+    </a>
+    {% else %}<p class="muted">暂无对局记录。</p>{% endfor %}
+  </div>
+</section>
+{% endblock %}

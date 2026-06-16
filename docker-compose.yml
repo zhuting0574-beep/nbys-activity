@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        BASE_IMAGE: docker.1ms.run/python:3.12-slim
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.12-slim}
     container_name: yongshi-activity-manager
     restart: unless-stopped
     ports:

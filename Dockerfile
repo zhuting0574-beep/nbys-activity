@@ -1,6 +1,7 @@
-# 国内网络优化版：默认使用 Docker Hub 镜像代理，避免 NAS 直接访问 registry-1.docker.io 失败
-# 如果你的网络可以直接访问 Docker Hub，可以把 docker-compose.yml 里的 BASE_IMAGE 改回 python:3.12-slim
-ARG BASE_IMAGE=docker.1ms.run/python:3.12-slim
+# 基础镜像可通过 .env 或 docker-compose.yml 的 BASE_IMAGE 修改
+# 推荐优先使用官方源：python:3.12-slim
+# 如果 NAS 无法访问 Docker Hub，可尝试：docker.1ms.run/library/python:3.12-slim
+ARG BASE_IMAGE=python:3.12-slim
 FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

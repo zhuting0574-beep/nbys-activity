@@ -20,8 +20,9 @@
     <label>赛季名称<input name="name" required></label>
     <label>开始日期<input type="date" name="start_date" required></label>
     <label>结束日期<input type="date" name="end_date" required></label>
+    <label>每个人头现金奖励<input type="number" name="kill_reward_cash" min="0" value="0" required></label>
     <button class="primary" type="submit">新增赛季</button>
   </form>
 </section>
-<section class="panel"><h2>赛季列表</h2><div class="table-wrap"><table><thead><tr><th>名称</th><th>开始</th><th>结束</th><th>状态</th><th>操作</th></tr></thead><tbody>{% for s in seasons %}<tr><td>{{ s.name }}</td><td>{{ s.start_date }}</td><td>{{ s.end_date }}</td><td>{{ '启用' if s.active else '停用' }}</td><td><form method="post" action="{{ url_for('extraction_toggle_season', season_id=s.id) }}"><button class="secondary small">{{ '停用' if s.active else '启用' }}</button></form></td></tr>{% else %}<tr><td colspan="5" class="muted">暂无赛季。</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><h2>赛季列表</h2><div class="table-wrap"><table><thead><tr><th>名称</th><th>开始</th><th>结束</th><th>每个人头奖励</th><th>状态</th><th>操作</th></tr></thead><tbody>{% for s in seasons %}<tr><td>{{ s.name }}</td><td>{{ s.start_date }}</td><td>{{ s.end_date }}</td><td><form method="post" action="{{ url_for('extraction_update_season_reward', season_id=s.id) }}" class="inline-form"><input type="number" name="kill_reward_cash" min="0" value="{{ s.kill_reward_cash or 0 }}" style="width:90px"><button class="secondary small">保存</button></form></td><td>{{ '启用' if s.active else '停用' }}</td><td><form method="post" action="{{ url_for('extraction_toggle_season', season_id=s.id) }}"><button class="secondary small">{{ '停用' if s.active else '启用' }}</button></form></td></tr>{% else %}<tr><td colspan="6" class="muted">暂无赛季。</td></tr>{% endfor %}</tbody></table></div></section>
 {% endblock %}

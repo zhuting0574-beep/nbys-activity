@@ -1,0 +1,248 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head">
+    <h2>{{ match.name }}</h2>
+    <span class="badge">{{ status_label(match.status) }}</span>
+  </div>
+  <div class="stats-row compact">
+    <div><span class="muted">场地</span><strong>{{ match.venue_name or '-' }}</strong></div>
+    <div><span class="muted">小队</span><strong>{{ match.squad_count }}</strong></div>
+    <div><span class="muted">人数上限</span><strong>{{ match.squad_limit }}/队</strong></div>
+    <div><span class="muted">已加入</span><strong>{{ participants|length }}</strong></div>
+  </div>
+  {% if current_user.can_manage_extraction and match.status == 'preparing' %}
+  <div class="form-actions compact-form">
+    <button class="secondary small" type="button" data-open-modal="matchEditModal">对局编辑</button>
+  </div>
+  <div id="matchEditModal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-panel large">
+      <div class="modal-head">
+        <h2>对局编辑</h2>
+        <button class="icon-btn" type="button" data-close-modal>×</button>
+      </div>
+      <form method="post" action="{{ url_for('extraction_match_edit', match_id=match.id) }}" class="form-grid">
+        <label>对局名称<input name="name" value="{{ match.name }}"></label>
+        <label>场地<select name="venue_name"><option value="">未选择</option>{% for v in venues %}<option value="{{ v.name }}" {% if match.venue_name==v.name %}selected{% endif %}>{{ v.name }}</option>{% endfor %}</select></label>
+        <label>小队数<input type="number" name="squad_count" min="1" max="20" value="{{ match.squad_count }}"></label>
+        <label>小队人数上限<input type="number" name="squad_limit" min="1" max="50" value="{{ match.squad_limit }}"></label>
+        <div class="form-actions"><button class="primary">保存对局设置</button></div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+{% if match.status == 'preparing' %}
+<section class="panel">
+  {% if not participant %}
+    <form method="post" action="{{ url_for('extraction_match_join', match_id=match.id) }}"><button class="primary">加入对局</button></form>
+  {% else %}
+    <h2>我的开局整备</h2>
+    {% if participant.locked %}
+      <p class="success-text">已锁定。等待其他人锁定后管理员开局。</p>
+    {% else %}
+      <form method="post" action="{{ url_for('extraction_match_configure', match_id=match.id) }}" class="form-grid">
+        <label>小队<select name="squad_no" required>{% for n in range(1, match.squad_count + 1) %}<option value="{{ n }}" {% if participant.squad_no==n %}selected{% endif %}>小队 {{ n }}</option>{% endfor %}</select></label>
+        <label>兵种等级<select name="class_rule_id" required>{% for rule in class_rules %}<option value="{{ rule.id }}" {% if participant.class_rule_id==rule.id %}selected{% endif %}>{{ rule.name }}｜血量{{ rule.health }}｜维护费{{ rule.maintenance_fee }}</option>{% endfor %}</select></label>
+        <label>武器<select name="weapon_choice" required>{% for choice in weapon_choices %}<option value="{{ choice.value }}" {% if participant.weapon_rule_id==choice.rule.id and ((choice.inventory_item and participant.weapon_inventory_item_id==choice.inventory_item.id) or (not choice.inventory_item and not participant.weapon_inventory_item_id)) %}selected{% endif %}>{{ choice.label }}</option>{% endfor %}</select></label>
+        <div class="form-actions extraction-prep-actions">
+          <button class="secondary">保存整备以加入战局</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('extraction_match_lock', match_id=match.id) }}" class="extraction-prep-lock-form" onsubmit="return confirm('锁定后不能自行修改，确认锁定？');">
+        <button class="primary">锁定我的整备</button>
+      </form>
+    {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-head"><h2>小队与人员</h2>{% if current_user.can_manage_extraction and match.status == 'preparing' %}<form method="post" action="{{ url_for('extraction_match_start', match_id=match.id) }}" onsubmit="return confirm('确认开始对局并扣费？');"><button class="primary small" {% if participants|length == 0 or participants|selectattr('locked','equalto',False)|list|length > 0 %}disabled{% endif %}>开始对局</button></form>{% endif %}</div>
+  <p class="muted">隐私规则：开局前普通用户只能看到其他人的呼号；开局后普通用户只能看到自己小队成员的兵种和武器信息。管理员可查看全部。</p>
+  {% for squad in range(1, match.squad_count + 1) %}
+    <div class="squad-block"><h3>小队 {{ squad }}</h3>
+      <div class="table-wrap"><table><thead><tr><th>呼号</th><th>兵种</th><th>武器</th><th>费用</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        {% for p in participants if p.squad_no == squad %}
+          {% set can_view_detail = current_user.can_manage_extraction or p.user_id == current_user.id or (match.status != 'preparing' and participant and participant.squad_no and p.squad_no == participant.squad_no) %}
+          <tr>
+            <td>{{ p.user.callsign }}</td>
+            {% if can_view_detail %}
+              <td>{{ p.class_rule.name if p.class_rule else '-' }}</td>
+              <td>{{ p.weapon_rule.name if p.weapon_rule else '-' }}{% if p.weapon_inventory_item %}（耐久{{ p.weapon_inventory_item.durability_percent }}%）{% endif %}</td>
+              <td>{{ participant_cost(p) }}</td>
+            {% else %}
+              <td class="muted">已隐藏</td>
+              <td class="muted">已隐藏</td>
+              <td class="muted">-</td>
+            {% endif %}
+            <td>{{ '已锁定' if p.locked else '未锁定' }}</td>
+            <td>{% if current_user.can_manage_extraction and p.locked and match.status=='preparing' %}<form method="post" action="{{ url_for('extraction_match_unlock', match_id=match.id, participant_id=p.id) }}"><button class="secondary small">解除锁定</button></form>{% endif %}</td>
+          </tr>
+        {% else %}<tr><td colspan="6" class="muted">暂无人员。</td></tr>{% endfor %}
+      </tbody></table></div>
+    </div>
+  {% endfor %}
+  {% set unassigned = participants|selectattr('squad_no','none')|list %}
+  {% if unassigned %}<div class="squad-block"><h3>未分配</h3>{% for p in unassigned %}<p>{{ p.user.callsign }}</p>{% endfor %}</div>{% endif %}
+</section>
+
+{% if current_user.can_manage_extraction and match.status == 'started' %}
+<section class="panel">
+  <h2>终局结算</h2>
+  <p class="muted">先在表格里勾选撤离结果、填写人头数和现金；每一行点击「物品录入」可以添加多种获得物品。最后点击底部「终局结算」。</p>
+  <form method="post" action="{{ url_for('extraction_match_settle', match_id=match.id) }}" id="settleForm">
+    <div class="table-wrap"><table><thead><tr><th>用户</th><th>成功撤离</th><th>人头数</th><th>击杀现金</th><th>手动获得现金</th><th>获得物品</th></tr></thead><tbody>
+      {% for p in participants %}
+      <tr>
+        <td>{{ p.user.callsign }}</td>
+        <td><label class="checkbox-line"><input type="checkbox" name="evacuated_{{ p.id }}" value="1">成功</label></td>
+        <td><input type="number" name="kills_{{ p.id }}" min="0" value="0" data-kill-input data-kill-reward-unit="{{ season.kill_reward_cash if season else 0 }}" data-kill-reward-target="killReward{{ p.id }}"></td>
+        <td><span id="killReward{{ p.id }}">0</span></td>
+        <td><input type="number" name="cash_{{ p.id }}" min="0" value="0"></td>
+        <td>
+          <button type="button" class="secondary small" data-open-modal="rewardModal{{ p.id }}">物品录入</button>
+          <span class="muted reward-summary" id="rewardSummary{{ p.id }}">未录入</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody></table></div>
+
+    {% for p in participants %}
+    <div id="rewardModal{{ p.id }}" class="modal reward-modal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h3>{{ p.user.callsign }}｜获得物品录入</h3>
+          <button type="button" class="icon-btn" data-close-modal>×</button>
+        </div>
+        <div class="reward-lines" data-reward-lines="{{ p.id }}">
+          <div class="reward-line">
+            <select name="reward_item_{{ p.id }}[]">
+              <option value="">选择物品</option>
+              {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}</option>{% endfor %}
+            </select>
+            <input type="number" name="reward_qty_{{ p.id }}[]" min="0" max="99" value="0" placeholder="数量">
+            <button type="button" class="secondary small" data-remove-reward-line>删除</button>
+          </div>
+        </div>
+        <div class="form-actions reward-modal-actions">
+          <button type="button" class="secondary" data-add-reward-line="{{ p.id }}">新增一项</button>
+          <button type="button" class="primary" data-save-reward-modal="{{ p.id }}">保存物品录入</button>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+
+    <template id="rewardLineTemplate">
+      <div class="reward-line">
+        <select data-name-template="reward_item___PID__[]">
+          <option value="">选择物品</option>
+          {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}</option>{% endfor %}
+        </select>
+        <input type="number" data-name-template="reward_qty___PID__[]" min="0" max="99" value="0" placeholder="数量">
+        <button type="button" class="secondary small" data-remove-reward-line>删除</button>
+      </div>
+    </template>
+
+    <div class="form-actions"><button class="danger" onclick="return confirm('确认完成终局结算？');">终局结算</button></div>
+  </form>
+</section>
+{% endif %}
+
+{% if match.status == 'ended' %}
+<section class="panel"><h2>结算结果</h2><div class="table-wrap"><table><thead><tr><th>用户</th><th>撤离</th><th>人头</th><th>击杀现金</th><th>手动现金</th><th>总获得现金</th><th>扣费</th></tr></thead><tbody>{% for p in participants %}<tr><td>{{ p.user.callsign }}</td><td>{{ '成功' if p.evacuated else '失败' }}</td><td>{{ p.kills }}</td><td>{{ p.kill_reward_cash or 0 }}</td><td>{{ p.earned_cash }}</td><td>{{ (p.earned_cash or 0) + (p.kill_reward_cash or 0) }}</td><td>{{ p.paid_cash }}</td></tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+
+<style>
+.extraction-prep-actions,
+.extraction-prep-lock-form {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+}
+.extraction-prep-actions button,
+.extraction-prep-lock-form button {
+  min-width: 180px;
+}
+.reward-line {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 90px auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.reward-summary {
+  display: inline-block;
+  margin-left: 8px;
+}
+@media (max-width: 720px) {
+  .reward-line { grid-template-columns: 1fr; }
+  .extraction-prep-actions button,
+  .extraction-prep-lock-form button { width: 100%; }
+}
+</style>
+
+<script>
+
+document.addEventListener('input', function(event) {
+  const input = event.target.closest('[data-kill-input]');
+  if (!input) return;
+  const unit = parseInt(input.getAttribute('data-kill-reward-unit') || '0', 10);
+  const kills = Math.max(0, parseInt(input.value || '0', 10) || 0);
+  const target = document.getElementById(input.getAttribute('data-kill-reward-target'));
+  if (target) target.textContent = String(unit * kills);
+});
+document.addEventListener('click', function(event) {
+  const addBtn = event.target.closest('[data-add-reward-line]');
+  if (addBtn) {
+    const pid = addBtn.getAttribute('data-add-reward-line');
+    const lines = document.querySelector('[data-reward-lines="' + pid + '"]');
+    const tpl = document.getElementById('rewardLineTemplate');
+    if (!lines || !tpl) return;
+    const node = tpl.content.firstElementChild.cloneNode(true);
+    node.querySelectorAll('[data-name-template]').forEach(function(el) {
+      el.name = el.getAttribute('data-name-template').replace('__PID__', pid);
+      el.removeAttribute('data-name-template');
+    });
+    lines.appendChild(node);
+    return;
+  }
+
+  const removeBtn = event.target.closest('[data-remove-reward-line]');
+  if (removeBtn) {
+    const line = removeBtn.closest('.reward-line');
+    const lines = removeBtn.closest('.reward-lines');
+    if (line && lines && lines.querySelectorAll('.reward-line').length > 1) {
+      line.remove();
+    } else if (line) {
+      line.querySelectorAll('select').forEach(function(s){ s.value = ''; });
+      line.querySelectorAll('input').forEach(function(i){ i.value = 0; });
+    }
+    return;
+  }
+
+  const saveBtn = event.target.closest('[data-save-reward-modal]');
+  if (saveBtn) {
+    const pid = saveBtn.getAttribute('data-save-reward-modal');
+    const lines = document.querySelector('[data-reward-lines="' + pid + '"]');
+    const summary = document.getElementById('rewardSummary' + pid);
+    let count = 0;
+    if (lines) {
+      lines.querySelectorAll('.reward-line').forEach(function(line) {
+        const item = line.querySelector('select')?.value;
+        const qty = parseInt(line.querySelector('input')?.value || '0', 10);
+        if (item && qty > 0) count += qty;
+      });
+    }
+    if (summary) summary.textContent = count > 0 ? ('已录入 ' + count + ' 件') : '未录入';
+    const modal = saveBtn.closest('.modal');
+    if (modal) modal.setAttribute('aria-hidden', 'true');
+  }
+});
+</script>
+{% endblock %}
