@@ -27,7 +27,8 @@
         <td>{{ today_prices.get(item.id, '-') }}</td>
         <td>{{ item.height }}×{{ item.width }}</td>
         <td><div class="item-icon level-{{ item.level }}" style="--w:{{ item.width }};--h:{{ item.height }}">{% if item.photo_filename %}<img src="{{ url_for('static', filename='uploads/extraction_items/' ~ item.photo_filename) }}">{% else %}{{ item.name[:2] }}{% endif %}</div></td>
-        <td>
+        <td class="inline-actions">
+          <a class="secondary small" href="{{ url_for('extraction_edit_item', item_id=item.id) }}">编辑</a>
           <form method="post" action="{{ url_for('extraction_delete_item', item_id=item.id) }}" onsubmit="return confirm('确认删除物品《{{ item.name }}》？删除后会从所有用户仓库中消失，且不可恢复。');">
             <button class="danger small" type="submit">删除</button>
           </form>

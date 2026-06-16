@@ -3636,7 +3636,7 @@ def extraction_sell_item(item_id):
         flash("物品不存在或已出售。", "error")
         return redirect(url_for("extraction_home"))
     price = sell_extraction_inventory_item(inv)
-    flash(f"已出售 {inv.item_def.name}，获得 {price} 现金。", "success")
+    flash(f"已出售 {inv.item_def.name}，获得 {price} 甬士币。", "success")
     return redirect(url_for("extraction_home"))
 
 
@@ -3658,7 +3658,7 @@ def extraction_sell_many():
         total += sell_extraction_inventory_item(inv)
         count += 1
     if count:
-        flash(f"已出售 {count} 个物品，获得 {total} 现金。", "success")
+        flash(f"已出售 {count} 个物品，获得 {total} 甬士币。", "success")
     else:
         flash("没有可出售的物品。", "error")
     return redirect(url_for("extraction_home"))
@@ -3754,26 +3754,16 @@ def extraction_entry():
 @extraction_manage_required
 def extraction_items():
     if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        level = request.form.get("level", "普通").strip()
-        if level not in {"超凡", "史诗", "精品", "普通"}:
-            level = "普通"
-        item_category = request.form.get("item_category", "常规物品").strip() or "常规物品"
-        if item_category not in {"常规物品", "武器"}:
-            item_category = "常规物品"
         try:
-            min_price = max(1, int(request.form.get("min_price", "1")))
-            max_price = max(min_price, int(request.form.get("max_price", str(min_price))))
-            width = max(1, min(int(request.form.get("width", "1")), 30))
-            height = max(1, min(int(request.form.get("height", "1")), 12))
+            item_data = parse_extraction_item_form()
         except ValueError:
             flash("价格和体积必须是正整数。", "error")
             return redirect(url_for("extraction_items"))
-        if not name:
+        if not item_data["name"]:
             flash("物品名称不能为空。", "error")
             return redirect(url_for("extraction_items"))
         photo = request.files.get("photo")
-        item = ExtractionItemDef(name=name, level=level, item_category=item_category, min_price=min_price, max_price=max_price, width=width, height=height, photo_filename=None, created_by_id=current_user.id)
+        item = ExtractionItemDef(**item_data, photo_filename=None, created_by_id=current_user.id)
         db.session.add(item)
         db.session.flush()
         if photo and photo.filename:
@@ -3789,6 +3779,64 @@ def extraction_items():
     item_defs = ExtractionItemDef.query.order_by(ExtractionItemDef.created_at.desc()).all()
     today_prices = {item.id: extraction_today_price(item) for item in item_defs if item.active}
     return render_template("extraction_items.html", item_defs=item_defs, today_prices=today_prices)
+
+
+def parse_extraction_item_form() -> dict:
+    name = request.form.get("name", "").strip()
+    level = request.form.get("level", "普通").strip()
+    if level not in {"超凡", "史诗", "精品", "普通"}:
+        level = "普通"
+    item_category = request.form.get("item_category", "常规物品").strip() or "常规物品"
+    if item_category not in {"常规物品", "武器"}:
+        item_category = "常规物品"
+    min_price = max(1, int(request.form.get("min_price", "1")))
+    max_price = max(min_price, int(request.form.get("max_price", str(min_price))))
+    width = max(1, min(int(request.form.get("width", "1")), 30))
+    height = max(1, min(int(request.form.get("height", "1")), 12))
+    return {
+        "name": name,
+        "level": level,
+        "item_category": item_category,
+        "min_price": min_price,
+        "max_price": max_price,
+        "width": width,
+        "height": height,
+    }
+
+
+@app.route("/extraction/items/<int:item_id>/edit", methods=["GET", "POST"])
+@login_required
+@extraction_manage_required
+def extraction_edit_item(item_id):
+    item = db.session.get(ExtractionItemDef, item_id)
+    if not item:
+        flash("物品不存在。", "error")
+        return redirect(url_for("extraction_items"))
+    if request.method == "POST":
+        try:
+            item_data = parse_extraction_item_form()
+        except ValueError:
+            flash("价格和体积必须是正整数。", "error")
+            return redirect(url_for("extraction_edit_item", item_id=item.id))
+        if not item_data["name"]:
+            flash("物品名称不能为空。", "error")
+            return redirect(url_for("extraction_edit_item", item_id=item.id))
+        for key, value in item_data.items():
+            setattr(item, key, value)
+        item.active = request.form.get("active", "1") == "1"
+        photo = request.files.get("photo")
+        if photo and photo.filename:
+            try:
+                item.photo_filename = save_uploaded_photo(photo, "extraction_items", f"item_{item.id}")
+            except ValueError as exc:
+                flash(str(exc), "error")
+                db.session.rollback()
+                return redirect(url_for("extraction_edit_item", item_id=item.id))
+        db.session.commit()
+        ensure_default_extraction_rules()
+        flash("物品已更新。", "success")
+        return redirect(url_for("extraction_items"))
+    return render_template("extraction_item_edit.html", item=item)
 
 
 @app.route("/extraction/items/<int:item_id>/delete", methods=["POST"])
@@ -3913,7 +3961,7 @@ def extraction_buy(shop_item_id):
     if not item or not item.active or item.stock <= 0:
         flash("商品不可购买。", "error")
     elif profile.cash < item.price:
-        flash("现金不足。", "error")
+        flash("甬士币不足。", "error")
     elif item.shelf_until and item.shelf_until < datetime.now().date():
         flash("商品已下架。", "error")
     else:
@@ -4243,7 +4291,7 @@ def extraction_match_start(match_id):
                 flash(f"{p.user.callsign} 的特殊武器已不可用，不能开局。", "error")
                 return redirect(url_for("extraction_match_detail", match_id=match.id))
         if profile.cash < cost:
-            flash(f"{p.user.callsign} 现金不足，不能开局。", "error")
+            flash(f"{p.user.callsign} 甬士币不足，不能开局。", "error")
             return redirect(url_for("extraction_match_detail", match_id=match.id))
     for p in participants:
         cost = participant_cost(p)
@@ -4357,7 +4405,7 @@ def extraction_seasons():
         try:
             kill_reward_cash = max(0, int(request.form.get("kill_reward_cash", "0") or 0))
         except ValueError:
-            flash("每个人头现金奖励必须是整数。", "error")
+            flash("每个人头甬士币奖励必须是整数。", "error")
             return redirect(url_for("extraction_seasons"))
         if not name:
             flash("赛季名称不能为空。", "error")
@@ -4396,7 +4444,7 @@ def extraction_update_season_reward(season_id):
     try:
         season.kill_reward_cash = max(0, int(request.form.get("kill_reward_cash", season.kill_reward_cash or 0)))
     except ValueError:
-        flash("每个人头现金奖励必须是整数。", "error")
+        flash("每个人头甬士币奖励必须是整数。", "error")
         return redirect(url_for("extraction_seasons"))
     db.session.commit()
     flash("击杀奖励已更新。", "success")

@@ -92,9 +92,9 @@
 {% if current_user.can_manage_extraction and match.status == 'started' %}
 <section class="panel">
   <h2>终局结算</h2>
-  <p class="muted">先在表格里勾选撤离结果、填写人头数和现金；每一行点击「物品录入」可以添加多种获得物品。最后点击底部「终局结算」。</p>
+  <p class="muted">先在表格里勾选撤离结果、填写人头数和甬士币；每一行点击「物品录入」可以添加多种获得物品。最后点击底部「终局结算」。</p>
   <form method="post" action="{{ url_for('extraction_match_settle', match_id=match.id) }}" id="settleForm">
-    <div class="table-wrap"><table><thead><tr><th>用户</th><th>成功撤离</th><th>人头数</th><th>击杀现金</th><th>手动获得现金</th><th>获得物品</th></tr></thead><tbody>
+    <div class="table-wrap"><table><thead><tr><th>用户</th><th>成功撤离</th><th>人头数</th><th>击杀甬士币</th><th>手动获得甬士币</th><th>获得物品</th></tr></thead><tbody>
       {% for p in participants %}
       <tr>
         <td>{{ p.user.callsign }}</td>
@@ -153,7 +153,7 @@
 {% endif %}
 
 {% if match.status == 'ended' %}
-<section class="panel"><h2>结算结果</h2><div class="table-wrap"><table><thead><tr><th>用户</th><th>撤离</th><th>人头</th><th>击杀现金</th><th>手动现金</th><th>总获得现金</th><th>扣费</th></tr></thead><tbody>{% for p in participants %}<tr><td>{{ p.user.callsign }}</td><td>{{ '成功' if p.evacuated else '失败' }}</td><td>{{ p.kills }}</td><td>{{ p.kill_reward_cash or 0 }}</td><td>{{ p.earned_cash }}</td><td>{{ (p.earned_cash or 0) + (p.kill_reward_cash or 0) }}</td><td>{{ p.paid_cash }}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><h2>结算结果</h2><div class="table-wrap"><table><thead><tr><th>用户</th><th>撤离</th><th>人头</th><th>击杀甬士币</th><th>手动甬士币</th><th>总获得甬士币</th><th>扣费</th></tr></thead><tbody>{% for p in participants %}<tr><td>{{ p.user.callsign }}</td><td>{{ '成功' if p.evacuated else '失败' }}</td><td>{{ p.kills }}</td><td>{{ p.kill_reward_cash or 0 }}</td><td>{{ p.earned_cash }}</td><td>{{ (p.earned_cash or 0) + (p.kill_reward_cash or 0) }}</td><td>{{ p.paid_cash }}</td></tr>{% endfor %}</tbody></table></div></section>
 {% endif %}
 
 <style>
