@@ -1,0 +1,21 @@
+{% extends "extraction_base.html" %}
+{% block extraction_content %}
+<section class="panel">
+  <div class="section-head"><h2>编辑物品</h2><a class="secondary small" href="{{ url_for('extraction_items') }}">返回物品设置</a></div>
+  <form method="post" enctype="multipart/form-data" class="form-grid">
+    <label>物品名称<input name="name" value="{{ item.name }}" required></label>
+    <label>等级<select name="level"><option {% if item.level=='超凡' %}selected{% endif %}>超凡</option><option {% if item.level=='史诗' %}selected{% endif %}>史诗</option><option {% if item.level=='精品' %}selected{% endif %}>精品</option><option {% if item.level=='普通' %}selected{% endif %}>普通</option></select></label>
+    <label>物品分类<select name="item_category"><option {% if (item.item_category or '常规物品')=='常规物品' %}selected{% endif %}>常规物品</option><option {% if item.item_category=='武器' %}selected{% endif %}>武器</option></select></label>
+    <label>最低价格<input type="number" name="min_price" min="1" value="{{ item.min_price }}"></label>
+    <label>最高价格<input type="number" name="max_price" min="1" value="{{ item.max_price }}"></label>
+    <label>横向体积<input type="number" name="width" min="1" max="30" value="{{ item.width }}"></label>
+    <label>纵向体积<input type="number" name="height" min="1" max="12" value="{{ item.height }}"></label>
+    <label>状态<select name="active"><option value="1" {% if item.active %}selected{% endif %}>启用</option><option value="0" {% if not item.active %}selected{% endif %}>停用</option></select></label>
+    <label>替换照片<input type="file" name="photo" accept="image/*"></label>
+    {% if item.photo_filename %}
+      <div class="item-icon level-{{ item.level }}" style="--w:{{ item.width }};--h:{{ item.height }}"><img src="{{ url_for('static', filename='uploads/extraction_items/' ~ item.photo_filename) }}"></div>
+    {% endif %}
+    <div class="form-actions"><button class="primary">保存</button><a class="secondary" href="{{ url_for('extraction_items') }}">取消</a></div>
+  </form>
+</section>
+{% endblock %}

@@ -39,7 +39,7 @@
 <section class="panel extraction-profile">
   <div class="stats-row">
     <div><span class="muted">呼号</span><strong>{{ selected_user.callsign }}</strong></div>
-    <div><span class="muted">现金</span><strong>{{ profile.cash }}</strong></div>
+    <div><span class="muted">甬士币</span><strong>{{ profile.cash }}</strong></div>
     <div><span class="muted">参加逃离西撇镇次数</span><strong>{{ profile.runs_count }}</strong></div>
     <div><span class="muted">当前赛季</span><strong>{{ season.name if season else '未设置' }}</strong></div>
   </div>
@@ -48,7 +48,7 @@
   <div class="section-head"><h2>赛季统计</h2></div>
   <div class="stats-row compact">
     {% for level, count in level_counts.items() %}<div><span class="muted">{{ level }}物品</span><strong>{{ count }}</strong></div>{% endfor %}
-    <div><span class="muted">赛季获取现金</span><strong>{{ season_cash }}</strong></div>
+    <div><span class="muted">赛季获取甬士币</span><strong>{{ season_cash }}</strong></div>
   </div>
 </section>
 {{ readonly_grid('个人仓库', profile.storage_rows ~ '×' ~ profile.storage_cols, profile.storage_rows, profile.storage_cols, storage_items) }}

@@ -2,7 +2,7 @@
 {% block extraction_content %}
 <section class="panel">
   <h2>武器管理</h2>
-  <p class="muted">特殊武器会根据物品设置中“物品分类=武器”的物品自动生成。特殊武器开局不扣现金，终局根据撤离结果处理耐久或消失。</p>
+  <p class="muted">特殊武器会根据物品设置中“物品分类=武器”的物品自动生成。特殊武器开局不扣甬士币，终局根据撤离结果处理耐久或消失。</p>
   <form method="post">
     <div class="table-wrap"><table><thead><tr><th>类型</th><th>名称</th><th>使用费</th><th>特殊武器耐久消耗%</th></tr></thead><tbody>
       {% for rule in rules %}<tr><td>{% if rule.weapon_type=='knife' %}刀{% elif rule.weapon_type=='regular' %}常规武器{% else %}特殊武器{% endif %}</td><td>{{ rule.name }}</td><td><input type="number" min="0" name="usage_fee_{{ rule.id }}" value="{{ rule.usage_fee }}" {% if rule.weapon_type != 'regular' %}readonly{% endif %}></td><td><input type="number" min="0" max="100" name="durability_{{ rule.id }}" value="{{ rule.durability_cost_percent }}" {% if rule.weapon_type != 'special' %}readonly{% endif %}></td></tr>{% endfor %}

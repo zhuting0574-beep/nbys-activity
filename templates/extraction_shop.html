@@ -2,7 +2,7 @@
 {% block extraction_content %}
 
 <section class="panel">
-  <div class="section-head"><h2>商店</h2><span class="muted">我的现金：{{ profile.cash }}</span></div>
+  <div class="section-head"><h2>商店</h2><span class="muted">我的甬士币：{{ profile.cash }}</span></div>
   <div class="shop-list">
     {% for item in shop_items %}<div class="shop-card"><strong>{{ item.name }}</strong><span>{{ '仓库扩充' if item.category == 'storage' else ('武器' if item.category == 'weapon' else '常规物品') }}</span><span>价格：{{ item.price }} · 库存：{{ item.stock }}</span>{% if item.category == 'storage' %}<span>购买后仓库：{{ item.storage_rows }}×{{ item.storage_cols }}</span>{% endif %}<form method="post" action="{{ url_for('extraction_buy', shop_item_id=item.id) }}"><button class="primary small">购买</button></form></div>{% else %}<p class="muted">暂无上架商品。</p>{% endfor %}
   </div>
