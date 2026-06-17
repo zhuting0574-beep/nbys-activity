@@ -25,15 +25,73 @@
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_entry') }}">物品录入</a>
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_items') }}">物品设置</a>
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_seasons') }}">赛季设置</a>
-      <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_shop_new') }}">商店添加新货品</a>
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_shop_manage') }}">商店物品管理</a>
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_classes') }}">兵种管理</a>
       <a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_weapons') }}">武器管理</a>
       {% if current_user.is_superadmin %}<a class="admin-modal-action" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(34,197,94,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#dcfce7 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;" href="{{ url_for('extraction_assets') }}">用户资产管理</a>{% endif %}
+      <button class="admin-modal-action" type="button" data-open-modal="extractionAssetsResetModal" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(250,204,21,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#fef9c3 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;">资产重置</button>
+      <button class="admin-modal-action" type="button" data-open-modal="extractionDataResetModal" style="display:flex !important; align-items:center !important; justify-content:center !important; width:100% !important; box-sizing:border-box !important; min-height:52px !important; padding:14px 16px !important; border:2px solid rgba(239,68,68,.72) !important; border-radius:14px !important; background:rgba(15,23,42,.98) !important; color:#fee2e2 !important; text-decoration:none !important; font-weight:900 !important; text-align:center !important;">数据重置</button>
     </div>
+    {% if extraction_reset_pending %}
+    <div class="notice warning compact-warning">
+      {% for reset_type, record in extraction_reset_pending.items() %}
+        <div>{{ record.requested_by.callsign if record.requested_by else '管理员' }} 已申请{{ '资产重置' if reset_type == 'assets' else '数据重置' }}，需要另一名管理员确认。</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <button class="secondary" type="button" data-open-modal="extractionResetRecordsModal">查看重置记录</button>
     <div class="form-actions">
       <button type="button" class="secondary" data-close-modal>关闭</button>
     </div>
+  </div>
+</div>
+
+<div id="extractionAssetsResetModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel">
+    <div class="modal-head"><h2>资产重置</h2><button type="button" class="icon-btn" data-close-modal>×</button></div>
+    <p class="muted">将清空所有用户仓库物品和甬士币，游戏对局记录不变。需要两名管理员分别输入“资产重置”确认。</p>
+    <form method="post" action="{{ url_for('extraction_reset', reset_type='assets') }}" class="form-grid">
+      <label>确认文字<input name="confirm_text" required></label>
+      <div class="form-actions"><button type="button" class="secondary" data-close-modal>取消</button><button class="danger" type="submit">确认资产重置</button></div>
+    </form>
+  </div>
+</div>
+
+<div id="extractionResetRecordsModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel large">
+    <div class="modal-head"><h2>重置记录</h2><button type="button" class="icon-btn" data-close-modal>×</button></div>
+    <div class="table-wrap small-table">
+      <table>
+        <thead><tr><th>类型</th><th>申请人</th><th>确认人</th><th>时间</th></tr></thead>
+        <tbody>
+          {% for record in extraction_reset_records %}
+          <tr>
+            <td>{{ '资产重置' if record.reset_type == 'assets' else '数据重置' }}</td>
+            <td>{{ record.requested_by.callsign if record.requested_by else '-' }}</td>
+            <td>{{ record.confirmed_by.callsign if record.confirmed_by else '-' }}</td>
+            <td>{{ record.confirmed_at.strftime('%Y-%m-%d %H:%M') if record.confirmed_at else '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="muted">暂无重置记录。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions"><button type="button" class="secondary" data-close-modal>关闭</button></div>
+  </div>
+</div>
+
+<div id="extractionDataResetModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel">
+    <div class="modal-head"><h2>数据重置</h2><button type="button" class="icon-btn" data-close-modal>×</button></div>
+    <p class="muted">将重置逃离西撇镇所有用户数据，包括资产、甬士币、对局和撤离记录。需要两名管理员分别输入“数据重置”确认。</p>
+    <form method="post" action="{{ url_for('extraction_reset', reset_type='data') }}" class="form-grid">
+      <label>确认文字<input name="confirm_text" required></label>
+      <div class="form-actions"><button type="button" class="secondary" data-close-modal>取消</button><button class="danger" type="submit">确认数据重置</button></div>
+    </form>
   </div>
 </div>
 {% endif %}

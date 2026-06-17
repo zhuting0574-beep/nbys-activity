@@ -2044,6 +2044,7 @@ button.warning:hover, .button.warning:hover { background: rgba(245, 158, 11, .28
   min-height: 0;
 }
 .inventory-grid-item:active { cursor: grabbing; }
+.inventory-grid-item:hover { z-index: 1200; }
 .inventory-grid-item.is-dragging { opacity: 0.42; }
 .inventory-grid-item.is-selected { outline: 3px solid rgba(255, 235, 59, 0.95); outline-offset: 1px; }
 .inventory-grid-item.level-传奇 { background: rgba(255, 152, 0, 0.18); border-color: rgba(255, 152, 0, 0.85); }
@@ -2149,7 +2150,7 @@ button.mini, .button.mini { font-size: 10px; line-height: 1; padding: 4px 5px; b
   left: calc(100% + 8px);
   top: 0;
   min-width: 150px;
-  z-index: 60;
+  z-index: 1201;
   padding: 8px 10px;
   border: 1px solid rgba(190, 255, 205, 0.42);
   border-radius: 10px;
@@ -2199,6 +2200,24 @@ button.mini, .button.mini { font-size: 10px; line-height: 1; padding: 4px 5px; b
 .inventory-grid-item .grid-item-label.name-only { display: none !important; }
 .inventory-grid-item .grid-item-bg { width:100%; height:100%; border-radius:7px; background:rgba(0,0,0,0.16); }
 .inventory-grid-item .grid-item-bg img { width:100%; height:100%; object-fit:cover; display:block; }
+.item-quantity-badge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 5;
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.88);
+  border: 1px solid rgba(250, 204, 21, 0.88);
+  color: #fef9c3;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,.35);
+  pointer-events: none;
+}
 
 /* V56 逃离西撇镇入口 Banner 不做半透明和遮罩 */
 .battle-royale-entry img { opacity: 1 !important; filter: none !important; }

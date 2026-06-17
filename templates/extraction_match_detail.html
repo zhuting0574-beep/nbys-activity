@@ -122,9 +122,9 @@
           <div class="reward-line">
             <select name="reward_item_{{ p.id }}[]">
               <option value="">选择物品</option>
-              {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}</option>{% endfor %}
+              {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}{% if item.item_category == '钱币' %}｜钱币{% endif %}</option>{% endfor %}
             </select>
-            <input type="number" name="reward_qty_{{ p.id }}[]" min="0" max="99" value="0" placeholder="数量">
+            <input type="number" name="reward_qty_{{ p.id }}[]" min="0" value="0" placeholder="数量">
             <button type="button" class="secondary small" data-remove-reward-line>删除</button>
           </div>
         </div>
@@ -140,9 +140,9 @@
       <div class="reward-line">
         <select data-name-template="reward_item___PID__[]">
           <option value="">选择物品</option>
-          {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}</option>{% endfor %}
+          {% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }}｜{{ item.level }}{% if item.item_category == '钱币' %}｜钱币{% endif %}</option>{% endfor %}
         </select>
-        <input type="number" data-name-template="reward_qty___PID__[]" min="0" max="99" value="0" placeholder="数量">
+        <input type="number" data-name-template="reward_qty___PID__[]" min="0" value="0" placeholder="数量">
         <button type="button" class="secondary small" data-remove-reward-line>删除</button>
       </div>
     </template>

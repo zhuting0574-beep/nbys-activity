@@ -242,6 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let draggedItem = null;
   let selectedItem = null;
   let lastHoverCell = null;
+  let dragAnchor = { rowOffset: 0, colOffset: 0 };
 
   function notice(message, ok = true) {
     const el = document.querySelector('[data-extraction-notice]') || document.querySelector('[data-floating-notice]');
@@ -272,11 +273,37 @@ document.addEventListener('DOMContentLoaded', () => {
     return grid.querySelector(`[data-drop-cell][data-row="${row}"][data-col="${col}"]`);
   }
 
+  function topLeftFromPointerCell(item, cell) {
+    return {
+      row: cell.row - (dragAnchor.rowOffset || 0),
+      col: cell.col - (dragAnchor.colOffset || 0)
+    };
+  }
+
   function clearHover() {
     if (lastHoverCell) {
       lastHoverCell.classList.remove('drop-hover', 'drop-deny');
       lastHoverCell = null;
     }
+  }
+
+  function isStackTarget(item, other, row, col) {
+    return item.dataset.category === '钱币'
+      && other.dataset.category === '钱币'
+      && item.dataset.itemDefId === other.dataset.itemDefId
+      && parseInt(other.dataset.row || '1', 10) === row
+      && parseInt(other.dataset.col || '1', 10) === col;
+  }
+
+  function hoveredMoneyStackTarget(event, item, grid) {
+    const target = event.target.closest('[data-inventory-item]');
+    if (!target || target === item || target.closest('[data-warehouse-grid]') !== grid) return null;
+    if (item.dataset.category !== '钱币' || target.dataset.category !== '钱币') return null;
+    if (item.dataset.itemDefId !== target.dataset.itemDefId) return null;
+    return {
+      row: parseInt(target.dataset.row || '1', 10),
+      col: parseInt(target.dataset.col || '1', 10)
+    };
   }
 
   function canClientPlace(item, grid, row, col) {
@@ -285,6 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const w = parseInt(item.dataset.width || '1', 10);
     const h = parseInt(item.dataset.height || '1', 10);
     if (row < 1 || col < 1 || row + h - 1 > rows || col + w - 1 > cols) return false;
+    return true;
     // 粗略前端碰撞检测，最终以后端为准。
     const itemId = item.dataset.itemId;
     const targetLocation = grid.dataset.location;
@@ -296,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (other.dataset.location !== targetLocation) continue;
       const orow = parseInt(other.dataset.row || '1', 10);
       const ocol = parseInt(other.dataset.col || '1', 10);
+      if (isStackTarget(item, other, row, col)) return true;
       const ow = parseInt(other.dataset.width || '1', 10);
       const oh = parseInt(other.dataset.height || '1', 10);
       for (let rr = orow; rr < orow + oh; rr++) {
@@ -326,6 +355,42 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) throw new Error(data.message || '移动失败');
+      if (data.stacked) {
+        const target = document.querySelector(`[data-inventory-item][data-item-id="${data.target_id}"]`);
+        if (target) {
+          target.dataset.quantity = String(data.quantity || 1);
+          const badge = target.querySelector('.item-quantity-badge') || document.createElement('span');
+          badge.className = 'item-quantity-badge';
+          badge.textContent = `×${data.quantity || 1}`;
+          if (!badge.parentElement) target.appendChild(badge);
+          const hoverQty = target.querySelector('[data-hover-quantity]');
+          if (hoverQty) hoverQty.textContent = String(data.quantity || 1);
+        }
+        if (data.remaining_id && data.remaining_quantity > 0) {
+          item.style.gridRow = oldStyle.row;
+          item.style.gridColumn = oldStyle.col;
+          item.dataset.location = oldStyle.location;
+          item.dataset.row = oldStyle.dataRow;
+          item.dataset.col = oldStyle.dataCol;
+          oldParent.appendChild(item);
+          item.dataset.quantity = String(data.remaining_quantity);
+          const badge = item.querySelector('.item-quantity-badge') || document.createElement('span');
+          badge.className = 'item-quantity-badge';
+          badge.textContent = `×${data.remaining_quantity}`;
+          if (!badge.parentElement) item.appendChild(badge);
+          const hoverQty = item.querySelector('[data-hover-quantity]');
+          if (hoverQty) hoverQty.textContent = String(data.remaining_quantity);
+        } else {
+          item.remove();
+        }
+      } else {
+        const newRow = parseInt(data.row || row, 10);
+        const newCol = parseInt(data.col || col, 10);
+        item.style.gridRow = `${newRow} / span ${item.dataset.height || 1}`;
+        item.style.gridColumn = `${newCol} / span ${item.dataset.width || 1}`;
+        item.dataset.row = String(newRow);
+        item.dataset.col = String(newCol);
+      }
       notice(data.message || '已移动');
     } catch (err) {
       item.style.gridRow = oldStyle.row;
@@ -342,6 +407,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const item = event.target.closest('[data-inventory-item]');
     if (!item) return;
     draggedItem = item;
+    const rect = item.getBoundingClientRect();
+    const w = Math.max(1, parseInt(item.dataset.width || '1', 10));
+    const h = Math.max(1, parseInt(item.dataset.height || '1', 10));
+    const relX = Math.min(Math.max(event.clientX - rect.left, 0), Math.max(rect.width - 1, 0));
+    const relY = Math.min(Math.max(event.clientY - rect.top, 0), Math.max(rect.height - 1, 0));
+    dragAnchor = {
+      colOffset: Math.min(w - 1, Math.max(0, Math.floor(relX / (rect.width / w || 1)))),
+      rowOffset: Math.min(h - 1, Math.max(0, Math.floor(relY / (rect.height / h || 1))))
+    };
     item.classList.add('is-dragging');
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', item.dataset.itemId || '');
@@ -361,9 +435,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const cell = gridCellFromPoint(grid, event.clientX, event.clientY);
     clearHover();
     if (!cell) return;
+    const stackTarget = hoveredMoneyStackTarget(event, draggedItem, grid);
+    const target = stackTarget || topLeftFromPointerCell(draggedItem, cell);
     const cellEl = findCell(grid, cell.row, cell.col);
     if (cellEl) {
-      const ok = canClientPlace(draggedItem, grid, cell.row, cell.col) && !(draggedItem.dataset.location === 'storage' && grid.dataset.location === 'buffer');
+      const ok = canClientPlace(draggedItem, grid, target.row, target.col) && !(draggedItem.dataset.location === 'storage' && grid.dataset.location === 'buffer');
       cellEl.classList.add(ok ? 'drop-hover' : 'drop-deny');
       lastHoverCell = cellEl;
     }
@@ -377,15 +453,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const cell = gridCellFromPoint(grid, event.clientX, event.clientY);
     clearHover();
     if (!cell) return;
+    const stackTarget = hoveredMoneyStackTarget(event, draggedItem, grid);
+    const target = stackTarget || topLeftFromPointerCell(draggedItem, cell);
     if (draggedItem.dataset.location === 'storage' && grid.dataset.location === 'buffer') {
       notice('个人仓库物品不能放回缓冲区。', false);
       return;
     }
-    if (!canClientPlace(draggedItem, grid, cell.row, cell.col)) {
+    if (!canClientPlace(draggedItem, grid, target.row, target.col)) {
       notice('目标位置空间不足或发生重叠。', false);
       return;
     }
-    moveItem(draggedItem, grid, cell.row, cell.col);
+    moveItem(draggedItem, grid, target.row, target.col);
   });
 
   document.addEventListener('click', (event) => {

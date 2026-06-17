@@ -19,6 +19,11 @@ ACTIVITY_VISIBILITY_OPTIONS = {
     "all": "所有人可见",
     "official_plus_invite": "正式队员和邀请队员可见",
 }
+EXTRACTION_BUFFER_ROWS = 16
+EXTRACTION_BUFFER_COLS = 48
+EXTRACTION_DEFAULT_STORAGE_ROWS = 8
+EXTRACTION_DEFAULT_STORAGE_COLS = 12
+EXTRACTION_MONEY_STACK_LIMIT = 9999
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env.local"))
@@ -368,8 +373,8 @@ class ExtractionUserProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, unique=True, index=True)
     cash = db.Column(db.Integer, default=0, nullable=False)
-    storage_rows = db.Column(db.Integer, default=6, nullable=False)
-    storage_cols = db.Column(db.Integer, default=10, nullable=False)
+    storage_rows = db.Column(db.Integer, default=EXTRACTION_DEFAULT_STORAGE_ROWS, nullable=False)
+    storage_cols = db.Column(db.Integer, default=EXTRACTION_DEFAULT_STORAGE_COLS, nullable=False)
     runs_count = db.Column(db.Integer, default=0, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
@@ -387,6 +392,7 @@ class ExtractionInventoryItem(db.Model):
     col = db.Column(db.Integer, nullable=True)
     sold_at = db.Column(db.DateTime, nullable=True)
     sold_price = db.Column(db.Integer, nullable=True)
+    quantity = db.Column(db.Integer, default=1, nullable=False)
     durability_percent = db.Column(db.Integer, default=100, nullable=False)
     match_participant_id = db.Column(db.Integer, db.ForeignKey("extraction_match_participants.id"), nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
@@ -502,6 +508,20 @@ class ExtractionUiSetting(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
 
+class ExtractionResetRecord(db.Model):
+    __tablename__ = "extraction_reset_records"
+    id = db.Column(db.Integer, primary_key=True)
+    reset_type = db.Column(db.String(20), nullable=False, index=True)  # assets/data
+    requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    confirmed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    status = db.Column(db.String(20), default="pending", nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, nullable=False)
+    confirmed_at = db.Column(db.DateTime, nullable=True)
+
+    requested_by = db.relationship("User", foreign_keys=[requested_by_id])
+    confirmed_by = db.relationship("User", foreign_keys=[confirmed_by_id])
+
+
 
 class AttendanceEvent(db.Model):
     __tablename__ = "attendance_events"
@@ -573,7 +593,20 @@ def inject_globals():
         is_manager = bool(getattr(current_user, "is_admin", False))
         can_view_attendance_nav = True
     can_access_extraction_nav = bool(getattr(current_user, "can_access_extraction", False))
-    return {"APP_TITLE": APP_TITLE, "JOB_OPTIONS": JOB_OPTIONS, "ACTIVITY_REGION_OPTIONS": ACTIVITY_REGION_OPTIONS, "ACTIVITY_VISIBILITY_OPTIONS": ACTIVITY_VISIBILITY_OPTIONS, "is_manager": is_manager, "can_view_attendance_nav": can_view_attendance_nav, "can_access_extraction_nav": can_access_extraction_nav, "format_date_with_weekday": format_date_with_weekday, "format_plan_date_option": format_plan_date_option}
+    extraction_reset_pending = {}
+    extraction_reset_records = []
+    if current_user.is_authenticated and bool(getattr(current_user, "can_manage_extraction", False)):
+        extraction_reset_pending = {
+            row.reset_type: row
+            for row in ExtractionResetRecord.query.filter_by(status="pending").order_by(ExtractionResetRecord.created_at.desc()).all()
+        }
+        extraction_reset_records = (
+            ExtractionResetRecord.query.filter_by(status="completed")
+            .order_by(ExtractionResetRecord.confirmed_at.desc())
+            .limit(10)
+            .all()
+        )
+    return {"APP_TITLE": APP_TITLE, "JOB_OPTIONS": JOB_OPTIONS, "ACTIVITY_REGION_OPTIONS": ACTIVITY_REGION_OPTIONS, "ACTIVITY_VISIBILITY_OPTIONS": ACTIVITY_VISIBILITY_OPTIONS, "is_manager": is_manager, "can_view_attendance_nav": can_view_attendance_nav, "can_access_extraction_nav": can_access_extraction_nav, "format_date_with_weekday": format_date_with_weekday, "format_plan_date_option": format_plan_date_option, "extraction_reset_pending": extraction_reset_pending, "extraction_reset_records": extraction_reset_records}
 
 
 def admin_required(func):
@@ -689,6 +722,16 @@ def get_extraction_profile(user_id: int) -> ExtractionUserProfile:
         profile = ExtractionUserProfile(user_id=user_id)
         db.session.add(profile)
         db.session.commit()
+    else:
+        changed = False
+        if int(profile.storage_rows or 0) < EXTRACTION_DEFAULT_STORAGE_ROWS:
+            profile.storage_rows = EXTRACTION_DEFAULT_STORAGE_ROWS
+            changed = True
+        if int(profile.storage_cols or 0) < EXTRACTION_DEFAULT_STORAGE_COLS:
+            profile.storage_cols = EXTRACTION_DEFAULT_STORAGE_COLS
+            changed = True
+        if changed:
+            db.session.commit()
     return profile
 
 
@@ -824,6 +867,57 @@ def average_item_def_value(item_def: ExtractionItemDef) -> int:
     return max(0, int(round((low + high) / 2)))
 
 
+def is_stackable_money(item_def: ExtractionItemDef | None) -> bool:
+    return bool(item_def and getattr(item_def, "item_category", None) == "钱币")
+
+
+def add_extraction_inventory_item(user_id: int, item_def: ExtractionItemDef, quantity: int = 1, season_id: int | None = None, location: str = "buffer", match_participant_id: int | None = None):
+    quantity = max(1, int(quantity or 1))
+    created_or_updated = []
+    if is_stackable_money(item_def):
+        existing_items = (
+            ExtractionInventoryItem.query.filter_by(
+                user_id=user_id,
+                item_def_id=item_def.id,
+                location=location,
+                sold_at=None,
+            )
+            .filter(ExtractionInventoryItem.match_participant_id.is_(None) if match_participant_id is None else ExtractionInventoryItem.match_participant_id == match_participant_id)
+            .order_by(ExtractionInventoryItem.created_at.asc())
+            .all()
+        )
+        for existing in existing_items:
+            if quantity <= 0:
+                break
+            current_qty = max(1, int(existing.quantity or 1))
+            free = EXTRACTION_MONEY_STACK_LIMIT - current_qty
+            if free <= 0:
+                continue
+            add_qty = min(quantity, free)
+            existing.quantity = current_qty + add_qty
+            quantity -= add_qty
+            created_or_updated.append(existing)
+        while quantity > 0:
+            stack_qty = min(quantity, EXTRACTION_MONEY_STACK_LIMIT)
+            inv = ExtractionInventoryItem(user_id=user_id, item_def_id=item_def.id, season_id=season_id, location=location, match_participant_id=match_participant_id, quantity=stack_qty)
+            db.session.add(inv)
+            created_or_updated.append(inv)
+            quantity -= stack_qty
+        return created_or_updated[-1] if created_or_updated else None
+    last_inv = None
+    for _ in range(quantity):
+        last_inv = ExtractionInventoryItem(user_id=user_id, item_def_id=item_def.id, season_id=season_id, location=location, match_participant_id=match_participant_id, quantity=1)
+        db.session.add(last_inv)
+    return last_inv
+
+
+def find_stack_target(user_id: int, item_def_id: int, location: str, row: int, col: int, exclude_item_id: int | None = None):
+    target = ExtractionInventoryItem.query.filter_by(user_id=user_id, item_def_id=item_def_id, location=location, sold_at=None, row=row, col=col).first()
+    if target and (exclude_item_id is None or target.id != exclude_item_id) and is_stackable_money(target.item_def) and int(target.quantity or 1) < EXTRACTION_MONEY_STACK_LIMIT:
+        return target
+    return None
+
+
 def get_user_extraction_match_stats(user_id: int, season: ExtractionSeason | None = None) -> dict:
     """按已结束对局统计个人逃离西撇镇数据。"""
     query = ExtractionMatchParticipant.query.join(ExtractionMatch).filter(
@@ -841,7 +935,7 @@ def get_user_extraction_match_stats(user_id: int, season: ExtractionSeason | Non
     total_item_value = 0
     if participant_ids:
         reward_items = ExtractionInventoryItem.query.filter(ExtractionInventoryItem.match_participant_id.in_(participant_ids)).all()
-        total_item_value = sum(average_item_def_value(it.item_def) for it in reward_items if it.item_def)
+        total_item_value = sum(average_item_def_value(it.item_def) * int(it.quantity or 1) for it in reward_items if it.item_def)
     return {
         "match_count": match_count,
         "evac_count": evac_count,
@@ -896,6 +990,26 @@ def first_free_slot(user_id: int, location: str, rows: int, cols: int, item_w: i
     return None, None
 
 
+def nearest_free_slot(user_id: int, location: str, rows: int, cols: int, item_w: int, item_h: int, preferred_row: int, preferred_col: int, exclude_item_id: int | None = None):
+    max_row = rows - item_h + 1
+    max_col = cols - item_w + 1
+    if max_row < 1 or max_col < 1:
+        return None, None
+    preferred_row = min(max(int(preferred_row or 1), 1), max_row)
+    preferred_col = min(max(int(preferred_col or 1), 1), max_col)
+    best = None
+    best_score = None
+    for r in range(1, max_row + 1):
+        for c in range(1, max_col + 1):
+            if not can_place_extraction_item(user_id, location, rows, cols, item_w, item_h, r, c, exclude_item_id=exclude_item_id):
+                continue
+            score = (abs(r - preferred_row) + abs(c - preferred_col), abs(r - preferred_row), abs(c - preferred_col), r, c)
+            if best_score is None or score < best_score:
+                best_score = score
+                best = (r, c)
+    return best if best else (None, None)
+
+
 def normalize_extraction_inventory_layout(user_id: int, location: str, rows: int, cols: int) -> None:
     """Old data may not have row/col. Assign missing items to the first empty slots so grid display is stable."""
     changed = False
@@ -917,11 +1031,13 @@ def sell_extraction_inventory_item(inv_item: ExtractionInventoryItem) -> int:
         return 0
     profile = get_extraction_profile(inv_item.user_id)
     price = extraction_today_price(inv_item.item_def)
+    quantity = max(1, int(inv_item.quantity or 1))
+    total = price * quantity
     inv_item.sold_at = datetime.now()
-    inv_item.sold_price = price
-    profile.cash += price
+    inv_item.sold_price = total
+    profile.cash += total
     db.session.commit()
-    return price
+    return total
 
 
 def auto_sell_extraction_buffers() -> None:
@@ -1608,6 +1724,8 @@ def ensure_schema_compatibility():
             conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN durability_percent INTEGER NOT NULL DEFAULT 100")
         if extraction_inv_cols and "match_participant_id" not in extraction_inv_cols:
             conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN match_participant_id INTEGER")
+        if extraction_inv_cols and "quantity" not in extraction_inv_cols:
+            conn.exec_driver_sql("ALTER TABLE extraction_inventory_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1")
 
         extraction_season_cols = columns("extraction_seasons")
         if extraction_season_cols and "kill_reward_cash" not in extraction_season_cols:
@@ -2700,11 +2818,25 @@ def delete_user(user_id):
     elif user.is_admin and not current_user.is_superadmin:
         flash("普通管理员只能删除普通用户。", "error")
     else:
-        Enrollment.query.filter_by(user_id=user.id).delete()
-        InviteCode.query.filter_by(used_by_id=user.id).update({"used_by_id": None})
-        db.session.delete(user)
-        db.session.commit()
-        flash("用户已删除。", "success")
+        try:
+            deleted_suffix = f"deleted-{user.id}-{int(datetime.now().timestamp())}"
+            InviteCode.query.filter_by(used_by_id=user.id).update({"used_by_id": None}, synchronize_session=False)
+            user.username = deleted_suffix
+            user.callsign = f"已删除用户{user.id}"
+            user.set_password(secrets.token_urlsafe(32))
+            user.role = "user"
+            user.disabled = True
+            user.is_regular_member = False
+            user.attendance_manager = False
+            user.extraction_authorized = False
+            user.extraction_manager = False
+            user.invited_by_id = None
+            user.invite_code_id = None
+            db.session.commit()
+            flash("用户已删除，历史记录已保留。", "success")
+        except Exception as exc:
+            db.session.rollback()
+            flash(f"删除用户失败：{exc}", "error")
     return redirect(url_for("users"))
 
 
@@ -3447,9 +3579,19 @@ def activity_management():
         sync_attendance_events()
     except Exception:
         db.session.rollback()
-    activities = Activity.query.order_by(Activity.start_at.desc()).all()
-    plans = ActivityPlan.query.order_by(ActivityPlan.created_at.desc()).all()
-    return render_template("activity_management.html", activities=activities, plans=plans, activity_status=activity_status, plan_status=plan_status, enrollment_count=enrollment_count)
+    all_activities = Activity.query.order_by(Activity.start_at.desc()).all()
+    all_plans = ActivityPlan.query.order_by(ActivityPlan.created_at.desc()).all()
+    active_activities = []
+    ended_activities = []
+    for activity in all_activities:
+        status_text, _ = activity_status(activity)
+        if status_text in {"报名中", "已锁定", "活动进行中"}:
+            active_activities.append(activity)
+        elif status_text == "活动结束":
+            ended_activities.append(activity)
+    active_plans = [plan for plan in all_plans if not plan.hidden and plan_status(plan)[0] == "策划中"]
+    plan_records = [plan for plan in all_plans if plan.hidden]
+    return render_template("activity_management.html", active_activities=active_activities, active_plans=active_plans, activities=ended_activities, plans=plan_records, activity_status=activity_status, plan_status=plan_status, enrollment_count=enrollment_count)
 
 
 @app.route("/activities/<int:activity_id>/delete", methods=["POST"])
@@ -3602,23 +3744,24 @@ def extraction_home():
     profile = get_extraction_profile(current_user.id)
     season = current_extraction_season()
     match_stats = get_user_extraction_match_stats(current_user.id, season)
-    profile.runs_count = int(match_stats["match_count"] or 0)
+    total_match_stats = get_user_extraction_match_stats(current_user.id)
+    profile.runs_count = int(total_match_stats["match_count"] or 0)
     season_items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, season_id=season.id if season else None).all() if season else []
     levels = ["超凡", "史诗", "精品", "普通"]
     level_counts = {level: 0 for level in levels}
     season_cash = 0
     for it in season_items:
         if it.item_def.level in level_counts:
-            level_counts[it.item_def.level] += 1
+            level_counts[it.item_def.level] += max(1, int(it.quantity or 1))
         if it.sold_price:
             season_cash += it.sold_price
-    normalize_extraction_inventory_layout(current_user.id, "buffer", 12, 30)
+    normalize_extraction_inventory_layout(current_user.id, "buffer", EXTRACTION_BUFFER_ROWS, EXTRACTION_BUFFER_COLS)
     normalize_extraction_inventory_layout(current_user.id, "storage", profile.storage_rows, profile.storage_cols)
     buffer_items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, location="buffer", sold_at=None).order_by(ExtractionInventoryItem.row.asc(), ExtractionInventoryItem.col.asc(), ExtractionInventoryItem.created_at.desc()).all()
     storage_items = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, location="storage", sold_at=None).order_by(ExtractionInventoryItem.row.asc(), ExtractionInventoryItem.col.asc(), ExtractionInventoryItem.created_at.desc()).all()
     prices = {it.item_def_id: extraction_today_price(it.item_def) for it in buffer_items + storage_items}
     trends = {it.item_def_id: extraction_trend(it.item_def) for it in buffer_items + storage_items}
-    return render_template("extraction_home.html", profile=profile, season=season, match_stats=match_stats, level_counts=level_counts, season_cash=season_cash, buffer_items=buffer_items, storage_items=storage_items, prices=prices, trends=trends, buffer_rows=12, buffer_cols=30)
+    return render_template("extraction_home.html", profile=profile, season=season, match_stats=match_stats, total_match_stats=total_match_stats, level_counts=level_counts, season_cash=season_cash, buffer_items=buffer_items, storage_items=storage_items, prices=prices, trends=trends, buffer_rows=EXTRACTION_BUFFER_ROWS, buffer_cols=EXTRACTION_BUFFER_COLS)
 
 
 @app.route("/extraction/exit")
@@ -3636,7 +3779,8 @@ def extraction_sell_item(item_id):
         flash("物品不存在或已出售。", "error")
         return redirect(url_for("extraction_home"))
     price = sell_extraction_inventory_item(inv)
-    flash(f"已出售 {inv.item_def.name}，获得 {price} 甬士币。", "success")
+    qty_text = f" ×{inv.quantity}" if int(inv.quantity or 1) > 1 else ""
+    flash(f"已出售 {inv.item_def.name}{qty_text}，获得 {price} 甬士币。", "success")
     return redirect(url_for("extraction_home"))
 
 
@@ -3655,8 +3799,9 @@ def extraction_sell_many():
         inv = db.session.get(ExtractionInventoryItem, item_id)
         if not inv or inv.user_id != current_user.id or inv.sold_at:
             continue
+        item_qty = max(1, int(inv.quantity or 1))
         total += sell_extraction_inventory_item(inv)
-        count += 1
+        count += item_qty
     if count:
         flash(f"已出售 {count} 个物品，获得 {total} 甬士币。", "success")
     else:
@@ -3680,7 +3825,7 @@ def extraction_place_item(item_id):
         return jsonify({"ok": False, "message": "位置无效。"}), 400
     profile = get_extraction_profile(current_user.id)
     if location == "buffer":
-        rows, cols = 12, 30
+        rows, cols = EXTRACTION_BUFFER_ROWS, EXTRACTION_BUFFER_COLS
     elif location == "storage":
         rows, cols = profile.storage_rows, profile.storage_cols
     else:
@@ -3688,8 +3833,24 @@ def extraction_place_item(item_id):
     # V51: Only allow buffer -> storage, storage -> storage, and same-location rearrange.
     if inv.location == "storage" and location == "buffer":
         return jsonify({"ok": False, "message": "个人仓库物品不能放回缓冲区。"}), 400
+    stack_target = find_stack_target(current_user.id, inv.item_def_id, location, row, col, exclude_item_id=inv.id)
+    if stack_target and is_stackable_money(inv.item_def):
+        target_qty = max(1, int(stack_target.quantity or 1))
+        moving_qty = max(1, int(inv.quantity or 1))
+        can_add = max(0, EXTRACTION_MONEY_STACK_LIMIT - target_qty)
+        add_qty = min(can_add, moving_qty)
+        stack_target.quantity = target_qty + add_qty
+        remaining_qty = moving_qty - add_qty
+        if remaining_qty <= 0:
+            db.session.delete(inv)
+        else:
+            inv.quantity = remaining_qty
+        db.session.commit()
+        return jsonify({"ok": True, "message": "钱币已叠加。", "location": location, "row": row, "col": col, "stacked": True, "target_id": stack_target.id, "quantity": stack_target.quantity, "remaining_id": inv.id if remaining_qty > 0 else None, "remaining_quantity": remaining_qty})
     if not can_place_extraction_item(current_user.id, location, rows, cols, inv.item_def.width, inv.item_def.height, row, col, exclude_item_id=inv.id):
-        return jsonify({"ok": False, "message": "目标位置空间不足或发生重叠。"}), 400
+        row, col = nearest_free_slot(current_user.id, location, rows, cols, inv.item_def.width, inv.item_def.height, row, col, exclude_item_id=inv.id)
+        if row is None:
+            return jsonify({"ok": False, "message": "目标位置空间不足或发生重叠，且没有可用空间。"}), 400
     inv.location = location
     inv.row = row
     inv.col = col
@@ -3706,6 +3867,14 @@ def extraction_move_to_storage(item_id):
         flash("物品不能移动。", "error")
         return redirect(url_for("extraction_home"))
     profile = get_extraction_profile(current_user.id)
+    if is_stackable_money(inv.item_def):
+        existing = ExtractionInventoryItem.query.filter_by(user_id=current_user.id, item_def_id=inv.item_def_id, location="storage", sold_at=None).first()
+        if existing:
+            existing.quantity = int(existing.quantity or 1) + int(inv.quantity or 1)
+            db.session.delete(inv)
+            db.session.commit()
+            flash("钱币已转入个人仓库并叠加。", "success")
+            return redirect(url_for("extraction_home"))
     row, col = first_free_slot(current_user.id, "storage", profile.storage_rows, profile.storage_cols, inv.item_def.width, inv.item_def.height)
     if row is None:
         flash("个人仓库空间不足。", "error")
@@ -3731,7 +3900,7 @@ def extraction_entry():
         try:
             user_id = int(request.form.get("user_id"))
             item_def_id = int(request.form.get("item_def_id"))
-            qty = max(1, min(int(request.form.get("qty", "1")), 20))
+            qty = max(1, int(request.form.get("qty", "1")))
         except Exception:
             flash("请选择用户和物品。", "error")
             return redirect(url_for("extraction_entry"))
@@ -3740,8 +3909,9 @@ def extraction_entry():
         if not user or not item_def:
             flash("用户或物品不存在。", "error")
         else:
-            for _ in range(qty):
-                db.session.add(ExtractionInventoryItem(user_id=user.id, item_def_id=item_def.id, season_id=season.id if season else None, location="buffer"))
+            if not is_stackable_money(item_def):
+                qty = min(qty, 10)
+            add_extraction_inventory_item(user.id, item_def, quantity=qty, season_id=season.id if season else None, location="buffer")
             db.session.commit()
             flash("物品已录入到用户缓冲区仓库。", "success")
         return redirect(url_for("extraction_entry", user_id=user_id))
@@ -3787,7 +3957,7 @@ def parse_extraction_item_form() -> dict:
     if level not in {"超凡", "史诗", "精品", "普通"}:
         level = "普通"
     item_category = request.form.get("item_category", "常规物品").strip() or "常规物品"
-    if item_category not in {"常规物品", "武器"}:
+    if item_category not in {"常规物品", "武器", "钱币"}:
         item_category = "常规物品"
     min_price = max(1, int(request.form.get("min_price", "1")))
     max_price = max(min_price, int(request.form.get("max_price", str(min_price))))
@@ -3884,7 +4054,7 @@ def extraction_assets():
             season_items = ExtractionInventoryItem.query.filter_by(user_id=selected_user.id, season_id=season.id).all()
             for it in season_items:
                 if it.item_def.level in level_counts:
-                    level_counts[it.item_def.level] += 1
+                    level_counts[it.item_def.level] += max(1, int(it.quantity or 1))
                 if it.sold_price:
                     season_cash += it.sold_price
         normalize_extraction_inventory_layout(selected_user.id, "storage", profile.storage_rows, profile.storage_cols)
@@ -3906,10 +4076,10 @@ def _create_extraction_shop_item_from_form():
     shelf_until_raw = request.form.get("shelf_until", "").strip()
     shelf_until = datetime.strptime(shelf_until_raw, "%Y-%m-%d").date() if shelf_until_raw else None
     if category == "storage":
-        rows = max(1, int(request.form.get("storage_rows", "6")))
-        cols = max(1, int(request.form.get("storage_cols", "10")))
+        rows = max(1, int(request.form.get("storage_rows", str(EXTRACTION_DEFAULT_STORAGE_ROWS))))
+        cols = max(1, int(request.form.get("storage_cols", str(EXTRACTION_DEFAULT_STORAGE_COLS))))
         item_def_id = None
-    elif category in ["item", "weapon"]:
+    elif category in ["item", "weapon", "money"]:
         rows = cols = None
         item_def_id = None
     else:
@@ -3972,13 +4142,13 @@ def extraction_buy(shop_item_id):
             profile.storage_cols = max(profile.storage_cols, item.storage_cols or profile.storage_cols)
             flash("仓库已扩充。", "success")
         else:
-            item_category = "武器" if item.category == "weapon" else "常规物品"
+            item_category = "武器" if item.category == "weapon" else ("钱币" if item.category == "money" else "常规物品")
             item_def = ExtractionItemDef.query.filter_by(name=item.name, item_category=item_category).first()
             if not item_def:
                 item_def = ExtractionItemDef(name=item.name, level="普通", item_category=item_category, min_price=max(1, item.price), max_price=max(1, item.price), width=1, height=1, active=True)
                 db.session.add(item_def)
                 db.session.flush()
-            db.session.add(ExtractionInventoryItem(user_id=current_user.id, item_def_id=item_def.id, season_id=current_extraction_season().id if current_extraction_season() else None, location="buffer"))
+            add_extraction_inventory_item(current_user.id, item_def, season_id=current_extraction_season().id if current_extraction_season() else None, location="buffer")
             flash("购买成功，物品已进入缓冲区仓库。", "success")
         db.session.commit()
     return redirect(url_for("extraction_shop"))
@@ -4005,15 +4175,15 @@ def extraction_shop_edit(shop_item_id):
         return redirect(url_for("extraction_shop_manage"))
     if request.method == "POST":
         item.category = request.form.get("category", item.category)
-        if item.category not in {"storage", "item", "weapon"}:
+        if item.category not in {"storage", "item", "weapon", "money"}:
             item.category = "item"
         item.name = request.form.get("name", "").strip() or item.name
         try:
             item.price = max(0, int(request.form.get("price", item.price)))
             item.stock = max(0, int(request.form.get("stock", item.stock)))
             if item.category == "storage":
-                item.storage_rows = max(1, int(request.form.get("storage_rows", item.storage_rows or 6)))
-                item.storage_cols = max(1, int(request.form.get("storage_cols", item.storage_cols or 10)))
+                item.storage_rows = max(1, int(request.form.get("storage_rows", item.storage_rows or EXTRACTION_DEFAULT_STORAGE_ROWS)))
+                item.storage_cols = max(1, int(request.form.get("storage_cols", item.storage_cols or EXTRACTION_DEFAULT_STORAGE_COLS)))
             else:
                 item.storage_rows = None
                 item.storage_cols = None
@@ -4349,12 +4519,12 @@ def extraction_match_settle(match_id):
                 reward_qty = int(reward_qtys[idx]) if idx < len(reward_qtys) else 0
             except (TypeError, ValueError):
                 reward_qty = 0
-            reward_qty = max(0, min(reward_qty, 99))
             if reward_item_id and reward_qty > 0:
                 item_def = db.session.get(ExtractionItemDef, reward_item_id)
                 if item_def:
-                    for _ in range(reward_qty):
-                        db.session.add(ExtractionInventoryItem(user_id=p.user_id, item_def_id=item_def.id, season_id=season.id if season else None, location="buffer", match_participant_id=p.id))
+                    if not is_stackable_money(item_def):
+                        reward_qty = min(reward_qty, 99)
+                    add_extraction_inventory_item(p.user_id, item_def, quantity=reward_qty, season_id=season.id if season else None, location="buffer", match_participant_id=p.id)
         if p.weapon_rule and p.weapon_rule.weapon_type == "special" and p.weapon_inventory_item:
             inv = p.weapon_inventory_item
             if p.evacuated:
@@ -4449,6 +4619,95 @@ def extraction_update_season_reward(season_id):
     db.session.commit()
     flash("击杀奖励已更新。", "success")
     return redirect(url_for("extraction_seasons"))
+
+
+@app.route("/extraction/seasons/<int:season_id>/edit", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_edit_season(season_id):
+    season = db.session.get(ExtractionSeason, season_id)
+    if not season:
+        flash("赛季不存在。", "error")
+        return redirect(url_for("extraction_seasons"))
+    name = request.form.get("name", "").strip()
+    try:
+        start_date = datetime.strptime(request.form.get("start_date"), "%Y-%m-%d").date()
+        end_date = datetime.strptime(request.form.get("end_date"), "%Y-%m-%d").date()
+        kill_reward_cash = max(0, int(request.form.get("kill_reward_cash", season.kill_reward_cash or 0)))
+    except Exception:
+        flash("请填写有效的赛季信息。", "error")
+        return redirect(url_for("extraction_seasons"))
+    if not name:
+        flash("赛季名称不能为空。", "error")
+    elif end_date < start_date:
+        flash("结束日期不能早于开始日期。", "error")
+    else:
+        season.name = name
+        season.start_date = start_date
+        season.end_date = end_date
+        season.kill_reward_cash = kill_reward_cash
+        db.session.commit()
+        flash("赛季信息已更新。", "success")
+    return redirect(url_for("extraction_seasons"))
+
+
+def reset_extraction_assets() -> None:
+    ExtractionMatchParticipant.query.update({"weapon_inventory_item_id": None}, synchronize_session=False)
+    ExtractionInventoryItem.query.delete(synchronize_session=False)
+    ExtractionUserProfile.query.update({"cash": 0, "storage_rows": EXTRACTION_DEFAULT_STORAGE_ROWS, "storage_cols": EXTRACTION_DEFAULT_STORAGE_COLS}, synchronize_session=False)
+
+
+def reset_extraction_data() -> None:
+    ExtractionMatchParticipant.query.update({"weapon_inventory_item_id": None}, synchronize_session=False)
+    ExtractionInventoryItem.query.delete(synchronize_session=False)
+    ExtractionMatchParticipant.query.delete(synchronize_session=False)
+    ExtractionMatch.query.delete(synchronize_session=False)
+    ExtractionRunRecord.query.delete(synchronize_session=False)
+    ExtractionUserProfile.query.delete(synchronize_session=False)
+
+
+@app.route("/extraction/reset/<reset_type>", methods=["POST"])
+@login_required
+@extraction_manage_required
+def extraction_reset(reset_type):
+    reset_config = {
+        "assets": ("资产重置", reset_extraction_assets),
+        "data": ("数据重置", reset_extraction_data),
+    }
+    if reset_type not in reset_config:
+        flash("未知的重置类型。", "error")
+        return redirect(request.referrer or url_for("extraction_home"))
+    phrase, reset_func = reset_config[reset_type]
+    confirm_text = (request.form.get("confirm_text") or "").strip()
+    if confirm_text != phrase:
+        flash(f"请输入“{phrase}”确认操作。", "error")
+        return redirect(request.referrer or url_for("extraction_home"))
+
+    pending = (
+        ExtractionResetRecord.query.filter_by(reset_type=reset_type, status="pending")
+        .order_by(ExtractionResetRecord.created_at.desc())
+        .first()
+    )
+    if not pending:
+        db.session.add(ExtractionResetRecord(reset_type=reset_type, requested_by_id=current_user.id))
+        db.session.commit()
+        flash(f"{current_user.callsign} 已申请{phrase}，需要另一名管理员再次确认。", "warning")
+        return redirect(request.referrer or url_for("extraction_home"))
+    if pending.requested_by_id == current_user.id:
+        flash(f"你已经申请了{phrase}，需要另一名管理员确认。", "warning")
+        return redirect(request.referrer or url_for("extraction_home"))
+
+    try:
+        reset_func()
+        pending.confirmed_by_id = current_user.id
+        pending.confirmed_at = datetime.now()
+        pending.status = "completed"
+        db.session.commit()
+        flash(f"{phrase}已完成。", "success")
+    except Exception as exc:
+        db.session.rollback()
+        flash(f"{phrase}失败：{exc}", "error")
+    return redirect(request.referrer or url_for("extraction_home"))
 
 
 # =========================
@@ -4617,6 +4876,7 @@ def api_extraction_profile():
                 "name": item.item_def.name,
                 "level": item.item_def.level,
                 "category": getattr(item.item_def, "item_category", "常规物品"),
+                "quantity": int(item.quantity or 1),
                 "location": item.location,
                 "row": item.row,
                 "col": item.col,
