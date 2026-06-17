@@ -15,13 +15,16 @@
       {% endfor %}
       {% for it in items %}
         {% set trend = trends.get(it.item_def_id, ('equal', '=')) %}
-        <div class="inventory-grid-item level-{{ it.item_def.level }}" draggable="true" data-inventory-item data-item-id="{{ it.id }}" data-location="{{ it.location }}" data-row="{{ it.row or 1 }}" data-col="{{ it.col or 1 }}" data-width="{{ it.item_def.width }}" data-height="{{ it.item_def.height }}" style="grid-row: {{ it.row or 1 }} / span {{ it.item_def.height }}; grid-column: {{ it.col or 1 }} / span {{ it.item_def.width }};">
+        <div class="inventory-grid-item level-{{ it.item_def.level }}" draggable="true" data-inventory-item data-item-id="{{ it.id }}" data-item-def-id="{{ it.item_def_id }}" data-category="{{ it.item_def.item_category or '常规物品' }}" data-location="{{ it.location }}" data-row="{{ it.row or 1 }}" data-col="{{ it.col or 1 }}" data-width="{{ it.item_def.width }}" data-height="{{ it.item_def.height }}" data-quantity="{{ it.quantity or 1 }}" style="grid-row: {{ it.row or 1 }} / span {{ it.item_def.height }}; grid-column: {{ it.col or 1 }} / span {{ it.item_def.width }};">
           <div class="grid-item-bg">
             {% if it.item_def.photo_filename %}<img draggable="false" src="{{ url_for('static', filename='uploads/extraction_items/' ~ it.item_def.photo_filename) }}">{% endif %}
           </div>
+          {% if it.item_def.item_category == '钱币' and (it.quantity or 1) > 1 %}<span class="item-quantity-badge">×{{ it.quantity }}</span>{% endif %}
           <div class="item-hover-card">
             <div>物品名称：{{ it.item_def.name }}</div>
+            <div>分类：{{ it.item_def.item_category or '常规物品' }}</div>
             <div>等级：{{ it.item_def.level }}</div>
+            {% if it.item_def.item_category == '钱币' %}<div>数量：{{ it.quantity or 1 }}</div>{% endif %}
             <div>价格：{{ prices[it.item_def_id] }} <b class="trend {{ trend[0] }}">{{ trend[1] }}</b></div>
             {% if it.item_def.item_category == '武器' %}<div>耐久：{{ it.durability_percent }}%</div>{% endif %}
           </div>
@@ -38,14 +41,15 @@
   <div class="stats-row">
     <div><span class="muted">呼号</span><strong>{{ current_user.callsign }}</strong></div>
     <div><span class="muted">甬士币</span><strong>{{ profile.cash }}</strong></div>
-    <div><span class="muted">参加对局数</span><strong>{{ match_stats.match_count }}</strong></div>
+    <div><span class="muted">总参与对局数</span><strong>{{ total_match_stats.match_count }}</strong></div>
+    <div><span class="muted">总成功撤离率</span><strong>{{ total_match_stats.evac_rate }}%</strong></div>
     <div><span class="muted">当前赛季</span><strong>{{ season.name if season else '未设置' }}</strong></div>
   </div>
 </section>
 <section class="panel">
   <div class="section-head"><h2>赛季统计</h2><button class="secondary small" type="button" disabled>历史赛季信息</button></div>
   <div class="stats-row compact">
-    <div><span class="muted">参加对局数</span><strong>{{ match_stats.match_count }}</strong></div>
+    <div><span class="muted">本赛季参与对局数</span><strong>{{ match_stats.match_count }}</strong></div>
     <div><span class="muted">成功撤离次数</span><strong>{{ match_stats.evac_count }}</strong></div>
     <div><span class="muted">撤离成功率</span><strong>{{ match_stats.evac_rate }}%</strong></div>
     <div><span class="muted">平均每局获得甬士币</span><strong>{{ match_stats.avg_cash }}</strong></div>
@@ -58,7 +62,7 @@
 
 
 <section class="warehouse-layout">
-  {{ warehouse_grid('缓冲区仓库', '12×30，每天 5:00 自动出售已过夜物品', 'buffer', buffer_rows, buffer_cols, buffer_items) }}
+  {{ warehouse_grid('缓冲区仓库', buffer_rows ~ '×' ~ buffer_cols ~ '，每天 5:00 自动出售已过夜物品', 'buffer', buffer_rows, buffer_cols, buffer_items) }}
   {{ warehouse_grid('个人仓库', profile.storage_rows ~ '×' ~ profile.storage_cols, 'storage', profile.storage_rows, profile.storage_cols, storage_items) }}
 </section>
 <section class="panel extraction-sell-box-panel">

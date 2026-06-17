@@ -7,12 +7,15 @@
       {% for r in range(1, rows + 1) %}{% for c in range(1, cols + 1) %}<div class="inventory-cell" style="grid-row: {{ r }}; grid-column: {{ c }};"></div>{% endfor %}{% endfor %}
       {% for it in items %}
         {% set trend = trends.get(it.item_def_id, ('equal', '=')) %}
-        <div class="inventory-grid-item level-{{ it.item_def.level }}" data-inventory-item data-item-id="{{ it.id }}" data-location="storage" data-row="{{ it.row or 1 }}" data-col="{{ it.col or 1 }}" data-width="{{ it.item_def.width }}" data-height="{{ it.item_def.height }}" style="grid-row: {{ it.row or 1 }} / span {{ it.item_def.height }}; grid-column: {{ it.col or 1 }} / span {{ it.item_def.width }};" data-name="{{ it.item_def.name }}" data-level="{{ it.item_def.level }}" data-price="{{ prices[it.item_def_id] }}" data-trend="{{ trend[0] }}" data-trend-symbol="{{ trend[1] }}">
+        <div class="inventory-grid-item level-{{ it.item_def.level }}" data-inventory-item data-item-id="{{ it.id }}" data-item-def-id="{{ it.item_def_id }}" data-category="{{ it.item_def.item_category or '常规物品' }}" data-location="storage" data-row="{{ it.row or 1 }}" data-col="{{ it.col or 1 }}" data-width="{{ it.item_def.width }}" data-height="{{ it.item_def.height }}" data-quantity="{{ it.quantity or 1 }}" style="grid-row: {{ it.row or 1 }} / span {{ it.item_def.height }}; grid-column: {{ it.col or 1 }} / span {{ it.item_def.width }};" data-name="{{ it.item_def.name }}" data-level="{{ it.item_def.level }}" data-price="{{ prices[it.item_def_id] }}" data-trend="{{ trend[0] }}" data-trend-symbol="{{ trend[1] }}">
           <div class="grid-item-bg">{% if it.item_def.photo_filename %}<img draggable="false" src="{{ url_for('static', filename='uploads/extraction_items/' ~ it.item_def.photo_filename) }}">{% else %}<span>{{ it.item_def.name[:2] }}</span>{% endif %}</div>
+          {% if it.item_def.item_category == '钱币' and (it.quantity or 1) > 1 %}<span class="item-quantity-badge">×{{ it.quantity }}</span>{% endif %}
           <div class="grid-item-label"><strong>{{ it.item_def.name }}</strong><small>{{ it.item_def.level }} {{ it.item_def.height }}×{{ it.item_def.width }}</small><small>￥{{ prices[it.item_def_id] }} <b class="trend {{ trend[0] }}">{{ trend[1] }}</b></small></div>
           <div class="item-hover-card">
             <div>物品名称：{{ it.item_def.name }}</div>
+            <div>分类：{{ it.item_def.item_category or '常规物品' }}</div>
             <div>等级：{{ it.item_def.level }}</div>
+            {% if it.item_def.item_category == '钱币' %}<div>数量：{{ it.quantity or 1 }}</div>{% endif %}
             <div>价格：{{ prices[it.item_def_id] }} <b class="trend {{ trend[0] }}">{{ trend[1] }}</b></div>
           </div>
         </div>

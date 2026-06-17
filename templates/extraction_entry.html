@@ -4,10 +4,10 @@
   <h2>物品录入</h2><p class="muted">录入后用户保持不变，方便连续录入同一用户。</p>
   <form method="post" class="form-grid">
     <label>用户<select name="user_id" required>{% for u in users %}<option value="{{ u.id }}" {% if selected_user_id == u.id %}selected{% endif %}>{{ u.callsign }}（{{ u.username }}）</option>{% endfor %}</select></label>
-    <label>物品<select name="item_def_id" required>{% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }} · {{ item.level }} · {{ item.height }}×{{ item.width }}</option>{% endfor %}</select></label>
-    <label>数量<input type="number" name="qty" min="1" max="20" value="1"></label>
+    <label>物品<select name="item_def_id" required>{% for item in item_defs %}<option value="{{ item.id }}">{{ item.name }} · {{ item.level }} · {{ item.height }}×{{ item.width }}{% if item.item_category == '钱币' %} · 钱币{% endif %}</option>{% endfor %}</select></label>
+    <label>数量<input type="number" name="qty" min="1" value="1"></label>
     <button class="primary" type="submit">录入到缓冲区仓库</button>
   </form>
-  <p class="muted">录入后会进入用户缓冲区仓库；每天 5:00 自动按当天价格出售缓冲区中过夜物品。</p>
+  <p class="muted">录入后会进入用户缓冲区仓库；普通物品单次最多录入 10 个，钱币类不限数量并会自动拆分堆叠；每天 5:00 自动按当天价格出售缓冲区中过夜物品。</p>
 </section>
 {% endblock %}

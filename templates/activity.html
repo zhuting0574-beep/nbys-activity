@@ -41,11 +41,39 @@
     <button class="secondary" disabled>当前不可报名</button>
     {% endif %}
     <button class="secondary" type="button" data-open-modal="launcherRentalModal">发射器租赁</button>
+    {% if activity.visibility_type == 'official_plus_invite' and invited_users %}
+    <button class="secondary" type="button" data-open-modal="invitedUsersModal">查看邀请用户</button>
+    {% endif %}
     {% if current_user.is_admin %}<button class="secondary" type="button" data-open-modal="activityEditModal">编辑活动</button>{% endif %}
   </div>
 </section>
 
 <div class="notice" id="pageNotice" style="display:none;"></div>
+
+{% if activity.visibility_type == 'official_plus_invite' and invited_users %}
+<div id="invitedUsersModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close-modal></div>
+  <div class="modal-panel">
+    <div class="modal-head">
+      <h2>邀请用户</h2>
+      <button type="button" class="icon-btn" data-close-modal>×</button>
+    </div>
+    <div class="table-wrap small-table">
+      <table>
+        <thead><tr><th>呼号</th><th>用户名</th></tr></thead>
+        <tbody>
+          {% for u in invited_users if not u.is_regular_member %}
+          <tr><td>{{ u.callsign }}</td><td>{{ u.username }}</td></tr>
+          {% else %}
+          <tr><td colspan="2" class="muted">暂无额外邀请用户。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions"><button type="button" class="secondary" data-close-modal>关闭</button></div>
+  </div>
+</div>
+{% endif %}
 
 <section class="roster-section">
   <div class="section-head">

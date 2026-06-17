@@ -3,13 +3,13 @@
 <section class="panel">
   <div class="section-head"><h2>编辑商店货品</h2><a class="secondary small" href="{{ url_for('extraction_shop_manage') }}">返回管理</a></div>
   <form method="post" class="form-grid">
-    <label>分类<select name="category"><option value="storage" {% if item.category=='storage' %}selected{% endif %}>仓库扩充</option><option value="item" {% if item.category=='item' %}selected{% endif %}>常规物品</option><option value="weapon" {% if item.category=='weapon' %}selected{% endif %}>武器</option></select></label>
+    <label>分类<select name="category"><option value="storage" {% if item.category=='storage' %}selected{% endif %}>仓库扩充</option><option value="item" {% if item.category=='item' %}selected{% endif %}>常规物品</option><option value="weapon" {% if item.category=='weapon' %}selected{% endif %}>武器</option><option value="money" {% if item.category=='money' %}selected{% endif %}>钱币</option></select></label>
     <label>商品名称<input name="name" value="{{ item.name }}" required></label>
     <label>单个价格<input type="number" name="price" min="0" value="{{ item.price }}"></label>
     <label>库存数量<input type="number" name="stock" min="0" value="{{ item.stock }}"></label>
     <label>下架日期<input type="date" name="shelf_until" value="{{ item.shelf_until or '' }}"></label>
-    <label>仓库纵向尺寸<input type="number" name="storage_rows" min="1" value="{{ item.storage_rows or 6 }}"></label>
-    <label>仓库横向尺寸<input type="number" name="storage_cols" min="1" value="{{ item.storage_cols or 10 }}"></label>
+    <label>仓库纵向尺寸<input type="number" name="storage_rows" min="1" value="{{ item.storage_rows or 8 }}"></label>
+    <label>仓库横向尺寸<input type="number" name="storage_cols" min="1" value="{{ item.storage_cols or 12 }}"></label>
     <label>状态<select name="active"><option value="1" {% if item.active %}selected{% endif %}>上架</option><option value="0" {% if not item.active %}selected{% endif %}>下架</option></select></label>
     <div class="form-actions"><button class="primary">保存</button><a class="secondary" href="{{ url_for('extraction_shop_manage') }}">取消</a></div>
   </form>

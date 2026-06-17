@@ -57,11 +57,15 @@
     </div>
     <div class="table-wrap small-table">
       <table>
-        <thead><tr><th>用户名</th><th>呼号</th><th>权限</th><th>正式队员</th><th>逃离西撇镇授权</th><th>状态</th><th>邀请人</th><th>管理员权限</th></tr></thead>
+        <thead><tr><th>正式队员</th><th>呼号</th><th>用户名</th><th>逃离西撇镇授权</th><th>状态</th><th>管理操作</th><th>权限</th><th>邀请人</th></tr></thead>
         <tbody>
           {% for u in users %}
           <tr>
-            <td>{{ u.username }}</td>
+            <td>
+              <form method="post" action="{{ url_for('toggle_regular_member', user_id=u.id) }}" class="mini-form preserve-scroll-form" data-preserve-scroll="1">
+                <button class="{{ 'success' if u.is_regular_member else 'secondary' }} small" type="submit">{{ '是' if u.is_regular_member else '否' }}</button>
+              </form>
+            </td>
             <td>
               {% if current_user.is_superadmin %}
               <form method="post" action="{{ url_for('update_user_callsign', user_id=u.id) }}" class="mini-form callsign-edit-form">
@@ -70,12 +74,7 @@
               </form>
               {% else %}{{ u.callsign }}{% endif %}
             </td>
-            <td>{{ {'user':'普通用户','admin':'管理员','superadmin':'超级管理员'}.get(u.role, u.role) }}</td>
-            <td>
-              <form method="post" action="{{ url_for('toggle_regular_member', user_id=u.id) }}" class="mini-form preserve-scroll-form" data-preserve-scroll="1">
-                <button class="{{ 'success' if u.is_regular_member else 'secondary' }} small" type="submit">{{ '是' if u.is_regular_member else '否' }}</button>
-              </form>
-            </td>
+            <td>{{ u.username }}</td>
             <td>
               {% if current_user.can_manage_extraction %}
               <form method="post" action="{{ url_for('toggle_extraction_authorized', user_id=u.id) }}" class="mini-form preserve-scroll-form" data-preserve-scroll="1">
@@ -84,19 +83,8 @@
               {% else %}{{ '是' if u.extraction_authorized or u.extraction_manager or u.is_superadmin else '否' }}{% endif %}
             </td>
             <td>{{ '已禁用' if u.disabled else '正常' }}</td>
-            <td>{{ u.inviter.callsign if u.inviter else '-' }}</td>
-            <td class="row-actions user-actions admin-permission-cell">
+            <td class="row-actions user-actions">
               {% if u.id != current_user.id and current_user.is_superadmin %}
-                <form method="post" action="{{ url_for('update_user_admin_kind', user_id=u.id) }}" class="mini-form preserve-scroll-form" data-preserve-scroll="1">
-                  <select name="admin_kind" title="管理员权限">
-                    <option value="user" {% if u.role=='user' and not u.attendance_manager and not u.extraction_manager %}selected{% endif %}>普通用户</option>
-                    <option value="admin" {% if u.role=='admin' and not u.attendance_manager and not u.extraction_manager %}selected{% endif %}>管理员</option>
-                    <option value="superadmin" {% if u.role=='superadmin' %}selected{% endif %}>超级管理员</option>
-                    <option value="attendance_manager" {% if u.attendance_manager %}selected{% endif %}>出勤管理员</option>
-                    <option value="extraction_manager" {% if u.extraction_manager %}selected{% endif %}>逃离西撇镇管理员</option>
-                  </select>
-                  <button class="secondary small" type="submit">保存</button>
-                </form>
                 <form method="post" action="{{ url_for('reset_user_password', user_id=u.id) }}" onsubmit="return confirm('确认将 {{ u.callsign }} 的密码重置为 nb123456？');">
                   <button class="warning small" type="submit">重置密码</button>
                 </form>
@@ -117,9 +105,26 @@
                 {% else %}<span class="muted">-</span>{% endif %}
               {% else %}<span class="muted">当前账号</span>{% endif %}
             </td>
+            <td class="admin-permission-cell">
+              {% if u.id != current_user.id and current_user.is_superadmin %}
+                <form method="post" action="{{ url_for('update_user_admin_kind', user_id=u.id) }}" class="mini-form preserve-scroll-form" data-preserve-scroll="1">
+                  <select name="admin_kind" title="管理员权限">
+                    <option value="user" {% if u.role=='user' and not u.attendance_manager and not u.extraction_manager %}selected{% endif %}>普通用户</option>
+                    <option value="admin" {% if u.role=='admin' and not u.attendance_manager and not u.extraction_manager %}selected{% endif %}>管理员</option>
+                    <option value="superadmin" {% if u.role=='superadmin' %}selected{% endif %}>超级管理员</option>
+                    <option value="attendance_manager" {% if u.attendance_manager %}selected{% endif %}>出勤管理员</option>
+                    <option value="extraction_manager" {% if u.extraction_manager %}selected{% endif %}>逃离西撇镇管理员</option>
+                  </select>
+                  <button class="secondary small" type="submit">保存</button>
+                </form>
+              {% else %}
+                {{ {'user':'普通用户','admin':'管理员','superadmin':'超级管理员'}.get(u.role, u.role) }}{% if u.attendance_manager %} / 出勤管理员{% endif %}{% if u.extraction_manager %} / 逃离西撇镇管理员{% endif %}
+              {% endif %}
+            </td>
+            <td>{{ u.inviter.callsign if u.inviter else '-' }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="7" class="muted">暂无用户。</td></tr>
+          <tr><td colspan="8" class="muted">暂无用户。</td></tr>
           {% endfor %}
         </tbody>
       </table>
