@@ -1,0 +1,57 @@
+数据库冗余字段记录
+
+基准 SQL：
+/Users/zhuting/Documents/nbyongshi_activity_manager_v56_item_photo_category/sql_bak/nbys-activity-manager_20260621_024324.sql
+
+处理原则：
+1. 允许新增表和新增字段。
+2. 不删除已有字段。
+3. 已有但在当前业务中暂不使用的字段标记为冗余/历史兼容字段，保留数据。
+
+冗余或历史兼容字段：
+
+1. activities.deleted_at、activities.deleted_by_id
+   当前活动管理需求明确为硬删除；原表里存在软删除字段。实现中保留字段，不作为删除主逻辑。
+
+2. activities.list_locked
+   当前需求没有“锁定名单”业务；字段保留，暂不参与新增/编辑表单。
+
+3. activities.attendance_enabled
+   当前签到由活动状态和报名记录控制；字段保留，默认沿用已有值。
+
+4. users.attendance_manager、users.extraction_authorized、users.extraction_manager
+   新权限方案以 role_permissions 和用户 role 为准；这些字段属于旧系统功能开关，保留兼容旧数据。
+
+5. invite_codes.role
+   当前邀请人来源以用户邀请码/二维码绑定 invited_by_id 为主；invite_codes.role 保留兼容历史邀请码策略。
+
+6. launcher_rental_items.owner_type
+   当前发射器租赁归属按 created_by_id 判断；owner_type 保留兼容旧数据。
+
+7. activity_plans.hidden
+   当前策划状态按投票截止时间和 converted_activity_id 推导；hidden 保留，可作为后续下架/隐藏扩展。
+
+8. extraction_* 全部表
+   这些表属于“摸金/撤离”玩法扩展，当前活动管理、后管、H5报名签到主线暂不使用；保留，不改动。
+
+新增字段：
+
+1. activities.record_type
+   区分正式活动和活动策划镜像，便于活动管理统一列表展示“正式活动/活动策划”。
+
+2. activities.activity_type
+   保存周常/本地活动/外地活动。
+
+3. activities.banner_url、activity_plans.banner_url
+   保存活动与策划 banner 图片地址。
+
+4. activity_launcher_rentals.status、activity_launcher_rentals.confirmed_at
+   支持租借待确认、已确认、已取消流程。
+
+新增表：
+
+1. role_permissions
+   支持权限管理页面动态配置角色在各页面的操作权限。
+
+2. user_notifications
+   支持 H5 首页租借通知等轻量通知。

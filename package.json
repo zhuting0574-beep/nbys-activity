@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "admin:dev": "npm --prefix admin-web run dev",
+    "admin:build": "npm --prefix admin-web run build",
+    "h5:dev": "npm --prefix h5-web run dev",
+    "h5:build": "npm --prefix h5-web run build",
+    "web:build": "npm run admin:build && npm run h5:build"
+  },
+  "devDependencies": {}
+}

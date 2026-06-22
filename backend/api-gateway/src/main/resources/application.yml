@@ -1,0 +1,42 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: activity-center-admin
+          uri: lb://activity-center
+          predicates:
+            - Path=/api/admin/activities,/api/admin/activities/**,/api/admin/activity-plans,/api/admin/activity-plans/**,/api/admin/attendance,/api/admin/attendance/**
+        - id: activity-center-h5
+          uri: lb://activity-center
+          predicates:
+            - Path=/api/h5/activities,/api/h5/activities/**,/api/h5/activity-plans,/api/h5/activity-plans/**,/api/h5/launcher-rentals,/api/h5/launcher-rentals/**,/api/h5/notifications,/api/h5/notifications/**
+        - id: user-center
+          uri: lb://user-center
+          predicates:
+            - Path=/api/admin/auth,/api/admin/auth/**,/api/admin/users,/api/admin/users/**,/api/h5/auth,/api/h5/auth/**,/api/h5/me,/api/h5/me/**
+        - id: public-center
+          uri: lb://public-center
+          predicates:
+            - Path=/api/admin/venues,/api/admin/venues/**,/api/admin/game-modes,/api/admin/game-modes/**,/api/admin/roles,/api/admin/roles/**,/api/admin/permissions,/api/admin/permissions/**,/api/admin/files,/api/admin/files/**,/api/h5/files,/api/h5/files/**,/uploads/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
+
+apollo:
+  bootstrap:
+    enabled: true
+    eagerLoad:
+      enabled: true
+    namespaces: application
+  meta: ${APOLLO_META:http://localhost:8080}
