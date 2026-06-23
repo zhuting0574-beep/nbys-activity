@@ -33,6 +33,7 @@ public class AuthService {
         sessions.put(token, ((Number) user.get("id")).intValue());
         user.remove("password_hash");
         user.put("invite_code", inviteCode(user));
+        user.put("profile_complete", profileComplete(user));
         user.put("token", token);
         user.put("permissions", permissions(role));
         return user;
@@ -45,6 +46,7 @@ public class AuthService {
         if (user == null) throw new SecurityException("用户不存在");
         user.remove("password_hash");
         user.put("invite_code", inviteCode(user));
+        user.put("profile_complete", profileComplete(user));
         user.put("permissions", permissions(String.valueOf(user.get("role"))));
         return user;
     }
@@ -111,6 +113,14 @@ public class AuthService {
 
     public static String inviteCode(Map<String, Object> user) {
         return md5(String.valueOf(user.get("callsign")) + String.valueOf(user.get("username"))).substring(0, 10);
+    }
+
+    private boolean profileComplete(Map<String, Object> user) {
+        return notBlank(user.get("phone")) && notBlank(user.get("id_card"));
+    }
+
+    private boolean notBlank(Object value) {
+        return value != null && !String.valueOf(value).trim().isEmpty();
     }
 
     private static String md5(String value) {

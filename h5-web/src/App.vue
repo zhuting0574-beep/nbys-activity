@@ -23,6 +23,8 @@
         <h2>注册</h2>
         <input v-model="registerForm.username" placeholder="用户名" />
         <input v-model="registerForm.callsign" placeholder="呼号" />
+        <input v-model="registerForm.phone" placeholder="手机号" />
+        <input v-model="registerForm.id_card" placeholder="身份证号" />
         <input v-model="registerForm.password" placeholder="密码" type="password" />
         <input v-model="registerForm.confirm_password" placeholder="确认密码" type="password" />
         <input v-model="registerForm.invite_code" placeholder="邀请码" />
@@ -33,6 +35,16 @@
         <img v-if="registerForm.avatar_url" class="avatar-preview" :src="registerForm.avatar_url" alt="头像预览" />
         <button class="btn" style="width: 100%" @click="register">注册</button>
         <p class="muted"><a @click="view = 'login'">返回登录</a></p>
+      </div>
+    </div>
+
+    <div v-else-if="view === 'completeProfile'" class="page auth-page">
+      <div class="auth-card">
+        <h2>完善资料</h2>
+        <p class="muted">请先完善手机号和身份证号，完善后才能进入活动页面。</p>
+        <input v-model="profileForm.phone" placeholder="手机号" />
+        <input v-model="profileForm.id_card" placeholder="身份证号" />
+        <button class="btn" style="width: 100%" @click="completeProfile">确认保存</button>
       </div>
     </div>
 
@@ -55,7 +67,7 @@
             <h3>{{ activity.name }}</h3>
             <div v-if="activity.record_kind === 'activity'" class="card-meta">
               <p>{{ formatTimeRange(activity.start_at, activity.end_at) }}</p>
-              <p>{{ activity.location }}</p>
+              <p>{{ displayVenueName(activity) }}</p>
               <p>报名：{{ activity.enroll_count || 0 }} / {{ activity.signup_limit || '-' }}</p>
               <p :class="{ ready: (activity.enroll_count || 0) >= activity.open_min }">
                 {{ (activity.enroll_count || 0) >= activity.open_min ? '已满足开启人数' : '未满足开启人数' }}
@@ -63,7 +75,7 @@
             </div>
             <div v-else class="card-meta">
               <p>投票截止：{{ formatDateTime(activity.vote_deadline) }}</p>
-              <p>可选日期：{{ planNames(activity.dates, 'date') || '待配置' }}</p>
+              <p>可选日期：{{ planDateNames(activity.dates) || '待配置' }}</p>
               <p>可选场地：{{ planNames(activity.venues, 'name') || '待配置' }}</p>
               <p>游戏模式：{{ planNames(activity.game_modes, 'name') || '待配置' }}</p>
             </div>
@@ -90,6 +102,7 @@
           <input v-model="planVoteForm.date_option_ids" type="checkbox" :value="option.id" :disabled="selectedPlan.voted" />
           <span>
             <strong>{{ option.date }}</strong>
+            <small v-if="option.remark">{{ option.remark }}</small>
             <small v-if="selectedPlan.voted">{{ option.vote_count || 0 }} 票</small>
           </span>
         </label>
@@ -102,7 +115,7 @@
           <input v-model="planVoteForm.venue_ids" type="checkbox" :value="venue.id" :disabled="selectedPlan.voted" />
           <span>
             <strong>{{ venue.name }}</strong>
-            <small>{{ venue.address }}</small>
+            <small><a :href="amapUrl(venue.address || venue.name)" target="_blank" rel="noopener" @click.stop>{{ venue.address || '地址待配置' }}</a></small>
             <small v-if="selectedPlan.voted">{{ venue.vote_count || 0 }} 票</small>
           </span>
         </label>
@@ -132,7 +145,13 @@
         <img v-if="detail.banner_url" class="detail-banner" :src="detail.banner_url" />
         <div v-else class="detail-banner banner-placeholder">正式活动</div>
         <h2>{{ detail.name }}</h2>
-        <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ detail.location }}</p>
+        <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
+        <p class="detail-copy">
+          场地地址：
+          <a :href="amapUrl(displayVenueAddress(detail) || displayVenueName(detail))" target="_blank" rel="noopener">
+            {{ displayVenueAddress(detail) || '地址待配置' }}
+          </a>
+        </p>
         <div class="detail-status-row">
           <span class="status inline" :class="statusClass(detail.display_status)">{{ statusLabel(detail.display_status) }}</span>
           <span>报名人数：{{ detail.members?.length || 0 }} / {{ detail.signup_limit }}</span>
@@ -321,6 +340,8 @@
         </div>
         <input v-model="profileForm.username" placeholder="用户名" />
         <input v-model="profileForm.callsign" placeholder="呼号" />
+        <input v-model="profileForm.phone" placeholder="手机号" />
+        <input v-model="profileForm.id_card" placeholder="身份证号" />
         <input type="file" accept="image/*" @change="uploadProfileAvatar" />
         <img v-if="profileForm.avatar_url" class="avatar-preview" :src="profileForm.avatar_url" alt="头像预览" />
         <button class="btn" style="width: 100%" @click="saveProfile">确认修改</button>
@@ -407,13 +428,21 @@ export default {
     },
     async register() {
       if (this.registerForm.password !== this.registerForm.confirm_password) return alert('两次密码不一致')
+      if (!this.validPhone(this.registerForm.phone)) return alert('请输入合法手机号')
+      if (!this.validIdCard(this.registerForm.id_card)) return alert('请输入合法身份证号')
       await api('/api/h5/auth/register', { method: 'POST', body: this.registerForm })
       alert('注册成功')
       this.view = 'login'
     },
     async init() {
       this.me = await api('/api/h5/me')
-      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '' }
+      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }
+      if (!this.me.profile_complete) {
+        alert('请先完善手机号和身份证号')
+        this.view = 'completeProfile'
+        return
+      }
+      this.view = 'app'
       await this.loadActivities()
       await this.loadMine()
     },
@@ -459,8 +488,25 @@ export default {
         game_mode_ids: [...(plan.my_game_mode_ids || [])]
       }
     },
-    planNames(items, key) {
-      return (items || []).map(item => String(item[key] || '')).filter(Boolean).join('、')
+	    planNames(items, key) {
+	      return (items || []).map(item => String(item[key] || '')).filter(Boolean).join('、')
+	    },
+    planDateNames(items) {
+	      return (items || []).map(item => {
+	        const date = String(item.date || '').trim()
+	        const remark = String(item.remark || '').trim()
+	        if (!date) return ''
+	        return remark ? `${date}（${remark}）` : date
+	      }).filter(Boolean).join('、')
+	    },
+    displayVenueName(item) {
+      return item?.venue_name || item?.location || '场地待配置'
+    },
+    displayVenueAddress(item) {
+      return item?.venue_address || item?.location || ''
+    },
+    amapUrl(keyword) {
+      return `https://uri.amap.com/search?keyword=${encodeURIComponent(keyword || '')}`
     },
     formatTimeRange(start, end) {
       if (!start && !end) return ''
@@ -526,8 +572,7 @@ export default {
     },
     rentalButtonText(item) {
       if (Number(item.created_by_id) === Number(this.me.id)) return '不可租借自己'
-      if (item.rental_status === 'confirmed') return '已租借'
-      if (item.rental_status === 'pending') return '待确认'
+      if (item.rental_status) return '已租赁'
       return '租借'
     },
     rentLauncher(item) {
@@ -597,6 +642,8 @@ export default {
       return api(`/api/h5/launcher-rentals/my-items/${id}/on`, { method: 'PUT' }).then(this.loadRentals)
     },
     toggleRentalActive(item) {
+      const message = item.active ? '确认下架该发射器？' : '确认上架该发射器？'
+      if (!confirm(message)) return
       return item.active ? this.offRental(item.id) : this.onRental(item.id)
     },
     deleteRental(id) {
@@ -620,12 +667,22 @@ export default {
       })
     },
     openProfileDialog() {
-      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '' }
+      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }
       this.showProfileDialog = true
     },
     saveProfile() {
+      if (!this.validPhone(this.profileForm.phone)) return alert('请输入合法手机号')
+      if (!this.validIdCard(this.profileForm.id_card)) return alert('请输入合法身份证号')
       return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
         this.showProfileDialog = false
+        await this.init()
+      })
+    },
+    completeProfile() {
+      if (!this.validPhone(this.profileForm.phone)) return alert('请输入合法手机号')
+      if (!this.validIdCard(this.profileForm.id_card)) return alert('请输入合法身份证号')
+      return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
+        alert('资料已完善')
         await this.init()
       })
     },
@@ -661,6 +718,12 @@ export default {
       this.selectedActivity = null
       this.selectedPlan = null
       this.me = {}
+    },
+    validPhone(value) {
+      return /^1\d{10}$/.test(String(value || '').trim())
+    },
+    validIdCard(value) {
+      return /^\d{17}[0-9Xx]$/.test(String(value || '').trim())
     }
   }
 }

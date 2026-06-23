@@ -34,6 +34,7 @@ public class H5Controller {
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : rows) {
             applyDefaultVenueBanner(row);
+            enrichVenueFields(row);
             String status = displayStatus(row);
             if (visible(row, me) && ("报名中".equals(status) || "活动开始".equals(status))) {
                 row.put("display_status", status);
@@ -50,6 +51,7 @@ public class H5Controller {
         Map<String, Object> row = Rows.one(jdbc, "select * from activities where id=?", id);
         if (row == null || !visible(row, me)) throw new IllegalArgumentException("活动不存在或不可见");
         applyDefaultVenueBanner(row);
+        enrichVenueFields(row);
         int userId = ((Number) me.get("id")).intValue();
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
@@ -239,6 +241,24 @@ public class H5Controller {
             if (!location.isEmpty()) venue = Rows.one(jdbc, "select image_url from venues where name=? or address=? limit 1", location, location);
         }
         if (venue != null && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
+    }
+
+    private void enrichVenueFields(Map<String, Object> row) {
+        Map<String, Object> venue = null;
+        if (row.get("venue_id") != null) {
+            venue = Rows.one(jdbc, "select name,address from venues where id=?", row.get("venue_id"));
+        }
+        if (venue == null) {
+            String location = text(row.get("location"));
+            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address from venues where name=? or address=? limit 1", location, location);
+        }
+        if (venue != null) {
+            row.put("venue_name", venue.get("name"));
+            row.put("venue_address", venue.get("address"));
+        } else {
+            row.put("venue_name", row.get("location"));
+            row.put("venue_address", row.get("location"));
+        }
     }
 
     private List<?> list(Object value) {

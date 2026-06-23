@@ -68,33 +68,43 @@ public class RentalController {
     @GetMapping("/api/h5/activities/{activityId}/launcher-rentals")
     public ApiResponse<List<Map<String, Object>>> activityItems(@PathVariable int activityId) {
         return ApiResponse.ok(Rows.list(jdbc,
-                "select l.*, u.username owner_name, u.callsign owner_callsign, r.status rental_status, r.user_id renter_id " +
-                        "from launcher_rental_items l join users u on u.id=l.created_by_id join enrollments e on e.user_id=l.created_by_id and e.activity_id=? " +
-                        "left join activity_launcher_rentals r on r.activity_id=? and r.launcher_id=l.id and r.cancelled_at is null " +
-                        "where l.active=1 order by l.id desc", activityId, activityId));
+                "select l.*, u.username owner_name, u.callsign owner_callsign, " +
+                        "case when r.id is null then null else 'confirmed' end rental_status, r.user_id renter_id " +
+                        "from ( " +
+                        "  select launcher_id,min(sort_order) sort_order from ( " +
+                        "    select o.launcher_id,0 sort_order from activity_launcher_options o where o.activity_id=? " +
+                        "    union all " +
+                        "    select l2.id launcher_id,1 sort_order from launcher_rental_items l2 join enrollments e on e.user_id=l2.created_by_id and e.activity_id=? where l2.active=1 " +
+                        "  ) x group by launcher_id " +
+                        ") src join launcher_rental_items l on l.id=src.launcher_id " +
+                        "join users u on u.id=l.created_by_id " +
+                        "left join activity_launcher_rentals r on r.activity_id=? and r.launcher_id=l.id and r.cancelled_at is null and r.status<>'cancelled' " +
+                        "where l.active=1 order by src.sort_order,l.id desc", activityId, activityId, activityId));
     }
 
     @PostMapping("/api/h5/activities/{activityId}/launcher-rentals/{launcherId}")
     public ApiResponse<Void> rent(@PathVariable int activityId, @PathVariable int launcherId, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         int userId = ((Number) me.get("id")).intValue();
-        Map<String, Object> launcher = Rows.one(jdbc, "select * from launcher_rental_items where id=?", launcherId);
-        if (launcher == null) throw new IllegalArgumentException("发射器不存在");
+        Map<String, Object> launcher = Rows.one(jdbc, "select * from launcher_rental_items where id=? and active=1", launcherId);
+        if (launcher == null) throw new IllegalArgumentException("发射器不存在或未上架");
         if (((Number) launcher.get("created_by_id")).intValue() == userId) throw new IllegalArgumentException("不可租借自己的发射器");
+        if (Rows.one(jdbc,
+                "select t.launcher_id from (" +
+                        "select o.launcher_id from activity_launcher_options o where o.activity_id=? and o.launcher_id=? " +
+                        "union all " +
+                        "select l.id launcher_id from launcher_rental_items l join enrollments e on e.user_id=l.created_by_id and e.activity_id=? where l.id=? and l.active=1 " +
+                        ") t limit 1",
+                activityId, launcherId, activityId, launcherId) == null) throw new IllegalArgumentException("该发射器不在当前活动可租赁列表");
         if (Rows.one(jdbc, "select id from activity_launcher_rentals where activity_id=? and launcher_id=? and cancelled_at is null and status<>'cancelled'", activityId, launcherId) != null) throw new IllegalArgumentException("已被租借");
-        KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
-                    "insert into activity_launcher_rentals(activity_id,launcher_id,user_id,status,rented_at) values(?,?,?,'pending',now())",
-                    Statement.RETURN_GENERATED_KEYS);
+                    "insert into activity_launcher_rentals(activity_id,launcher_id,user_id,status,rented_at,confirmed_at) values(?,?,?,'confirmed',now(),now())");
             ps.setInt(1, activityId);
             ps.setInt(2, launcherId);
             ps.setInt(3, userId);
             return ps;
-        }, keyHolder);
-        int rentalId = keyHolder.getKey().intValue();
-        jdbc.update("insert into user_notifications(user_id,type,title,content,related_id,created_at) values(?,'launcher_rental','发射器租借申请',?,?,now())",
-                launcher.get("created_by_id"), String.valueOf(me.get("username")) + " 申请租借 " + launcher.get("name"), rentalId);
+        });
         return ApiResponse.ok(null);
     }
 

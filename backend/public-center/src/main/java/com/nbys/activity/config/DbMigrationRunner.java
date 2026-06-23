@@ -22,10 +22,14 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activities", "banner_source", "varchar(20) NOT NULL DEFAULT 'venue' COMMENT 'custom=用户上传, venue=跟随场地默认图'", "banner_url");
             addColumn("activities", "venue_id", "int DEFAULT NULL COMMENT '关联场地ID'", "location");
             addColumn("activity_plans", "banner_url", "varchar(500) DEFAULT NULL COMMENT '策划banner图'", "name");
+            addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
             addColumn("users", "avatar_url", "varchar(500) DEFAULT NULL COMMENT '用户头像'", "callsign");
+            addColumn("users", "phone", "varchar(20) DEFAULT NULL COMMENT '手机号'", "avatar_url");
+            addColumn("users", "id_card", "varchar(30) DEFAULT NULL COMMENT '身份证号'", "phone");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
+            jdbc.execute("create table if not exists activity_launcher_options (id int not null auto_increment, activity_id int not null, launcher_id int not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_activity_launcher_option(activity_id, launcher_id), key idx_launcher_option_activity(activity_id)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists role_permissions (id int not null auto_increment, role varchar(20) not null, permission_code varchar(80) not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_role_permission(role, permission_code)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists user_notifications (id int not null auto_increment, user_id int not null, type varchar(40) not null, title varchar(120) not null, content varchar(500) not null, related_id int default null, read_at datetime default null, created_at datetime not null default current_timestamp, primary key(id), key idx_user_read(user_id, read_at)) engine=InnoDB default charset=utf8mb4");
         } catch (Exception e) {

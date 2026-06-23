@@ -14,7 +14,7 @@ spring:
         - id: activity-center-admin
           uri: lb://activity-center
           predicates:
-            - Path=/api/admin/activities,/api/admin/activities/**,/api/admin/activity-plans,/api/admin/activity-plans/**,/api/admin/attendance,/api/admin/attendance/**
+            - Path=/api/admin/activities,/api/admin/activities/**,/api/admin/activity-plans,/api/admin/activity-plans/**,/api/admin/attendance,/api/admin/attendance/**,/api/admin/launcher-rentals,/api/admin/launcher-rentals/**
         - id: activity-center-h5
           uri: lb://activity-center
           predicates:

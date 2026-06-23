@@ -10,8 +10,13 @@ ALTER TABLE activities
 ALTER TABLE activity_plans
   ADD COLUMN banner_url varchar(500) DEFAULT NULL COMMENT '策划banner图' AFTER name;
 
+ALTER TABLE plan_date_options
+  ADD COLUMN remark varchar(200) DEFAULT NULL COMMENT '日期备注' AFTER date;
+
 ALTER TABLE users
-  ADD COLUMN avatar_url varchar(500) DEFAULT NULL COMMENT '用户头像' AFTER callsign;
+  ADD COLUMN avatar_url varchar(500) DEFAULT NULL COMMENT '用户头像' AFTER callsign,
+  ADD COLUMN phone varchar(20) DEFAULT NULL COMMENT '手机号' AFTER avatar_url,
+  ADD COLUMN id_card varchar(30) DEFAULT NULL COMMENT '身份证号' AFTER phone;
 
 ALTER TABLE venues
   ADD COLUMN image_url varchar(500) DEFAULT NULL COMMENT '场地图片' AFTER address;
@@ -19,6 +24,16 @@ ALTER TABLE venues
 ALTER TABLE activity_launcher_rentals
   ADD COLUMN status varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled' AFTER user_id,
   ADD COLUMN confirmed_at datetime DEFAULT NULL AFTER rented_at;
+
+CREATE TABLE IF NOT EXISTS activity_launcher_options (
+  id int NOT NULL AUTO_INCREMENT,
+  activity_id int NOT NULL,
+  launcher_id int NOT NULL,
+  created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_activity_launcher_option (activity_id, launcher_id),
+  KEY idx_launcher_option_activity (activity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS role_permissions (
   id int NOT NULL AUTO_INCREMENT,
