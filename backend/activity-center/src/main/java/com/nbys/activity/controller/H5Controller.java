@@ -29,8 +29,10 @@ public class H5Controller {
     public ApiResponse<List<Map<String, Object>>> activities(HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select a.*, (select count(*) from enrollments e where e.activity_id=a.id) enroll_count " +
-                        "from activities a where a.record_type='activity' order by a.created_at desc, a.id desc");
+                "select a.*, coalesce(nullif(u.callsign,''),u.username) creator_name, " +
+                        "(select count(distinct e.user_id) from enrollments e where e.activity_id=a.id) enroll_count " +
+                        "from activities a left join users u on u.id=a.created_by_id " +
+                        "where a.record_type='activity' order by a.created_at desc, a.id desc");
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : rows) {
             applyDefaultVenueBanner(row);
@@ -48,13 +50,17 @@ public class H5Controller {
     @GetMapping("/activities/{id}")
     public ApiResponse<Map<String, Object>> activityDetail(@PathVariable int id, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
-        Map<String, Object> row = Rows.one(jdbc, "select * from activities where id=?", id);
+        Map<String, Object> row = Rows.one(jdbc,
+                "select a.*, coalesce(nullif(u.callsign,''),u.username) creator_name " +
+                        "from activities a left join users u on u.id=a.created_by_id where a.id=?", id);
         if (row == null || !visible(row, me)) throw new IllegalArgumentException("活动不存在或不可见");
         applyDefaultVenueBanner(row);
         enrichVenueFields(row);
         int userId = ((Number) me.get("id")).intValue();
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
+        row.put("enroll_count", enrolledUserCount(id));
+        row.put("is_activity_creator", row.get("created_by_id") != null && String.valueOf(row.get("created_by_id")).equals(String.valueOf(userId)));
         row.put("my_enrollment", Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId));
         row.put("squads", Rows.list(jdbc,
                 "select s.*, (select count(*) from enrollments e where e.activity_id=s.activity_id and e.camp_no=s.camp_no and e.squad_no=s.squad_no) member_count " +
@@ -64,6 +70,33 @@ public class H5Controller {
         return ApiResponse.ok(row);
     }
 
+    @PutMapping("/activities/{id}/members/{targetUserId}/squad")
+    public ApiResponse<Void> assignMemberSquad(@PathVariable int id, @PathVariable int targetUserId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> activity = Rows.one(jdbc, "select created_by_id,squad_limit from activities where id=?", id);
+        if (activity == null) throw new IllegalArgumentException("活动不存在");
+        if (activity.get("created_by_id") == null || !String.valueOf(activity.get("created_by_id")).equals(String.valueOf(userId))) {
+            throw new SecurityException("只有活动发起人可以分配人员");
+        }
+        if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, targetUserId) == null) {
+            throw new IllegalArgumentException("该用户未报名");
+        }
+        int campNo = num(body.get("camp_no"), 1);
+        int squadNo = num(body.get("squad_no"), 1);
+        String job = String.valueOf(body.get("job"));
+        validateJob(id, campNo, squadNo, targetUserId, job);
+        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
+        if (squad == null) throw new IllegalArgumentException("小队不存在");
+        int squadLimit = num(activity.get("squad_limit"), 0);
+        if (squadLimit > 0) {
+            int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?", id, campNo, squadNo, targetUserId).size();
+            if (members >= squadLimit) throw new IllegalArgumentException("小队已满");
+        }
+        jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, targetUserId);
+        if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", targetUserId, squad.get("id"));
+        return ApiResponse.ok(null);
+    }
+
     @PostMapping("/activities/{id}/enroll")
     public ApiResponse<Void> enroll(@PathVariable int id, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
@@ -71,7 +104,7 @@ public class H5Controller {
         Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=?", id);
         if (activity == null || !"报名中".equals(displayStatus(activity))) throw new IllegalArgumentException("当前活动不可报名");
         if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, userId) != null) return ApiResponse.ok(null);
-        int count = Rows.list(jdbc, "select id from enrollments where activity_id=?", id).size();
+        int count = enrolledUserCount(id);
         if (count >= signupLimit(activity)) throw new IllegalArgumentException("活动名额已满");
         jdbc.update("insert into enrollments(activity_id,user_id,rent_launcher,created_at,updated_at) values(?,?,0,now(),now())", id, userId);
         return ApiResponse.ok(null);
@@ -115,8 +148,11 @@ public class H5Controller {
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
         Map<String, Object> activity = Rows.one(jdbc, "select squad_limit from activities where id=?", id);
-        int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo).size();
-        if (members >= num(activity.get("squad_limit"), 0)) throw new IllegalArgumentException("小队已满");
+        int squadLimit = num(activity.get("squad_limit"), 0);
+        if (squadLimit > 0) {
+            int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?", id, campNo, squadNo, userId).size();
+            if (members >= squadLimit) throw new IllegalArgumentException("小队已满");
+        }
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, userId);
         jdbc.update("update squad_settings set leader_user_id=null where activity_id=? and leader_user_id=? and id<>?", id, userId, squad.get("id"));
         if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", userId, squad.get("id"));
@@ -140,7 +176,11 @@ public class H5Controller {
     public ApiResponse<List<Map<String, Object>>> plans(HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         int userId = ((Number) me.get("id")).intValue();
-        List<Map<String, Object>> rows = Rows.list(jdbc, "select * from activity_plans where hidden=0 and converted_activity_id is null and vote_deadline>=now() order by created_at desc, id desc");
+        List<Map<String, Object>> rows = Rows.list(jdbc,
+                "select p.*, coalesce(nullif(u.callsign,''),u.username) creator_name " +
+                        "from activity_plans p left join users u on u.id=p.created_by_id " +
+                        "where p.hidden=0 and p.converted_activity_id is null and p.vote_deadline>=now() " +
+                        "order by p.created_at desc, p.id desc");
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : rows) {
             if (visible(row, me)) {
@@ -273,6 +313,14 @@ public class H5Controller {
             ids.add(((Number) row.get("option_id")).intValue());
         }
         return ids;
+    }
+
+    private int enrolledUserCount(int activityId) {
+        Integer count = jdbc.queryForObject(
+                "select count(distinct user_id) from enrollments where activity_id=?",
+                Integer.class,
+                activityId);
+        return count == null ? 0 : count;
     }
 
     private int num(Object v, int fallback) {

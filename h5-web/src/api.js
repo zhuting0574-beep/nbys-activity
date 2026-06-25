@@ -7,6 +7,12 @@ export function setToken(value) {
   else localStorage.removeItem('h5Token')
 }
 
+let errorHandler = null
+
+export function setErrorHandler(handler) {
+  errorHandler = handler
+}
+
 export async function api(url, options = {}) {
   const headers = { ...(options.headers || {}) }
   const body = options.body
@@ -18,8 +24,9 @@ export async function api(url, options = {}) {
   const response = await fetch(url, { ...options, headers })
   const result = await response.json()
   if (result.code !== 0) {
-    alert(result.message || '请求失败')
-    throw new Error(result.message || '请求失败')
+    const message = result.message || '请求失败'
+    if (errorHandler) errorHandler(message)
+    throw new Error(message)
   }
   return result.data
 }

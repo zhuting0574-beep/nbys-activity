@@ -68,6 +68,7 @@
             <div v-if="activity.record_kind === 'activity'" class="card-meta">
               <p>{{ formatTimeRange(activity.start_at, activity.end_at) }}</p>
               <p>{{ displayVenueName(activity) }}</p>
+              <p>发起人：{{ activity.creator_name || '未设置' }}</p>
               <p>报名：{{ activity.enroll_count || 0 }} / {{ activity.signup_limit || '-' }}</p>
               <p :class="{ ready: (activity.enroll_count || 0) >= activity.open_min }">
                 {{ (activity.enroll_count || 0) >= activity.open_min ? '已满足开启人数' : '未满足开启人数' }}
@@ -75,6 +76,7 @@
             </div>
             <div v-else class="card-meta">
               <p>投票截止：{{ formatDateTime(activity.vote_deadline) }}</p>
+              <p>发起人：{{ activity.creator_name || '未设置' }}</p>
               <p>可选日期：{{ planDateNames(activity.dates) || '待配置' }}</p>
               <p>可选场地：{{ planNames(activity.venues, 'name') || '待配置' }}</p>
               <p>游戏模式：{{ planNames(activity.game_modes, 'name') || '待配置' }}</p>
@@ -92,6 +94,7 @@
         <div>
           <h2>{{ selectedPlan.name }}</h2>
           <p class="muted">投票截止：{{ formatDateTime(selectedPlan.vote_deadline) }}</p>
+          <p class="muted">发起人：{{ selectedPlan.creator_name || '未设置' }}</p>
         </div>
         <span class="status inline planning">策划中</span>
       </div>
@@ -146,6 +149,7 @@
         <div v-else class="detail-banner banner-placeholder">正式活动</div>
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
+        <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
         <p class="detail-copy">
           场地地址：
           <a :href="amapUrl(displayVenueAddress(detail) || displayVenueName(detail))" target="_blank" rel="noopener">
@@ -154,7 +158,7 @@
         </p>
         <div class="detail-status-row">
           <span class="status inline" :class="statusClass(detail.display_status)">{{ statusLabel(detail.display_status) }}</span>
-          <span>报名人数：{{ detail.members?.length || 0 }} / {{ detail.signup_limit }}</span>
+          <span>报名人数：{{ detail.enroll_count || 0 }} / {{ detail.signup_limit }}</span>
         </div>
         <p class="detail-copy">开放职业：{{ detail.allowed_jobs || '未配置' }}</p>
         <p class="detail-copy">人员列表：{{ detail.my_enrollment ? '已加入' : '未加入' }}　游戏模式：{{ detail.game_modes || '未配置' }}</p>
@@ -169,7 +173,7 @@
         </div>
       </section>
 
-      <section v-if="detail.my_enrollment" class="squad-panel">
+      <section v-if="detail.my_enrollment || detail.is_activity_creator" class="squad-panel">
         <h3>阵营 / 小队 / 人员列表</h3>
         <p class="muted">点击某个小队即可自动加入对应阵营和小队。职业会自动保存。</p>
         <div v-for="camp in camps" :key="camp" class="camp-block">
@@ -188,14 +192,56 @@
                 <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
               </select>
               <button class="btn detail-sub-action" @click="joinSquad(squad, joinJobs[squad.id])">加入小队</button>
-              <button v-if="squad.leader_user_id === me.id" class="btn secondary detail-sub-action" @click="transferLeader(squad)">转让队长</button>
+              <button v-if="Number(squad.leader_user_id) === Number(me.id)" class="btn secondary detail-sub-action" @click="openLeaderDialog(squad)">转让队长</button>
               <div class="member-list">
                 <div v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.id" class="member">
-                  {{ member.callsign }} / {{ member.job || '未选职业' }} <span v-if="squad.leader_user_id === member.user_id">队长</span>
+                  {{ member.callsign }} / {{ member.job || '未选职业' }} <span v-if="Number(squad.leader_user_id) === Number(member.user_id)">队长</span>
                 </div>
                 <div v-if="membersBySquad(camp, squad.squad_no).length === 0" class="muted">暂无队员</div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="detail.my_enrollment && unassignedMembers.length" class="squad-panel">
+        <h3>未分配阵营 / 小队</h3>
+        <p class="muted">这些人员已报名，但还没有进入阵营和小队。</p>
+        <div class="unassigned-list">
+          <div v-for="member in unassignedMembers" :key="member.id" class="unassigned-member">
+            <div class="unassigned-name">
+              <strong>{{ member.callsign || member.username }}</strong>
+              <span>报名</span>
+            </div>
+            <template v-if="detail.is_activity_creator">
+              <select v-model="memberAssignments[member.user_id].squadKey" class="compact-select">
+                <option value="">未分配小队</option>
+                <option v-for="squad in detail.squads" :key="squad.id" :value="`${squad.camp_no}:${squad.squad_no}`">
+                  阵营{{ squad.camp_no }} / {{ squad.name }}
+                </option>
+              </select>
+              <select v-model="memberAssignments[member.user_id].job" class="compact-select">
+                <option value="">未选择职业</option>
+                <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
+              </select>
+              <button class="btn assign-btn" @click="assignMember(member)">分配</button>
+            </template>
+            <template v-else>
+              <span class="unassigned-pill">未分配小队</span>
+              <span class="unassigned-pill">未选择职业</span>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="detail.is_activity_creator" class="squad-panel activity-stats-panel">
+        <h3>活动统计</h3>
+        <p class="muted">按当前人员列表自动统计。</p>
+        <div class="stat-box">
+          <h4>职业数量</h4>
+          <div class="job-stat-grid">
+            <span v-for="item in jobStats" :key="item.name" class="job-stat-pill">{{ item.name }} <strong>{{ item.count }}</strong></span>
+            <span class="job-stat-pill">报名总人数 <strong>{{ detail.enroll_count || 0 }}</strong></span>
           </div>
         </div>
       </section>
@@ -360,12 +406,42 @@
         <button class="btn" style="width: 100%" @click="savePassword">确认修改</button>
       </div>
     </div>
+
+    <div v-if="leaderDialog.show" class="modal">
+      <div class="modal-backdrop" @click="leaderDialog.show = false"></div>
+      <div class="modal-panel">
+        <div class="modal-head">
+          <h2>转让队长</h2>
+          <button class="btn secondary" @click="leaderDialog.show = false">取消</button>
+        </div>
+        <select v-model="leaderDialog.selectedUserId" class="leader-select">
+          <option v-for="member in transferLeaderCandidates(leaderDialog.squad)" :key="member.user_id" :value="String(member.user_id)">
+            {{ member.callsign || member.username }} / {{ member.job || '未选职业' }}
+          </option>
+        </select>
+        <button class="btn" style="width: 100%" @click="confirmTransferLeader">确认转让</button>
+      </div>
+    </div>
+
+    <div v-if="confirmDialog.show" class="modal">
+      <div class="modal-backdrop" @click="resolveConfirm(false)"></div>
+      <div class="modal-panel confirm-panel">
+        <h2>{{ confirmDialog.title }}</h2>
+        <p>{{ confirmDialog.message }}</p>
+        <div class="confirm-actions">
+          <button class="btn secondary" @click="resolveConfirm(false)">取消</button>
+          <button class="btn" @click="resolveConfirm(true)">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="toast.show" class="toast">{{ toast.message }}</div>
     </template>
   </div>
 </template>
 
 <script>
-import { api, setToken, token } from './api'
+import { api, setErrorHandler, setToken, token } from './api'
 import logoUrl from './assets/nbys-logo.png'
 import QRCode from 'qrcode'
 
@@ -385,6 +461,7 @@ export default {
       detail: {},
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
+      memberAssignments: {},
       rentalItems: [],
       activityRentalItems: [],
       rentalForm: {},
@@ -395,12 +472,30 @@ export default {
       showPasswordDialog: false,
       showQr: false,
       qrDataUrl: '',
-      notifications: []
+      notifications: [],
+      toastTimer: null,
+      toast: { show: false, message: '' },
+      confirmDialog: { show: false, title: '确认操作', message: '', resolve: null },
+      leaderDialog: { show: false, squad: null, selectedUserId: '' }
     }
   },
   computed: {
     camps() {
       return [...new Set((this.detail.squads || []).map(squad => squad.camp_no))]
+    },
+    unassignedMembers() {
+      return (this.detail.members || []).filter(member => member.camp_no == null || member.squad_no == null)
+    },
+    jobStats() {
+      const stats = this.jobs.map(name => ({ name, count: 0 }))
+      const other = { name: '未选择职业', count: 0 }
+      const map = new Map(stats.map(item => [item.name, item]))
+      for (const member of this.detail.members || []) {
+        const job = member.job || ''
+        if (map.has(job)) map.get(job).count += 1
+        else other.count += 1
+      }
+      return [...stats, other]
     },
     registerUrl() {
       return `${location.origin}${location.pathname}?invite=${this.me.invite_code || ''}`
@@ -417,9 +512,28 @@ export default {
     }
   },
   async mounted() {
+    setErrorHandler(this.showToast)
     if (token()) await this.init()
   },
   methods: {
+    showToast(message) {
+      if (!message) return
+      clearTimeout(this.toastTimer)
+      this.toast = { show: true, message }
+      this.toastTimer = setTimeout(() => {
+        this.toast.show = false
+      }, 2200)
+    },
+    askConfirm(message, title = '确认操作') {
+      return new Promise(resolve => {
+        this.confirmDialog = { show: true, title, message, resolve }
+      })
+    },
+    resolveConfirm(value) {
+      const resolve = this.confirmDialog.resolve
+      this.confirmDialog = { show: false, title: '确认操作', message: '', resolve: null }
+      if (resolve) resolve(value)
+    },
     async login() {
       const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
       setToken(data.token)
@@ -427,18 +541,18 @@ export default {
       await this.init()
     },
     async register() {
-      if (this.registerForm.password !== this.registerForm.confirm_password) return alert('两次密码不一致')
-      if (!this.validPhone(this.registerForm.phone)) return alert('请输入合法手机号')
-      if (!this.validIdCard(this.registerForm.id_card)) return alert('请输入合法身份证号')
+      if (this.registerForm.password !== this.registerForm.confirm_password) return this.showToast('两次密码不一致')
+      if (!this.validPhone(this.registerForm.phone)) return this.showToast('请输入合法手机号')
+      if (!this.validIdCard(this.registerForm.id_card)) return this.showToast('请输入合法身份证号')
       await api('/api/h5/auth/register', { method: 'POST', body: this.registerForm })
-      alert('注册成功')
+      this.showToast('注册成功')
       this.view = 'login'
     },
     async init() {
       this.me = await api('/api/h5/me')
       this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }
       if (!this.me.profile_complete) {
-        alert('请先完善手机号和身份证号')
+        this.showToast('请先完善手机号和身份证号')
         this.view = 'completeProfile'
         return
       }
@@ -520,19 +634,19 @@ export default {
       this.selectedPlan = null
       this.selectedActivity = id
       this.detail = await api(`/api/h5/activities/${id}`)
+      this.prepareMemberAssignments()
     },
-    submitPlanVote() {
+    async submitPlanVote() {
       const body = this.planVoteForm
       if (!body.date_option_ids.length && !body.venue_ids.length && !body.game_mode_ids.length) {
-        return alert('请至少选择一个投票选项')
+        return this.showToast('请至少选择一个投票选项')
       }
-      if (!confirm('确认提交投票吗？提交后不得修改。')) return
-      return api(`/api/h5/activity-plans/${this.selectedPlan.id}/vote`, { method: 'POST', body }).then(async () => {
-        await this.loadActivities()
-        this.selectedPlan = this.activities.find(item => item.record_kind === 'plan' && item.id === this.selectedPlan.id) || { ...this.selectedPlan, voted: true }
-        this.planVoteForm = this.planVoteFormFromPlan(this.selectedPlan)
-        alert('已投票')
-      })
+      if (!(await this.askConfirm('确认提交投票吗？提交后不得修改。'))) return
+      await api(`/api/h5/activity-plans/${this.selectedPlan.id}/vote`, { method: 'POST', body })
+      await this.loadActivities()
+      this.selectedPlan = this.activities.find(item => item.record_kind === 'plan' && item.id === this.selectedPlan.id) || { ...this.selectedPlan, voted: true }
+      this.planVoteForm = this.planVoteFormFromPlan(this.selectedPlan)
+      this.showToast('已投票')
     },
     enroll() {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'POST' }).then(() => this.openActivity(this.selectedActivity))
@@ -552,16 +666,55 @@ export default {
     membersByCamp(camp) {
       return (this.detail.members || []).filter(member => member.camp_no === camp)
     },
+    prepareMemberAssignments() {
+      const assignments = {}
+      for (const member of this.detail.members || []) {
+        assignments[member.user_id] = {
+          squadKey: member.camp_no != null && member.squad_no != null ? `${member.camp_no}:${member.squad_no}` : '',
+          job: member.job || ''
+        }
+      }
+      this.memberAssignments = assignments
+    },
+    async assignMember(member) {
+      const assignment = this.memberAssignments[member.user_id] || {}
+      if (!assignment.squadKey) return this.showToast('请先选择小队')
+      if (!assignment.job) return this.showToast('请先选择职业')
+      const [campNo, squadNo] = assignment.squadKey.split(':').map(value => Number(value))
+      await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/squad`, {
+        method: 'PUT',
+        body: { camp_no: campNo, squad_no: squadNo, job: assignment.job }
+      })
+      await this.openActivity(this.selectedActivity)
+      this.showToast('已分配')
+    },
     joinSquad(squad, job) {
       if (!job) {
-        alert('请先选择职业')
+        this.showToast('请先选择职业')
         return
       }
       return api(`/api/h5/activities/${this.selectedActivity}/squad`, { method: 'PUT', body: { camp_no: squad.camp_no, squad_no: squad.squad_no, job } }).then(() => this.openActivity(this.selectedActivity))
     },
-    transferLeader() {
-      const id = prompt('输入要转让的队员用户ID')
-      if (id) return api(`/api/h5/activities/${this.selectedActivity}/squad/leader`, { method: 'PUT', body: { user_id: id } }).then(() => this.openActivity(this.selectedActivity))
+    openLeaderDialog(squad) {
+      const candidates = this.transferLeaderCandidates(squad)
+      if (!candidates.length) {
+        this.showToast('暂无可转让队员')
+        return
+      }
+      this.leaderDialog = { show: true, squad, selectedUserId: String(candidates[0].user_id) }
+    },
+    transferLeaderCandidates(squad) {
+      if (!squad) return []
+      return this.membersBySquad(squad.camp_no, squad.squad_no)
+        .filter(member => Number(member.user_id) !== Number(this.me.id))
+    },
+    async confirmTransferLeader() {
+      const userId = this.leaderDialog.selectedUserId
+      if (!userId) return this.showToast('请选择转让对象')
+      await api(`/api/h5/activities/${this.selectedActivity}/squad/leader`, { method: 'PUT', body: { user_id: userId } })
+      this.leaderDialog = { show: false, squad: null, selectedUserId: '' }
+      await this.openActivity(this.selectedActivity)
+      this.showToast('已转让队长')
     },
     openActivityRentals() {
       this.tab = 'activityRentals'
@@ -576,7 +729,7 @@ export default {
       return '租借'
     },
     rentLauncher(item) {
-      if (Number(item.created_by_id) === Number(this.me.id)) return alert('不可租借自己的发射器')
+      if (Number(item.created_by_id) === Number(this.me.id)) return this.showToast('不可租借自己的发射器')
       return api(`/api/h5/activities/${this.selectedActivity}/launcher-rentals/${item.id}`, { method: 'POST' }).then(() => this.openActivityRentals())
     },
     loadRentals() {
@@ -636,18 +789,19 @@ export default {
       })
     },
     offRental(id) {
-      return api(`/api/h5/launcher-rentals/my-items/${id}/off`, { method: 'PUT' }).then(this.loadRentals)
+      return api(`/api/h5/launcher-rentals/my-items/${id}/off`, { method: 'PUT' }).then(() => this.loadRentals())
     },
     onRental(id) {
-      return api(`/api/h5/launcher-rentals/my-items/${id}/on`, { method: 'PUT' }).then(this.loadRentals)
+      return api(`/api/h5/launcher-rentals/my-items/${id}/on`, { method: 'PUT' }).then(() => this.loadRentals())
     },
-    toggleRentalActive(item) {
+    async toggleRentalActive(item) {
       const message = item.active ? '确认下架该发射器？' : '确认上架该发射器？'
-      if (!confirm(message)) return
+      if (!(await this.askConfirm(message))) return
       return item.active ? this.offRental(item.id) : this.onRental(item.id)
     },
-    deleteRental(id) {
-      return api(`/api/h5/launcher-rentals/my-items/${id}`, { method: 'DELETE' }).then(this.loadRentals)
+    async deleteRental(id) {
+      if (!(await this.askConfirm('确认删除该发射器出租信息？'))) return
+      return api(`/api/h5/launcher-rentals/my-items/${id}`, { method: 'DELETE' }).then(() => this.loadRentals())
     },
     loadMine() {
       return api('/api/h5/notifications').then(data => { this.notifications = data })
@@ -662,7 +816,7 @@ export default {
     },
     confirmRentalNotice(notice) {
       return api(`/api/h5/launcher-rentals/${notice.rental_action_id || notice.related_id}/confirm`, { method: 'PUT' }).then(async () => {
-        alert('已确认租借')
+        this.showToast('已确认租借')
         await this.loadMine()
       })
     },
@@ -671,18 +825,19 @@ export default {
       this.showProfileDialog = true
     },
     saveProfile() {
-      if (!this.validPhone(this.profileForm.phone)) return alert('请输入合法手机号')
-      if (!this.validIdCard(this.profileForm.id_card)) return alert('请输入合法身份证号')
+      if (!this.validPhone(this.profileForm.phone)) return this.showToast('请输入合法手机号')
+      if (!this.validIdCard(this.profileForm.id_card)) return this.showToast('请输入合法身份证号')
       return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
         this.showProfileDialog = false
         await this.init()
+        this.showToast('已修改')
       })
     },
     completeProfile() {
-      if (!this.validPhone(this.profileForm.phone)) return alert('请输入合法手机号')
-      if (!this.validIdCard(this.profileForm.id_card)) return alert('请输入合法身份证号')
+      if (!this.validPhone(this.profileForm.phone)) return this.showToast('请输入合法手机号')
+      if (!this.validIdCard(this.profileForm.id_card)) return this.showToast('请输入合法身份证号')
       return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
-        alert('资料已完善')
+        this.showToast('资料已完善')
         await this.init()
       })
     },
@@ -694,12 +849,12 @@ export default {
       return api('/api/h5/me/password', { method: 'PUT', body: this.passwordForm }).then(() => {
         this.showPasswordDialog = false
         this.passwordForm = {}
-        alert('已修改')
+        this.showToast('已修改')
       })
     },
     copyInvite() {
       navigator.clipboard.writeText(this.registerUrl)
-      alert('已复制')
+      this.showToast('已复制注册链接')
     },
     async toggleInviteQr() {
       this.showQr = !this.showQr
