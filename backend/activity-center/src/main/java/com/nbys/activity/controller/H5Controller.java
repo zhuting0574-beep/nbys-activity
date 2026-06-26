@@ -17,6 +17,8 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/h5")
 public class H5Controller {
+    private static final String DEFAULT_PLAN_BANNER = "/uploads/activity-plan-default.jpg";
+
     private final JdbcTemplate jdbc;
     private final AuthService auth;
 
@@ -62,9 +64,16 @@ public class H5Controller {
         row.put("enroll_count", enrolledUserCount(id));
         row.put("is_activity_creator", row.get("created_by_id") != null && String.valueOf(row.get("created_by_id")).equals(String.valueOf(userId)));
         row.put("my_enrollment", Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId));
-        row.put("squads", Rows.list(jdbc,
+        List<Map<String, Object>> squads = Rows.list(jdbc,
                 "select s.*, (select count(*) from enrollments e where e.activity_id=s.activity_id and e.camp_no=s.camp_no and e.squad_no=s.squad_no) member_count " +
-                        "from squad_settings s where s.activity_id=? order by s.camp_no,s.squad_no", id));
+                        "from squad_settings s where s.activity_id=? order by s.camp_no,s.squad_no", id);
+        for (Map<String, Object> squad : squads) {
+            int campNo = num(squad.get("camp_no"), 1);
+            int squadNo = num(squad.get("squad_no"), 1);
+            String channel = text(squad.get("radio_channel"));
+            if (channel.isEmpty() || channel.equals(legacyRadioChannel(campNo, squadNo))) squad.put("radio_channel", radioChannel(campNo, squadNo));
+        }
+        row.put("squads", squads);
         row.put("members", Rows.list(jdbc, "select e.*, u.username, u.callsign from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.camp_no,e.squad_no,e.id", id));
         row.put("checkin", Rows.one(jdbc, "select ar.* from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=? and ar.user_id=?", id, userId));
         return ApiResponse.ok(row);
@@ -87,6 +96,7 @@ public class H5Controller {
         validateJob(id, campNo, squadNo, targetUserId, job);
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
+        ensureSquadJoinAllowed(id, squad, targetUserId);
         int squadLimit = num(activity.get("squad_limit"), 0);
         if (squadLimit > 0) {
             int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?", id, campNo, squadNo, targetUserId).size();
@@ -95,6 +105,19 @@ public class H5Controller {
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, targetUserId);
         if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", targetUserId, squad.get("id"));
         return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/attendance/my-summary")
+    public ApiResponse<Map<String, Object>> myAttendanceSummary(HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("present_count", Rows.one(jdbc,
+                "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                        "where ar.user_id=? and ar.present=1",
+                userId).get("total"));
+        out.put("activity_total", Rows.one(jdbc,
+                "select count(*) total from activities where record_type='activity' and deleted_at is null and end_at<=now()").get("total"));
+        return ApiResponse.ok(out);
     }
 
     @PostMapping("/activities/{id}/enroll")
@@ -147,6 +170,7 @@ public class H5Controller {
         validateJob(id, campNo, squadNo, userId, job);
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
+        ensureSquadJoinAllowed(id, squad, userId);
         Map<String, Object> activity = Rows.one(jdbc, "select squad_limit from activities where id=?", id);
         int squadLimit = num(activity.get("squad_limit"), 0);
         if (squadLimit > 0) {
@@ -156,6 +180,17 @@ public class H5Controller {
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, userId);
         jdbc.update("update squad_settings set leader_user_id=null where activity_id=? and leader_user_id=? and id<>?", id, userId, squad.get("id"));
         if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", userId, squad.get("id"));
+        return ApiResponse.ok(null);
+    }
+
+    @PutMapping("/activities/{id}/squads/{squadId}/lock")
+    public ApiResponse<Void> lockSquad(@PathVariable int id, @PathVariable int squadId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=?", squadId, id);
+        if (squad == null) throw new IllegalArgumentException("小队不存在");
+        if (!String.valueOf(squad.get("leader_user_id")).equals(String.valueOf(userId))) throw new SecurityException("只有队长可以锁定小队");
+        int locked = bool(body.get("locked")) ? 1 : 0;
+        jdbc.update("update squad_settings set locked=?, updated_at=now() where id=?", locked, squadId);
         return ApiResponse.ok(null);
     }
 
@@ -184,6 +219,7 @@ public class H5Controller {
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : rows) {
             if (visible(row, me)) {
+                applyDefaultPlanBanner(row);
                 int id = ((Number) row.get("id")).intValue();
                 row.put("dates", Rows.list(jdbc,
                         "select d.*, (select count(*) from plan_votes v where v.plan_id=d.plan_id and v.option_type='date' and v.option_id=d.id) vote_count " +
@@ -231,6 +267,15 @@ public class H5Controller {
         if (!Rows.csv(String.valueOf(activity.get("allowed_jobs"))).contains(job)) throw new IllegalArgumentException("该活动未开放" + job);
         int quota = Math.max(1, num(activity.get("squad_limit"), 5) / 5);
         if (count >= quota) throw new IllegalArgumentException("该小队每5人只允许1个" + job);
+    }
+
+    private void ensureSquadJoinAllowed(int activityId, Map<String, Object> squad, int userId) {
+        if (!bool(squad.get("locked"))) return;
+        Map<String, Object> mine = Rows.one(jdbc, "select camp_no,squad_no from enrollments where activity_id=? and user_id=?", activityId, userId);
+        boolean alreadyInSquad = mine != null
+                && String.valueOf(mine.get("camp_no")).equals(String.valueOf(squad.get("camp_no")))
+                && String.valueOf(mine.get("squad_no")).equals(String.valueOf(squad.get("squad_no")));
+        if (!alreadyInSquad) throw new IllegalArgumentException("小队已锁定，无法加入");
     }
 
     private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
@@ -283,6 +328,10 @@ public class H5Controller {
         if (venue != null && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
     }
 
+    private void applyDefaultPlanBanner(Map<String, Object> row) {
+        if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
+    }
+
     private void enrichVenueFields(Map<String, Object> row) {
         Map<String, Object> venue = null;
         if (row.get("venue_id") != null) {
@@ -321,6 +370,20 @@ public class H5Controller {
                 Integer.class,
                 activityId);
         return count == null ? 0 : count;
+    }
+
+    private boolean bool(Object v) {
+        if (v instanceof Boolean) return (Boolean) v;
+        if (v instanceof Number) return ((Number) v).intValue() != 0;
+        return "true".equalsIgnoreCase(String.valueOf(v)) || "1".equals(String.valueOf(v));
+    }
+
+    private String radioChannel(int campNo, int squadNo) {
+        return (434 + campNo) + "." + String.format("%03d", squadNo * 100);
+    }
+
+    private String legacyRadioChannel(int campNo, int squadNo) {
+        return (campNo == 1 ? "435" : "436") + "." + String.format("%03d", (squadNo - 1) * 100);
     }
 
     private int num(Object v, int fallback) {

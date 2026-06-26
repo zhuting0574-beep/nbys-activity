@@ -66,6 +66,7 @@ public class AdminActivityController {
                 q, q, rt, rt);
         List<Map<String, Object>> filteredPlans = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : plans) {
+            applyDefaultPlanBanner(row);
             row.put("display_status", row.get("converted_activity_id") == null ? "投票中" : "已生成活动");
             row.put("display_record_type", "活动策划");
             if (st.isEmpty() || st.equals(String.valueOf(row.get("display_status")))) filteredPlans.add(row);
@@ -228,6 +229,7 @@ public class AdminActivityController {
     public ApiResponse<Map<String, Object>> planDetail(@PathVariable int id) {
         Map<String, Object> row = Rows.one(jdbc, "select * from activity_plans where id=?", id);
         if (row == null) throw new IllegalArgumentException("策划不存在");
+        applyDefaultPlanBanner(row);
         row.put("dates", Rows.list(jdbc, "select * from plan_date_options where plan_id=? order by date", id));
         row.put("venues", Rows.list(jdbc, "select v.* from plan_venue_options o join venues v on v.id=o.venue_id where o.plan_id=?", id));
         row.put("game_modes", Rows.list(jdbc, "select g.* from plan_game_mode_options o join game_modes g on g.id=o.game_mode_id where o.plan_id=?", id));
@@ -450,9 +452,13 @@ public class AdminActivityController {
             jdbc.update("insert into camp_settings(activity_id,camp_no,updated_at) values(?,?,now())", activityId, c);
             for (int s = 1; s <= squads; s++) {
                 jdbc.update("insert into squad_settings(activity_id,camp_no,squad_no,name,radio_channel,locked,updated_at) values(?,?,?,?,?,0,now())",
-                        activityId, c, s, (char) ('A' + s - 1) + "队", c == 1 ? "435." + String.format("%03d", (s - 1) * 100) : "436." + String.format("%03d", (s - 1) * 100));
+                        activityId, c, s, (char) ('A' + s - 1) + "队", radioChannel(c, s));
             }
         }
+    }
+
+    private String radioChannel(int campNo, int squadNo) {
+        return (434 + campNo) + "." + String.format("%03d", squadNo * 100);
     }
 
     private String displayStatus(Map<String, Object> row) {
@@ -536,6 +542,10 @@ public class AdminActivityController {
     private String planBanner(Object banner) {
         String value = text(banner);
         return value.isEmpty() ? DEFAULT_PLAN_BANNER : value;
+    }
+
+    private void applyDefaultPlanBanner(Map<String, Object> row) {
+        if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
     }
 
     private int compareCreatedDesc(Map<String, Object> a, Map<String, Object> b) {

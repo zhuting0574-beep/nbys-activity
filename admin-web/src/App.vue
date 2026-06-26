@@ -11,8 +11,15 @@
   <div v-else class="shell">
     <aside class="side">
       <div class="brand">NBYS 后管</div>
-      <div v-for="item in menus" :key="item.key" class="menu" :class="{ active: active === item.key }" @click="active = item.key; load()">
-        {{ item.name }}
+      <div v-for="item in menus" :key="item.key">
+        <div class="menu" :class="{ active: active === item.key }" @click="active = item.key; load()">
+          {{ item.name }}
+        </div>
+        <div v-if="item.key === 'system' && active === 'system'" class="submenu-list">
+          <div v-for="child in systemMenus" :key="child.key" class="menu sub-menu" :class="{ active: systemActive === child.key }" @click.stop="switchSystemTab(child.key)">
+            {{ child.name }}
+          </div>
+        </div>
       </div>
     </aside>
 
@@ -21,6 +28,96 @@
         <strong>{{ currentMenu?.name }}</strong>
         <span class="muted">当前用户：{{ me.username }} / {{ me.callsign }}</span>
       </div>
+
+      <section v-if="active === 'dashboard'" class="dashboard-page">
+        <div class="dashboard-hero">
+          <div>
+            <h1>数据看板</h1>
+            <p>{{ dashboardYear }} 年综合运营概览</p>
+          </div>
+          <div class="dashboard-filter">
+            <el-date-picker v-model="dashboardYear" type="year" value-format="YYYY" placeholder="选择年度" />
+            <el-button type="primary" @click="loadDashboard">刷新</el-button>
+          </div>
+        </div>
+
+        <div class="dashboard-metrics">
+          <div v-for="card in dashboardCards" :key="card.key" class="dashboard-metric">
+            <span>{{ card.label }}</span>
+            <strong>{{ card.value }}</strong>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="dashboard-panel dashboard-panel-wide">
+            <div class="dashboard-panel-head">
+              <h2>月度趋势</h2>
+              <span>活动 / 报名 / 签到</span>
+            </div>
+            <div ref="monthlyChart" class="dashboard-chart"></div>
+          </div>
+          <div class="dashboard-panel">
+            <div class="dashboard-panel-head">
+              <h2>热门场地</h2>
+              <span>按签到人数</span>
+            </div>
+            <div ref="venueChart" class="dashboard-chart"></div>
+          </div>
+          <div class="dashboard-panel">
+            <div class="dashboard-panel-head">
+              <h2>热门模式</h2>
+              <span>按活动使用次数</span>
+            </div>
+            <div ref="modeChart" class="dashboard-chart"></div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid dashboard-grid-lists">
+          <div class="dashboard-panel">
+            <div class="dashboard-panel-head">
+              <h2>热门活动</h2>
+              <span>按报名人数</span>
+            </div>
+            <ol class="dashboard-rank">
+              <li v-for="item in dashboardRankings.popular_activities || []" :key="item.id">
+                <span>{{ item.name }}</span>
+                <b>{{ item.enroll_count || 0 }} 人</b>
+              </li>
+            </ol>
+            <p v-if="!(dashboardRankings.popular_activities || []).length" class="muted">暂无数据</p>
+          </div>
+          <div class="dashboard-panel">
+            <div class="dashboard-panel-head">
+              <h2>活跃队员</h2>
+              <span>按签到次数</span>
+            </div>
+            <ol class="dashboard-rank">
+              <li v-for="item in dashboardRankings.active_members || []" :key="item.id">
+                <span>{{ item.callsign || item.username }}</span>
+                <b>{{ item.count || 0 }} 次</b>
+              </li>
+            </ol>
+            <p v-if="!(dashboardRankings.active_members || []).length" class="muted">暂无数据</p>
+          </div>
+        </div>
+
+        <div class="dashboard-panel">
+          <div class="dashboard-panel-head">
+            <h2>近期活动</h2>
+            <span>{{ dashboardYear }} 年</span>
+          </div>
+          <el-table :data="dashboardOverview.recent_activities || []" border>
+            <el-table-column prop="name" label="活动名称" min-width="160" />
+            <el-table-column label="时间" min-width="170">
+              <template #default="{ row }">{{ formatDateTime(row.start_at) || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="地点" min-width="120"><template #default="{ row }">{{ row.location || '-' }}</template></el-table-column>
+            <el-table-column prop="enroll_count" label="报名" width="90" />
+            <el-table-column prop="checkin_count" label="签到" width="90" />
+            <el-table-column prop="status" label="状态" width="100" />
+          </el-table>
+        </div>
+      </section>
 
       <section v-if="active === 'activities'" class="card">
         <div class="toolbar">
@@ -123,7 +220,7 @@
           <el-table-column label="操作" width="260">
             <template #default="{ row }">
               <el-button size="small" v-if="can('user:update')" @click="editUser = { ...row }">修改</el-button>
-              <el-button size="small" v-if="can('user:resetPassword')" @click="post(`/api/admin/users/${row.id}/reset-password`, loadUsers)">重置密码</el-button>
+              <el-button size="small" v-if="can('user:resetPassword')" @click="resetUserPassword(row)">重置密码</el-button>
               <el-button size="small" type="danger" v-if="can('user:delete')" @click="remove(`/api/admin/users/${row.id}`, loadUsers)">删除</el-button>
             </template>
           </el-table-column>
@@ -227,7 +324,37 @@
         </div>
       </section>
 
-      <section v-if="active === 'permissions'" class="card">
+      <section v-if="active === 'launchers'" class="card">
+        <div class="toolbar">
+          <el-input v-model="launcherManageFilters.name" placeholder="发射器名称" style="width: 200px" />
+          <el-input v-model="launcherManageFilters.user" placeholder="拥有人用户名/呼号" style="width: 220px" />
+          <el-button @click="loadLaunchers">查询</el-button>
+        </div>
+        <el-table :data="launchers" border>
+          <el-table-column prop="name" label="发射器名称" min-width="160" />
+          <el-table-column label="拥有人" min-width="140">
+            <template #default="{ row }">{{ row.owner_callsign || row.owner_name || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="租借价格" width="120">
+            <template #default="{ row }">{{ row.rent_fee || 0 }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">{{ row.active ? '上架' : '下架' }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="180">
+            <template #default="{ row }">
+              <el-button size="small" v-if="can('launcher:update')" @click="editLauncher = { ...row, active: !!row.active }">修改</el-button>
+              <el-button size="small" type="danger" v-if="can('launcher:delete')" @click="remove(`/api/admin/launchers/${row.id}`, loadLaunchers)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+
+      <section v-if="active === 'system' && !systemActive" class="system-page">
+        <p v-if="!systemMenus.length" class="muted">暂无可访问的系统管理功能</p>
+      </section>
+
+      <section v-if="active === 'system' && systemActive === 'permissions'" class="card">
         <div class="toolbar">
           <el-select v-model="permissionRole" @change="loadRolePermissions" style="width: 180px">
             <el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" />
@@ -246,12 +373,45 @@
           />
         </div>
       </section>
+
+      <section v-if="active === 'system' && systemActive === 'systemImages'" class="card">
+        <div class="settings-grid">
+          <div class="settings-panel">
+            <h3>登录页背景图</h3>
+            <img v-if="systemImages.login_background_url" class="settings-preview" :src="systemImages.login_background_url" />
+            <div v-else class="settings-empty">未设置背景图</div>
+            <div class="banner-upload-row">
+              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_background_url = r.data.url"><el-button>上传背景图</el-button></el-upload>
+              <el-button v-if="systemImages.login_background_url" @click="systemImages.login_background_url = ''">清除</el-button>
+            </div>
+          </div>
+          <div class="settings-panel">
+            <h3>标题 Logo</h3>
+            <img v-if="systemImages.login_logo_url" class="settings-logo-preview" :src="systemImages.login_logo_url" />
+            <div v-else class="settings-empty settings-logo-empty">使用默认 Logo</div>
+            <div class="banner-upload-row">
+              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_logo_url = r.data.url"><el-button>上传Logo</el-button></el-upload>
+              <el-button v-if="systemImages.login_logo_url" @click="systemImages.login_logo_url = ''">清除</el-button>
+            </div>
+          </div>
+        </div>
+        <el-button type="primary" v-if="can('systemImage:update')" @click="saveSystemImages">保存设置</el-button>
+      </section>
     </main>
   </div>
 
   <el-dialog v-model="venueVisible" title="场地" width="560px"><el-form label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address" /></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
   <el-dialog v-model="modeVisible" title="模式"><el-form label-width="90px"><el-form-item label="模式名称"><el-input v-model="editMode.name" /></el-form-item><el-form-item label="模式内容"><el-input v-model="editMode.rules" type="textarea" /></el-form-item><el-form-item label="人数"><el-input v-model="editMode.suitable_people" /></el-form-item></el-form><template #footer><el-button @click="editMode = null">取消</el-button><el-button type="primary" @click="saveMode">保存</el-button></template></el-dialog>
   <el-dialog v-model="userVisible" title="用户"><el-form label-width="110px"><el-form-item label="呼号"><el-input v-model="editUser.callsign" /></el-form-item><el-form-item label="权限"><el-select v-model="editUser.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item><el-form-item label="账号禁用"><el-switch v-model="editUser.disabled" /></el-form-item><el-form-item label="正式队员"><el-switch v-model="editUser.is_regular_member" /></el-form-item></el-form><template #footer><el-button @click="editUser = null">取消</el-button><el-button type="primary" @click="saveUser">保存</el-button></template></el-dialog>
+  <el-dialog v-model="launcherVisible" title="发射器" width="560px">
+    <el-form v-if="editLauncher" label-width="90px">
+      <el-form-item label="名称"><el-input v-model="editLauncher.name" /></el-form-item>
+      <el-form-item label="价格"><el-input-number v-model="editLauncher.rent_fee" :min="0" /></el-form-item>
+      <el-form-item label="简介"><el-input v-model="editLauncher.description" type="textarea" :rows="4" /></el-form-item>
+      <el-form-item label="上架状态"><el-switch v-model="editLauncher.active" active-text="上架" inactive-text="下架" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editLauncher = null">取消</el-button><el-button type="primary" @click="saveLauncher">保存</el-button></template>
+  </el-dialog>
   <el-dialog v-model="activityVisible" title="活动" width="760px">
     <el-form v-if="activityForm" label-width="130px">
       <el-form-item label="Banner图">
@@ -394,6 +554,7 @@
 </template>
 
 <script>
+import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, setToken, token } from './api'
 
@@ -469,8 +630,12 @@ export default {
 	      loginForm: {},
 	      jobs,
 	      activityStatuses,
-	      active: 'activities',
+	      active: 'dashboard',
+      systemActive: 'systemImages',
 	      filters: {},
+      dashboardYear: String(new Date().getFullYear()),
+      dashboardOverview: { cards: {}, monthly: {}, rankings: {}, recent_activities: [] },
+      dashboardCharts: {},
 	      activities: [],
 	      venues: [],
 	      modes: [],
@@ -483,6 +648,10 @@ export default {
 	      launcherPickerVisible: false,
 	      launcherPickerSelected: [],
 	      launcherFilters: {},
+      launchers: [],
+      launcherManageFilters: {},
+      editLauncher: null,
+      systemImages: {},
 	      convertPickerVisible: false,
 	      convertPickerTitle: '',
 	      convertPickerOptions: [],
@@ -509,18 +678,41 @@ export default {
   },
   computed: {
     menus() {
-      const items = [
-        ['activities', '活动管理', 'activity:view'],
-        ['venues', '场地管理', 'venue:view'],
-        ['modes', '模式管理', 'gameMode:view'],
-        ['users', '用户管理', 'user:view'],
-        ['attendance', '出勤统计', 'attendance:view'],
-        ['permissions', '权限管理', 'permission:view']
-      ]
-      return items.filter(([, , p]) => this.can(p)).map(([key, name]) => ({ key, name }))
+      const topItems = [
+        { key: 'dashboard', name: '数据看板' },
+        { key: 'activities', name: '活动管理', permission: 'activity:view' },
+        { key: 'venues', name: '场地管理', permission: 'venue:view' },
+        { key: 'modes', name: '模式管理', permission: 'gameMode:view' },
+        { key: 'users', name: '用户管理', permission: 'user:view' },
+        { key: 'attendance', name: '出勤统计', permission: 'attendance:view' },
+        { key: 'launchers', name: '发射器管理', permission: 'launcher:view' }
+      ].filter(item => !item.permission || this.can(item.permission))
+      if (this.systemMenus.length) topItems.push({ key: 'system', name: '系统管理' })
+      return topItems
+    },
+    systemMenus() {
+      return [
+        { key: 'systemImages', name: '图片管理', permission: 'systemImage:view' },
+        { key: 'permissions', name: '权限管理', permission: 'permission:view' }
+      ].filter(item => this.can(item.permission))
     },
     currentMenu() {
-      return this.menus.find(item => item.key === this.active)
+      return this.menus.find(item => item.key === this.active) || null
+    },
+    dashboardCards() {
+      const cards = this.dashboardOverview.cards || {}
+      return [
+        { key: 'user_total', label: '用户总数', value: this.formatNumber(cards.user_total) },
+        { key: 'formal_member_total', label: '正式队员', value: this.formatNumber(cards.formal_member_total) },
+        { key: 'activity_total', label: '今年活动', value: this.formatNumber(cards.activity_total) },
+        { key: 'upcoming_activity_total', label: '待开始活动', value: this.formatNumber(cards.upcoming_activity_total) },
+        { key: 'enroll_total', label: '报名总数', value: this.formatNumber(cards.enroll_total) },
+        { key: 'checkin_total', label: '签到总数', value: this.formatNumber(cards.checkin_total) },
+        { key: 'checkin_rate', label: '签到率', value: `${cards.checkin_rate || 0}%` }
+      ]
+    },
+    dashboardRankings() {
+      return this.dashboardOverview.rankings || {}
     },
     attendanceTableMinWidth() {
       return `${260 + (this.attendanceEvents || []).length * 190}px`
@@ -552,12 +744,23 @@ export default {
     venueVisible: { get() { return !!this.editVenue }, set(v) { if (!v) this.editVenue = null } },
     modeVisible: { get() { return !!this.editMode }, set(v) { if (!v) this.editMode = null } },
     userVisible: { get() { return !!this.editUser }, set(v) { if (!v) this.editUser = null } },
+    launcherVisible: { get() { return !!this.editLauncher }, set(v) { if (!v) this.editLauncher = null } },
     activityVisible: { get() { return !!this.activityForm }, set(v) { if (!v) this.activityForm = null } },
     planVisible: { get() { return !!this.planForm }, set(v) { if (!v) this.planForm = null } },
     eventVisible: { get() { return !!this.editEvent }, set(v) { if (!v) this.editEvent = null } }
   },
   async mounted() {
     if (this.tokenValue) await this.init()
+    window.addEventListener('resize', this.resizeDashboardCharts)
+  },
+  beforeUnmount() {
+    window.removeEventListener('resize', this.resizeDashboardCharts)
+    Object.values(this.dashboardCharts || {}).forEach(chart => chart && chart.dispose())
+  },
+  watch: {
+    dashboardYear() {
+      if (this.tokenValue && this.active === 'dashboard') this.loadDashboard()
+    }
   },
   methods: {
     can(permission) {
@@ -575,7 +778,70 @@ export default {
       await Promise.all([this.loadModes(), this.loadVenues(), this.load()])
     },
     load() {
-      return ({ activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, permissions: this.loadPermissions }[this.active] || this.loadActivities)()
+      return ({ dashboard: this.loadDashboard, activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
+    },
+    loadSystem() {
+      if (!this.systemMenus.some(item => item.key === this.systemActive)) {
+        this.systemActive = this.systemMenus[0]?.key || ''
+      }
+      if (this.systemActive === 'permissions') return this.loadPermissions()
+      if (this.systemActive === 'systemImages') return this.loadSystemImages()
+      return Promise.resolve()
+    },
+    switchSystemTab(key) {
+      this.systemActive = key
+      return this.loadSystem()
+    },
+    async loadDashboard() {
+      const params = new URLSearchParams()
+      if (this.dashboardYear) params.set('year', this.dashboardYear)
+      this.dashboardOverview = await api(`/api/admin/dashboard/overview?${params.toString()}`)
+      this.$nextTick(() => this.renderDashboardCharts())
+    },
+    renderDashboardCharts() {
+      if (this.active !== 'dashboard') return
+      this.renderChart('monthly', this.$refs.monthlyChart, this.monthlyChartOption())
+      this.renderChart('venue', this.$refs.venueChart, this.rankChartOption(this.dashboardRankings.popular_venues || [], 'name', 'count'))
+      this.renderChart('mode', this.$refs.modeChart, this.rankChartOption(this.dashboardRankings.popular_game_modes || [], 'name', 'count'))
+    },
+    renderChart(key, el, option) {
+      if (!el) return
+      if (this.dashboardCharts[key]) this.dashboardCharts[key].dispose()
+      const chart = echarts.init(el)
+      chart.setOption(option)
+      this.dashboardCharts[key] = chart
+    },
+    monthlyChartOption() {
+      const monthly = this.dashboardOverview.monthly || {}
+      const months = (monthly.months || []).map(month => `${month}月`)
+      return {
+        color: ['#2563eb', '#16a34a', '#f59e0b'],
+        tooltip: { trigger: 'axis' },
+        legend: { top: 0, data: ['活动', '报名', '签到'] },
+        grid: { left: 36, right: 20, top: 44, bottom: 28 },
+        xAxis: { type: 'category', data: months },
+        yAxis: { type: 'value', minInterval: 1 },
+        series: [
+          { name: '活动', type: 'bar', data: monthly.activities || [] },
+          { name: '报名', type: 'line', smooth: true, data: monthly.enrollments || [] },
+          { name: '签到', type: 'line', smooth: true, data: monthly.checkins || [] }
+        ]
+      }
+    },
+    rankChartOption(rows, labelKey, valueKey) {
+      const labels = rows.map(item => item[labelKey] || '-').reverse()
+      const values = rows.map(item => Number(item[valueKey] || 0)).reverse()
+      return {
+        color: ['#2563eb'],
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        grid: { left: 80, right: 20, top: 16, bottom: 24 },
+        xAxis: { type: 'value', minInterval: 1 },
+        yAxis: { type: 'category', data: labels },
+        series: [{ type: 'bar', data: values, barWidth: 14 }]
+      }
+    },
+    resizeDashboardCharts() {
+      Object.values(this.dashboardCharts || {}).forEach(chart => chart && chart.resize())
     },
 	    loadActivities() {
 	      const params = new URLSearchParams({
@@ -588,6 +854,16 @@ export default {
     loadVenues() { return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => { this.venues = d }) },
     loadModes() { return api(`/api/admin/game-modes?name=${this.filters.name || ''}`).then(d => { this.modes = d }) },
     loadUsers() { return api(`/api/admin/users?keyword=${this.filters.keyword || ''}`).then(d => { this.users = d }) },
+    loadLaunchers() {
+      const params = new URLSearchParams({
+        name: this.launcherManageFilters.name || '',
+        user: this.launcherManageFilters.user || ''
+      })
+      return api(`/api/admin/launchers?${params.toString()}`).then(d => { this.launchers = d })
+    },
+    loadSystemImages() {
+      return api('/api/admin/system/images').then(d => { this.systemImages = d || {} })
+    },
     userRoleLabel(row) {
       if (row.role === 'superadmin') return '超级管理员'
       if (row.role === 'admin') return '超级管理员'
@@ -842,6 +1118,9 @@ export default {
       const text = String(value).replace('T', ' ')
       return text.length >= 19 ? text.slice(0, 19) : text
     },
+    formatNumber(value) {
+      return Number(value || 0).toLocaleString()
+    },
     async downloadFile(url) {
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } })
       if (!response.ok) {
@@ -866,6 +1145,23 @@ export default {
     },
     saveUser() {
       return api(`/api/admin/users/${this.editUser.id}`, { method: 'PUT', body: this.editUser }).then(() => { this.editUser = null; this.loadUsers() })
+    },
+    saveLauncher() {
+      return api(`/api/admin/launchers/${this.editLauncher.id}`, { method: 'PUT', body: this.editLauncher }).then(() => {
+        this.editLauncher = null
+        this.loadLaunchers()
+      })
+    },
+    saveSystemImages() {
+      return api('/api/admin/system/images', { method: 'PUT', body: this.systemImages }).then(() => {
+        ElMessage.success('已保存')
+      })
+    },
+    resetUserPassword(row) {
+      return api(`/api/admin/users/${row.id}/reset-password`, { method: 'PUT', body: {} }).then(() => {
+        ElMessage.success('已经将密码置为初始密码 nb123456')
+        this.loadUsers()
+      })
     },
 	    saveEvent() {
 	      return api(`/api/admin/attendance/history-activities${this.editEvent.id ? `/${this.editEvent.id}` : ''}`, { method: this.editEvent.id ? 'PUT' : 'POST', body: this.editEvent }).then(() => { this.editEvent = null; this.loadAttendance() })

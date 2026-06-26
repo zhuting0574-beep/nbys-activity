@@ -33,8 +33,8 @@ public class UserAdminController {
         Integer d = disabled == null ? -1 : disabled;
         return ApiResponse.ok(Rows.list(jdbc,
                 "select u.*, i.username inviter_name, i.callsign inviter_callsign from users u left join users i on u.invited_by_id=i.id " +
-                        "where (?='' or u.username like concat('%',?,'%') or u.callsign like concat('%',?,'%')) " +
-                        "and (?='' or u.role=?) and (?=-1 or u.disabled=?) order by u.id desc",
+                "where (?='' or u.username like concat('%',?,'%') or u.callsign like concat('%',?,'%')) " +
+                        "and u.username not like '已删除用户%' and (?='' or u.role=?) and (?=-1 or u.disabled=?) order by u.id desc",
                 q, q, q, r, r, d, d));
     }
 
@@ -66,7 +66,15 @@ public class UserAdminController {
     @DeleteMapping("/users/{id}")
     public ApiResponse<Void> deleteUser(@PathVariable int id, HttpServletRequest req) {
         auth.require(req, "user:delete");
-        jdbc.update("delete from users where id=?", id);
+        Integer currentUserId = auth.currentUserId(req);
+        if (currentUserId != null && currentUserId == id) throw new IllegalArgumentException("不能删除当前登录账号");
+        Map<String, Object> user = Rows.one(jdbc, "select id,role from users where id=?", id);
+        if (user == null) throw new IllegalArgumentException("用户不存在");
+        if ("superadmin".equals(String.valueOf(user.get("role"))) || "admin".equals(String.valueOf(user.get("role")))) {
+            throw new IllegalArgumentException("超级管理员账号不允许删除");
+        }
+        jdbc.update("update users set username=?, callsign=?, avatar_url=null, phone=null, id_card=null, role='guest', disabled=1, is_regular_member=0 where id=?",
+                "已删除用户" + id, "已删除" + id, id);
         return ApiResponse.ok(null);
     }
 

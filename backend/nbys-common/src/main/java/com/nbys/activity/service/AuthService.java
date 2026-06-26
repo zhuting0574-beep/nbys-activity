@@ -91,7 +91,7 @@ public class AuthService {
 
     private Set<String> defaultPermissions(String role) {
         Set<String> p = new HashSet<String>();
-        Collections.addAll(p, "activity:view", "venue:view", "gameMode:view", "user:view", "role:view", "permission:view", "attendance:view");
+        Collections.addAll(p, "activity:view", "venue:view", "gameMode:view", "user:view", "role:view", "permission:view", "attendance:view", "launcher:view", "systemImage:view");
         if ("activity_admin".equals(role)) {
             Collections.addAll(p, "activity:create", "activity:update", "activity:delete", "activity:cancel", "activity:restore", "plan:create", "plan:update", "plan:delete");
         }
@@ -107,6 +107,7 @@ public class AuthService {
                 "plan:create", "plan:update", "plan:delete",
                 "venue:create", "venue:update", "venue:delete", "gameMode:create", "gameMode:update", "gameMode:delete",
                 "user:update", "user:delete", "user:disable", "user:resetPassword", "role:update", "permission:update",
+                "launcher:update", "launcher:delete", "systemImage:update",
                 "attendance:create", "attendance:update", "attendance:delete", "attendance:export");
         return p;
     }

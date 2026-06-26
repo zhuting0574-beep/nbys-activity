@@ -1,6 +1,8 @@
 .tools/
+.venv/
 node_modules/
 dist/
 target/
 uploads/
+.env.local
 .DS_Store

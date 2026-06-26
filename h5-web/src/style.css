@@ -41,7 +41,7 @@ a {
   max-width: 900px;
   min-height: 100vh;
   margin: 0 auto;
-  padding-bottom: 74px;
+  padding-bottom: 112px;
   background: transparent;
 }
 
@@ -117,6 +117,8 @@ select {
   display: grid;
   min-height: calc(100vh - 64px - 74px);
   align-items: start;
+  background-position: center;
+  background-size: cover;
 }
 
 .auth-card,
@@ -282,8 +284,23 @@ select {
 }
 
 .mine-identity p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
   margin: 0;
   color: var(--muted);
+}
+
+.mine-identity p b {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, .14);
+  border: 1px solid rgba(34, 197, 94, .26);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .mine-panel {
@@ -760,6 +777,57 @@ select {
   font-size: 13px;
 }
 
+.radio-field {
+  display: grid;
+  gap: 6px;
+}
+
+.radio-field span {
+  color: #9fb0c7;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.radio-field input {
+  height: 40px;
+  color: #dbeafe;
+  font-weight: 800;
+  letter-spacing: 0;
+  background: rgba(15, 23, 42, .9);
+}
+
+.squad-lock-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.lock-state {
+  min-height: 34px;
+  padding: 8px 10px;
+  color: #cbd5e1;
+  background: rgba(148, 163, 184, .12);
+  border: 1px solid rgba(148, 163, 184, .24);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lock-state.locked {
+  color: #fecaca;
+  background: rgba(239, 68, 68, .14);
+  border-color: rgba(239, 68, 68, .3);
+}
+
+.lock-btn {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .member-list {
   display: grid;
   gap: 5px;
@@ -1021,6 +1089,22 @@ input:focus,
 textarea:focus,
 select:focus {
   border-color: rgba(34, 197, 94, .62);
+}
+
+.icp-footer {
+  padding: 18px 16px 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.icp-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.icp-footer a:active {
+  color: #bbf7d0;
 }
 
 .tabs {

@@ -2,58 +2,62 @@
   <div>
     <header class="topbar">
       <a class="brand" href="#" @click.prevent="goHome">
-        <img class="brand-logo" :src="logoUrl" alt="甬士 Logo" />
+        <img class="brand-logo" :src="displayLogoUrl" alt="甬士 Logo" />
         <span>宁波甬士活动管理系统</span>
       </a>
       <button v-if="showHeaderBack" class="header-back" @click="goHome">返回首页</button>
     </header>
 
-    <div v-if="view === 'login'" class="page auth-page">
-      <div class="auth-card">
+    <div v-if="view === 'login'" class="page auth-page" :style="authPageStyle">
+      <form class="auth-card" @submit.prevent="login()">
         <h2>登录</h2>
-        <input v-model="loginForm.account" placeholder="名字 / 呼号" />
-        <input v-model="loginForm.password" placeholder="密码" type="password" />
-        <button class="btn" style="width: 100%" @click="login">登录</button>
+        <input v-model="loginForm.account" placeholder="名字 / 呼号" required />
+        <input v-model="loginForm.password" placeholder="密码" type="password" required />
+        <button class="btn" style="width: 100%" type="submit">登录</button>
         <p class="muted">没有账号？赶紧 <a @click="view = 'register'">注册</a>。</p>
-      </div>
+      </form>
     </div>
 
-    <div v-else-if="view === 'register'" class="page auth-page">
-      <div class="auth-card">
+    <div v-else-if="view === 'register'" class="page auth-page" :style="authPageStyle">
+      <form class="auth-card" @submit.prevent="register()">
         <h2>注册</h2>
-        <input v-model="registerForm.username" placeholder="用户名" />
-        <input v-model="registerForm.callsign" placeholder="呼号" />
-        <input v-model="registerForm.phone" placeholder="手机号" />
-        <input v-model="registerForm.id_card" placeholder="身份证号" />
-        <input v-model="registerForm.password" placeholder="密码" type="password" />
+        <input v-model="registerForm.username" placeholder="用户名" required />
+        <input v-model="registerForm.callsign" placeholder="呼号（选填）" />
+        <input v-model="registerForm.phone" placeholder="手机号" required />
+        <input v-model="registerForm.id_card" placeholder="身份证号" required />
+        <input v-model="registerForm.password" placeholder="密码" type="password" required />
         <input v-model="registerForm.confirm_password" placeholder="确认密码" type="password" />
-        <input v-model="registerForm.invite_code" placeholder="邀请码" />
+        <input v-model="registerForm.invite_code" placeholder="邀请码（选填）" />
+        <p class="muted">用户名、手机号、身份证号、密码为必填项</p>
         <label class="upload-field">
           <span>头像</span>
           <input type="file" accept="image/*" @change="uploadRegisterAvatar" />
         </label>
         <img v-if="registerForm.avatar_url" class="avatar-preview" :src="registerForm.avatar_url" alt="头像预览" />
-        <button class="btn" style="width: 100%" @click="register">注册</button>
+        <button class="btn" style="width: 100%" type="submit">注册</button>
         <p class="muted"><a @click="view = 'login'">返回登录</a></p>
-      </div>
+      </form>
     </div>
 
-    <div v-else-if="view === 'completeProfile'" class="page auth-page">
-      <div class="auth-card">
+    <div v-else-if="view === 'completeProfile'" class="page auth-page" :style="authPageStyle">
+      <form class="auth-card" @submit.prevent="completeProfile()">
         <h2>完善资料</h2>
         <p class="muted">请先完善手机号和身份证号，完善后才能进入活动页面。</p>
-        <input v-model="profileForm.phone" placeholder="手机号" />
-        <input v-model="profileForm.id_card" placeholder="身份证号" />
-        <button class="btn" style="width: 100%" @click="completeProfile">确认保存</button>
-      </div>
+        <input v-model="profileForm.phone" placeholder="手机号" required />
+        <input v-model="profileForm.id_card" placeholder="身份证号" required />
+        <button class="btn" style="width: 100%" type="submit">确认保存</button>
+      </form>
     </div>
 
     <template v-else>
     <div v-if="tab === 'activities' && !selectedActivity && !selectedPlan">
       <div class="top">
-        <div>
+        <div class="home-identity mine-identity">
           <h2>{{ me.username }}</h2>
-          <div>{{ me.callsign }}</div>
+          <p>
+            <span>{{ me.callsign || '未设置呼号' }}</span>
+            <b>{{ attendanceSummary.present_count || 0 }}/{{ attendanceSummary.activity_total || 0 }}</b>
+          </p>
         </div>
         <img v-if="me.avatar_url" class="user-avatar" :src="me.avatar_url" alt="用户头像" />
         <div v-else class="user-avatar fallback">{{ avatarText }}</div>
@@ -187,11 +191,23 @@
                 <strong>{{ squad.name }}</strong>
                 <span>{{ squad.member_count }}人</span>
               </div>
+              <label class="radio-field">
+                <span>对讲频率</span>
+                <input :value="squad.radio_channel || defaultRadioChannel(squad)" readonly />
+              </label>
+              <div class="squad-lock-row">
+                <span class="lock-state" :class="{ locked: isSquadLocked(squad) }">{{ isSquadLocked(squad) ? '已锁定' : '未锁定' }}</span>
+                <button class="btn secondary lock-btn" @click="toggleSquadLock(squad)">
+                  {{ isSquadLocked(squad) ? '解除锁定' : '锁定小队' }}
+                </button>
+              </div>
               <select v-model="joinJobs[squad.id]">
                 <option value="">请选择职业</option>
                 <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
               </select>
-              <button class="btn detail-sub-action" @click="joinSquad(squad, joinJobs[squad.id])">加入小队</button>
+              <button class="btn detail-sub-action" :class="{ secondary: isSquadLocked(squad) && !isMySquad(squad) }" @click="joinSquad(squad, joinJobs[squad.id])">
+                {{ isSquadLocked(squad) && !isMySquad(squad) ? '小队已锁定' : '加入小队' }}
+              </button>
               <button v-if="Number(squad.leader_user_id) === Number(me.id)" class="btn secondary detail-sub-action" @click="openLeaderDialog(squad)">转让队长</button>
               <div class="member-list">
                 <div v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.id" class="member">
@@ -216,8 +232,8 @@
             <template v-if="detail.is_activity_creator">
               <select v-model="memberAssignments[member.user_id].squadKey" class="compact-select">
                 <option value="">未分配小队</option>
-                <option v-for="squad in detail.squads" :key="squad.id" :value="`${squad.camp_no}:${squad.squad_no}`">
-                  阵营{{ squad.camp_no }} / {{ squad.name }}
+                <option v-for="squad in detail.squads" :key="squad.id" :value="`${squad.camp_no}:${squad.squad_no}`" :disabled="isSquadLocked(squad)">
+                  阵营{{ squad.camp_no }} / {{ squad.name }}{{ isSquadLocked(squad) ? '（已锁定）' : '' }}
                 </option>
               </select>
               <select v-model="memberAssignments[member.user_id].job" class="compact-select">
@@ -352,6 +368,10 @@
         </div>
     </div>
 
+    <footer class="icp-footer">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">浙ICP 备2026046394</a>
+    </footer>
+
     <div class="tabs">
       <div class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'; selectedActivity = null; selectedPlan = null; loadActivities()">活动</div>
       <div class="tab" :class="{ active: tab === 'rentals' }" @click="tab = 'rentals'; loadRentals()">发射器租赁</div>
@@ -451,10 +471,12 @@ export default {
       view: token() ? 'app' : new URLSearchParams(location.search).get('invite') ? 'register' : 'login',
       tab: 'activities',
       me: {},
+      systemImages: {},
       loginForm: {},
       logoUrl,
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
+      attendanceSummary: { present_count: 0, activity_total: 0 },
       selectedActivity: null,
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
@@ -509,13 +531,28 @@ export default {
     showHeaderBack() {
       if (this.view !== 'app') return false
       return this.tab !== 'activities' || !!this.selectedActivity || !!this.selectedPlan
+    },
+    displayLogoUrl() {
+      return this.systemImages.login_logo_url || this.logoUrl
+    },
+    authPageStyle() {
+      const url = this.systemImages.login_background_url
+      return url ? { backgroundImage: `linear-gradient(rgba(2, 6, 23, .34), rgba(2, 6, 23, .7)), url("${url}")` } : {}
     }
   },
   async mounted() {
     setErrorHandler(this.showToast)
+    await this.loadSystemImages()
     if (token()) await this.init()
   },
   methods: {
+    async loadSystemImages() {
+      try {
+        this.systemImages = await api('/api/public/system-settings/images')
+      } catch (error) {
+        this.systemImages = {}
+      }
+    },
     showToast(message) {
       if (!message) return
       clearTimeout(this.toastTimer)
@@ -535,18 +572,29 @@ export default {
       if (resolve) resolve(value)
     },
     async login() {
-      const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
-      setToken(data.token)
-      this.view = 'app'
-      await this.init()
+      try {
+        const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
+        setToken(data.token)
+        this.view = 'app'
+        await this.init()
+      } catch (error) {
+        this.showToast(error.message || '登录失败')
+      }
     },
     async register() {
-      if (this.registerForm.password !== this.registerForm.confirm_password) return this.showToast('两次密码不一致')
-      if (!this.validPhone(this.registerForm.phone)) return this.showToast('请输入合法手机号')
-      if (!this.validIdCard(this.registerForm.id_card)) return this.showToast('请输入合法身份证号')
-      await api('/api/h5/auth/register', { method: 'POST', body: this.registerForm })
-      this.showToast('注册成功')
-      this.view = 'login'
+      try {
+        if (!this.registerForm.username.trim()) return this.showToast('请输入用户名')
+        if (!this.registerForm.password) return this.showToast('请输入密码')
+        if (!this.registerForm.confirm_password) return this.showToast('请再次输入密码')
+        if (this.registerForm.password !== this.registerForm.confirm_password) return this.showToast('两次密码不一致')
+        if (!this.validPhone(this.registerForm.phone)) return this.showToast('请输入合法手机号')
+        if (!this.validIdCard(this.registerForm.id_card)) return this.showToast('请输入合法身份证号')
+        await api('/api/h5/auth/register', { method: 'POST', body: this.registerForm })
+        this.view = 'login'
+        this.showToast('注册成功，请登录。')
+      } catch (error) {
+        this.showToast(error.message || '注册失败')
+      }
     },
     async init() {
       this.me = await api('/api/h5/me')
@@ -558,6 +606,7 @@ export default {
       }
       this.view = 'app'
       await this.loadActivities()
+      await this.loadAttendanceSummary()
       await this.loadMine()
     },
     loadActivities() {
@@ -568,6 +617,9 @@ export default {
         const planning = plans.map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
         this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
       })
+    },
+    loadAttendanceSummary() {
+      return api('/api/h5/attendance/my-summary').then(data => { this.attendanceSummary = data || { present_count: 0, activity_total: 0 } })
     },
     sortTime(value) {
       return value ? new Date(String(value).replace(' ', 'T')).getTime() || 0 : 0
@@ -666,6 +718,21 @@ export default {
     membersByCamp(camp) {
       return (this.detail.members || []).filter(member => member.camp_no === camp)
     },
+    isSquadLocked(squad) {
+      return squad?.locked === true || squad?.locked === 1 || String(squad?.locked) === '1' || String(squad?.locked).toLowerCase() === 'true'
+    },
+    isSquadLeader(squad) {
+      return Number(squad?.leader_user_id) === Number(this.me.id)
+    },
+    isMySquad(squad) {
+      const mine = this.detail.my_enrollment || {}
+      return Number(mine.camp_no) === Number(squad?.camp_no) && Number(mine.squad_no) === Number(squad?.squad_no)
+    },
+    defaultRadioChannel(squad) {
+      const campNo = Number(squad?.camp_no || 1)
+      const squadNo = Number(squad?.squad_no || 1)
+      return `${434 + campNo}.${String(squadNo * 100).padStart(3, '0')}`
+    },
     prepareMemberAssignments() {
       const assignments = {}
       for (const member of this.detail.members || []) {
@@ -689,11 +756,25 @@ export default {
       this.showToast('已分配')
     },
     joinSquad(squad, job) {
+      if (this.isSquadLocked(squad) && !this.isMySquad(squad)) {
+        this.showToast('小队已锁定，无法加入')
+        return
+      }
       if (!job) {
         this.showToast('请先选择职业')
         return
       }
       return api(`/api/h5/activities/${this.selectedActivity}/squad`, { method: 'PUT', body: { camp_no: squad.camp_no, squad_no: squad.squad_no, job } }).then(() => this.openActivity(this.selectedActivity))
+    },
+    async toggleSquadLock(squad) {
+      if (!this.isSquadLeader(squad)) {
+        this.showToast('只有队长可以锁定小队')
+        return
+      }
+      const locked = !this.isSquadLocked(squad)
+      await api(`/api/h5/activities/${this.selectedActivity}/squads/${squad.id}/lock`, { method: 'PUT', body: { locked } })
+      await this.openActivity(this.selectedActivity)
+      this.showToast(locked ? '小队已锁定' : '小队已解除锁定')
     },
     openLeaderDialog(squad) {
       const candidates = this.transferLeaderCandidates(squad)
@@ -740,16 +821,28 @@ export default {
       this.showRentalDialog = true
     },
     async uploadRegisterAvatar(event) {
-      const data = await this.uploadImage(event)
-      if (data) this.registerForm.avatar_url = data.url
+      try {
+        const data = await this.uploadImage(event)
+        if (data) this.registerForm.avatar_url = data.url
+      } catch (error) {
+        this.showToast(error.message || '头像上传失败')
+      }
     },
     async uploadProfileAvatar(event) {
-      const data = await this.uploadImage(event)
-      if (data) this.profileForm.avatar_url = data.url
+      try {
+        const data = await this.uploadImage(event)
+        if (data) this.profileForm.avatar_url = data.url
+      } catch (error) {
+        this.showToast(error.message || '头像上传失败')
+      }
     },
     async uploadRentalPhoto(event) {
-      const data = await this.uploadImage(event)
-      if (data) this.rentalForm.photo_filename = data.url
+      try {
+        const data = await this.uploadImage(event)
+        if (data) this.rentalForm.photo_filename = data.url
+      } catch (error) {
+        this.showToast(error.message || '图片上传失败')
+      }
     },
     async uploadImage(event) {
       let file = event.target.files[0]

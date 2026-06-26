@@ -31,9 +31,11 @@ public class ProfileController {
         String password = text(body.get("password"));
         String phone = normalizedPhone(body.get("phone"));
         String idCard = normalizedIdCard(body.get("id_card"));
-        if (username.isEmpty() || callsign.isEmpty() || password.isEmpty()) throw new IllegalArgumentException("用户名、呼号、密码不能为空");
+        if (username.isEmpty() || password.isEmpty()) throw new IllegalArgumentException("用户名、密码不能为空");
         validateIdentity(phone, idCard);
-        if (Rows.one(jdbc, "select id from users where username=? or callsign=?", username, callsign) != null) throw new IllegalArgumentException("用户名或呼号已存在");
+        if (Rows.one(jdbc, "select id from users where username=?", username) != null) throw new IllegalArgumentException("用户名已存在");
+        if (!callsign.isEmpty() && Rows.one(jdbc, "select id from users where callsign=?", callsign) != null) throw new IllegalArgumentException("呼号已存在");
+        if (Rows.one(jdbc, "select id from users where id_card=?", idCard) != null) throw new IllegalArgumentException("该身份证号已注册，禁止重复注册");
         Integer invitedBy = null;
         String inviteCode = text(body.get("invite_code"));
         if (!inviteCode.isEmpty()) {
@@ -57,9 +59,11 @@ public class ProfileController {
         String avatar = body.containsKey("avatar_url") ? text(body.get("avatar_url")) : current == null ? "" : text(current.get("avatar_url"));
         String phone = normalizedPhone(body.get("phone"));
         String idCard = normalizedIdCard(body.get("id_card"));
-        if (username.isEmpty() || callsign.isEmpty()) throw new IllegalArgumentException("用户名、呼号不能为空");
+        if (username.isEmpty()) throw new IllegalArgumentException("用户名不能为空");
         validateIdentity(phone, idCard);
-        if (Rows.one(jdbc, "select id from users where id<>? and (username=? or callsign=?)", userId, username, callsign) != null) throw new IllegalArgumentException("用户名或呼号已存在");
+        if (Rows.one(jdbc, "select id from users where id<>? and username=?", userId, username) != null) throw new IllegalArgumentException("用户名已存在");
+        if (!callsign.isEmpty() && Rows.one(jdbc, "select id from users where id<>? and callsign=?", userId, callsign) != null) throw new IllegalArgumentException("呼号已存在");
+        if (Rows.one(jdbc, "select id from users where id<>? and id_card=?", userId, idCard) != null) throw new IllegalArgumentException("该身份证号已注册，禁止重复注册");
         jdbc.update("update users set username=?, callsign=?, avatar_url=?, phone=?, id_card=? where id=?", username, callsign, avatar, phone, idCard, userId);
         return ApiResponse.ok(null);
     }
