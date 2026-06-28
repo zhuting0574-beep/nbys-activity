@@ -98,6 +98,15 @@
         </article>
       </div>
 
+      <article class="record-feature">
+        <img :src="featuredRecord.image" :alt="featuredRecord.title" width="1400" height="900" loading="lazy" decoding="async" />
+        <div>
+          <span>{{ featuredRecord.date }}</span>
+          <h3>{{ featuredRecord.title }}</h3>
+          <p>{{ featuredRecord.text }}</p>
+        </div>
+      </article>
+
       <div class="record-grid">
         <article v-for="item in activityLog" :key="item.title">
           <img :src="item.image" :alt="item.title" width="900" height="675" loading="lazy" decoding="async" />
@@ -141,10 +150,10 @@
 
       <div class="activity-board">
         <figure class="activity-photo">
-          <img :src="activityFeatureImage" alt="象山海影城任务现场" width="1200" height="900" loading="lazy" decoding="async" />
+          <img :src="activityFeatureImage" alt="象山海影城任务简报现场" width="1200" height="900" loading="lazy" decoding="async" />
           <figcaption>
             <span>XIANGSHAN / SCRIPT</span>
-            <strong>影视城剧本会提前讲清任务点、集合点和撤离条件。</strong>
+            <strong>影视城剧本先从地图、角色和任务条件开始。</strong>
           </figcaption>
         </figure>
 
@@ -301,8 +310,14 @@ export default {
       logo,
       heroVideo,
       esaRoom,
-      activityFeatureImage: haiyingcheng05,
+      activityFeatureImage: haiyingcheng02,
       cooperateImage: xhsHengdianStreet,
+      featuredRecord: {
+        date: '2024.06 / 象山海影城',
+        title: '巨蟹行动最终章',
+        text: '白色教堂、街区和楼体连在一起，任务从集合点一路推进到撤离条件。',
+        image: haiyingcheng05
+      },
       navItems: [
         { id: 'about', label: '关于' },
         { id: 'records', label: '记录' },
@@ -359,7 +374,7 @@ export default {
         { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员视角的视频切片，能看到一次下场的移动和接触距离。', image: xhsWargameFrame },
         { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '草地场景、队伍合影、现场动作。', image: xhsFieldTeam },
         { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '外地影视城场地，和其他队伍同场。', image: xhsHengdianStreet },
-        { date: '2024.06 / 象山', title: '巨蟹行动最终章', text: '象山海影城街区任务，B 站有公开视频。', image: biliJujieFinalFrame }
+        { date: '2021.10.31 / 山地', title: '浙东小九寨路线', text: '山路、林线、队伍间距和通讯纪律。', image: xiaojiuzhaiEscape01 }
       ],
       venues: [
         {
@@ -367,7 +382,7 @@ export default {
           type: '影视城街区',
           image: haiyingcheng03,
           featured: true,
-          text: '街道、楼体、巷口都能用。适合剧本推进、搜索、据点攻防和夜间任务。',
+          text: '街道、楼体、巷口都能用。剧本推进、搜索、据点攻防和夜间任务都在这里跑过。',
           points: ['巨蟹行动', '街区推进', '夜间任务']
         },
         {
@@ -375,7 +390,7 @@ export default {
           type: '夜间街区',
           image: yingmengliDate01,
           featured: false,
-          text: '夜间灯光足，街道完整，适合轻剧本、观摩和短流程任务。',
+          text: '夜间灯光足，街道完整。轻剧本、观摩和短流程任务比较好控节奏。',
           points: ['夜间街区', '观摩友好']
         },
         {
@@ -391,23 +406,23 @@ export default {
           type: '街区空间',
           image: moto01,
           featured: false,
-          text: '街区尺度小，适合短流程体验、器材摆放、公众观摩和内容拍摄。',
-          points: ['轻量任务', '器材摆放']
+          text: '街区尺度小，动线短。器材能摆开，观摩位置也容易安排。',
+          points: ['短流程', '器材摆放']
         },
         {
           name: '天宫庄园',
           type: '园区活动',
           image: patchBoard,
           featured: false,
-          text: '边界清楚，动线容易控制。适合团建、研学和低强度任务。',
-          points: ['团建', '研学']
+          text: '边界清楚，动线容易控制。人数不大的低强度任务，可以先从这里试。',
+          points: ['边界清楚', '低强度']
         },
         {
           name: '章水中心小学',
           type: '校园训练',
           image: esaRoom,
           featured: false,
-          text: '适合低强度规则课、队形演示、口令和安全边界讲解。',
+          text: '低强度规则课、队形演示、口令和安全边界讲解，可以放在校园环境里做。',
           points: ['规则讲解', '基础协作']
         }
       ],
@@ -462,8 +477,8 @@ export default {
       partnerNotes: [
         {
           code: 'A',
-          title: '哪些地方适合试',
-          points: ['有街区或楼体的影视城', '边界清楚的园区', '适合观摩的夜间街区', '能留出安全区的校园或营地']
+          title: '哪些地方能先跑',
+          points: ['有街区或楼体的影视城', '边界清楚的园区', '观摩位置好安排的夜间街区', '能留出安全区的校园或营地']
         },
         {
           code: 'B',

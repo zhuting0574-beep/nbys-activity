@@ -470,6 +470,7 @@ video {
 .activity-photo,
 .media-wall figure,
 .partner-photo,
+.record-feature,
 .field-grid article,
 .record-grid article {
   position: relative;
@@ -489,6 +490,7 @@ video {
 }
 
 .about-photos img,
+.record-feature img,
 .record-grid img,
 .field-grid img,
 .media-wall img,
@@ -566,7 +568,57 @@ h3 {
 }
 
 .record-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.record-feature {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.52fr);
+  gap: 0;
+  min-height: 430px;
+  margin-bottom: 14px;
+  border-color: var(--ys-line-strong);
+  background:
+    linear-gradient(135deg, rgba(213, 71, 53, 0.1), transparent 44%),
+    rgba(255, 255, 255, 0.045);
+}
+
+.record-feature img {
+  min-height: 430px;
+}
+
+.record-feature div {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: clamp(24px, 3.4vw, 44px);
+}
+
+.record-feature span {
+  color: var(--ys-sand);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.record-feature h3 {
+  margin: 12px 0;
+  font-size: clamp(32px, 4vw, 58px);
+  line-height: 1;
+  font-family:
+    "Source Han Serif SC",
+    "Noto Serif CJK SC",
+    "Songti SC",
+    "SimSun",
+    serif;
+}
+
+.record-feature p {
+  margin: 0;
+  color: #c8bda4;
+  font-size: 17px;
+  line-height: 1.72;
 }
 
 .record-grid img {
@@ -654,16 +706,17 @@ h3 {
 
 .activity-list {
   display: grid;
-  gap: 1px;
+  gap: 0;
+  border-top: 1px solid var(--ys-line);
 }
 
 .activity-list article {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 16px;
-  padding: 20px;
-  border: 1px solid var(--ys-line);
-  background: rgba(255, 255, 255, 0.045);
+  padding: 18px 0;
+  border-bottom: 1px solid var(--ys-line);
+  background: transparent;
 }
 
 .activity-list h3 {
@@ -673,9 +726,12 @@ h3 {
 
 .flow-panel {
   margin-top: 14px;
-  padding: 24px;
+  padding: 24px 0 0;
   border: 1px solid var(--ys-line);
-  background: rgba(255, 255, 255, 0.045);
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
 }
 
 .flow-panel h3 {
@@ -693,9 +749,14 @@ h3 {
 }
 
 .flow-panel li {
-  padding: 16px;
-  border: 1px solid var(--ys-line);
-  background: rgba(0, 0, 0, 0.16);
+  padding: 0 16px 0 0;
+  border: 0;
+  border-right: 1px solid var(--ys-line);
+  background: transparent;
+}
+
+.flow-panel li:last-child {
+  border-right: 0;
 }
 
 .flow-panel strong,
@@ -911,6 +972,7 @@ h3 {
   }
 
   .activity-board,
+  .record-feature,
   .flow-panel ol,
   .proof-strip,
   .public-links {
@@ -988,6 +1050,7 @@ h3 {
   }
 
   .proof-strip,
+  .record-feature,
   .record-grid,
   .field-grid,
   .activity-board,
@@ -996,6 +1059,10 @@ h3 {
   .media-wall,
   .public-links {
     grid-template-columns: 1fr;
+  }
+
+  .record-feature img {
+    min-height: 310px;
   }
 
   .proof-strip {
