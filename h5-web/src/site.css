@@ -620,6 +620,9 @@ video {
 .phase-grid p,
 .doctrine-vault p,
 .partner-grid p,
+.collaboration-start p,
+.trial-flow p,
+.deliverable-board p,
 .asset-wall span {
   color: rgba(243, 230, 191, 0.72);
   line-height: 1.78;
@@ -629,7 +632,10 @@ video {
 .training-loop,
 .phase-grid,
 .doctrine-vault,
-.partner-grid {
+.partner-grid,
+.collaboration-start,
+.trial-flow,
+.deliverable-board {
   display: grid;
   gap: 14px;
 }
@@ -638,7 +644,10 @@ video {
 .training-loop article,
 .phase-grid article,
 .doctrine-vault article,
-.partner-grid article {
+.partner-grid article,
+.collaboration-start article,
+.trial-flow article,
+.deliverable-board article {
   position: relative;
   overflow: hidden;
   padding: 20px;
@@ -648,7 +657,10 @@ video {
 
 .ops-grid article::after,
 .training-loop article::after,
-.partner-grid article::after {
+.partner-grid article::after,
+.collaboration-start article::after,
+.trial-flow article::after,
+.deliverable-board article::after {
   content: "";
   position: absolute;
   right: -24px;
@@ -663,7 +675,10 @@ video {
 .training-loop span,
 .phase-grid span,
 .doctrine-vault span,
-.partner-grid span {
+.partner-grid span,
+.collaboration-start span,
+.trial-flow span,
+.deliverable-board span {
   color: var(--ys-amber);
   font-size: 11px;
 }
@@ -672,7 +687,10 @@ video {
 .training-loop h4,
 .phase-grid h4,
 .doctrine-vault h4,
-.partner-grid h4 {
+.partner-grid h4,
+.collaboration-start h4,
+.trial-flow h4,
+.deliverable-board h4 {
   margin: 12px 0 8px;
   color: var(--ys-paper);
   font-size: 20px;
@@ -682,7 +700,10 @@ video {
 .training-loop p,
 .phase-grid p,
 .doctrine-vault p,
-.partner-grid p {
+.partner-grid p,
+.collaboration-start p,
+.trial-flow p,
+.deliverable-board p {
   margin: 0;
 }
 
@@ -706,6 +727,11 @@ video {
 .partner-checklist {
   display: grid;
   gap: 16px;
+}
+
+.collaboration-start {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
 }
 
 .overview-gallery {
@@ -956,7 +982,7 @@ video {
 }
 
 .ops-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .activity-log {
@@ -1059,6 +1085,10 @@ video {
 
 .record-table {
   grid-template-columns: 0.8fr 1fr 0.9fr 1.6fr 1.2fr;
+  margin-top: 18px;
+}
+
+.evidence-records {
   margin-top: 18px;
 }
 
@@ -1425,6 +1455,16 @@ video {
   margin-top: 16px;
 }
 
+.trial-flow {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.deliverable-board {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
 .panel-swap-enter-active,
 .panel-swap-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;
@@ -1487,6 +1527,7 @@ video {
   }
 
   .source-grid,
+  .collaboration-start,
   .activity-log,
   .quick-gallery,
   .venue-grid,
@@ -1496,6 +1537,8 @@ video {
   .member-notes,
   .training-loop,
   .partner-grid,
+  .trial-flow,
+  .deliverable-board,
   .partner-checklist,
   .evidence-note-grid,
   .ops-scenes,
@@ -1632,6 +1675,7 @@ video {
   }
 
   .mission-strip,
+  .collaboration-start,
   .overview-gallery,
   .activity-log,
   .quick-gallery,
@@ -1649,6 +1693,8 @@ video {
   .media-stage,
   .media-source-note,
   .partner-grid,
+  .trial-flow,
+  .deliverable-board,
   .partner-checklist,
   .evidence-note-grid,
   .album-photos,

@@ -12,7 +12,7 @@
         </span>
       </button>
 
-      <nav class="ys-links" aria-label="频道目录">
+      <nav class="ys-links" aria-label="页面目录">
         <button
           v-for="item in navItems"
           :key="item.key"
@@ -26,8 +26,8 @@
       </nav>
 
       <button class="action-btn" type="button" @click="$emit('enter-app')">
-        <span>一起行动</span>
-        <em>JOIN THE OP</em>
+        <span>参加活动</span>
+        <em>SIGN UP</em>
       </button>
     </header>
 
@@ -39,14 +39,14 @@
       </div>
 
       <div class="hero-copy">
-        <p class="eyebrow">PUBLIC BRIEFING / NINGBO / MILSIM & FIELD OPS</p>
+        <p class="eyebrow">NINGBO FIELD ACTIVITY / PUBLIC RECORD</p>
         <h1>
           <span v-for="line in activeHero.lines" :key="line">{{ line }}</span>
         </h1>
         <p class="hero-lead">{{ activeHero.lead }}</p>
         <div class="hero-actions">
-          <button type="button" class="primary-cta" @click="$emit('enter-app')">一起行动</button>
-          <button type="button" class="ghost-cta" @click="setView('evidence')">看看过往活动</button>
+          <button type="button" class="primary-cta" @click="setView('partners')">合作试场</button>
+          <button type="button" class="ghost-cta" @click="$emit('enter-app')">参加活动</button>
         </div>
       </div>
 
@@ -70,7 +70,7 @@
 
     <section class="workbench section-frame" aria-label="频道内容">
       <aside class="channel-rail" aria-label="频道切换">
-        <p>CHANNEL INDEX</p>
+        <p>快速浏览</p>
         <button
           v-for="item in navItems"
           :key="`rail-${item.key}`"
@@ -93,17 +93,24 @@
 
           <div v-if="activeView === 'overview'" class="overview-panel">
             <div class="manifesto">
-              <p class="eyebrow">WHO WE ARE</p>
-              <h3>甬士做军事模拟推演活动：集合、简报、分组、进场、任务推进、复盘。</h3>
+              <p class="eyebrow">START HERE</p>
+              <h3>甬士在宁波组织军事模拟推演活动，也承接场地试场、内容拍摄和轻量体验。</h3>
               <p>
-                场地可能是影视城街区、夜间街区、山地路线，也可能是学校、园区和开放街区。
-                每次活动都会先讲规则、人数、边界和当天任务。
-                新人可以先从观摩和周常开始，熟悉以后再参加远征或剧本行动。
+                活动开始前会确认人数、场地边界、安全要求和当天任务。
+                现场通常包含 Briefing、分组、进场、任务推进和 AAR 复盘。
+                合作方可以先做一次小规模试场；个人参与者可以先看公开记录，再进入报名系统。
               </p>
+            </div>
+            <div class="collaboration-start">
+              <article v-for="item in collaborationPaths" :key="item.title">
+                <span>{{ item.code }}</span>
+                <h4>{{ item.title }}</h4>
+                <p>{{ item.text }}</p>
+              </article>
             </div>
             <div class="overview-gallery">
               <figure>
-                <img :src="haiyingcheng03" alt="象山海影城巨蟹行动现场" />
+                <img :src="haiyingcheng02" alt="象山海影城巨蟹行动现场" />
                 <figcaption>剧本行动 / 象山海影城</figcaption>
               </figure>
               <figure>
@@ -141,6 +148,19 @@
                   <h3>{{ item.title }}</h3>
                   <p>{{ item.text }}</p>
                 </div>
+              </article>
+            </div>
+            <div class="record-table evidence-records">
+              <div class="board-title">
+                <p>ACTIVITY RECORDS</p>
+                <h3>公开活动记录</h3>
+              </div>
+              <article v-for="record in activityRecords" :key="record.name">
+                <time>{{ record.time }}</time>
+                <strong>{{ record.place }}</strong>
+                <span>{{ record.type }}</span>
+                <p>{{ record.name }}</p>
+                <em>{{ record.note }}</em>
               </article>
             </div>
             <div class="source-grid">
@@ -230,20 +250,6 @@
               </article>
             </div>
 
-            <div class="record-table">
-              <div class="board-title">
-                <p>ACTIVITY RECORDS</p>
-                <h3>活动记录表</h3>
-              </div>
-              <article v-for="record in activityRecords" :key="record.name">
-                <time>{{ record.time }}</time>
-                <strong>{{ record.place }}</strong>
-                <span>{{ record.type }}</span>
-                <p>{{ record.name }}</p>
-                <em>{{ record.note }}</em>
-              </article>
-            </div>
-
             <div class="expedition-board">
               <div class="board-title">
                 <p>EXPEDITION EXCHANGE LOG</p>
@@ -301,15 +307,15 @@
           <div v-else-if="activeView === 'doctrine'" class="doctrine-panel">
             <div class="doctrine-hero">
               <div>
-                <p class="eyebrow">TRAINING DOCTRINE / INTERNAL SYSTEM</p>
-                <h3>训练解决现场最基本的问题：听得懂指令，知道边界，能和队友配合。</h3>
+                <p class="eyebrow">SAFE OPS / EXECUTION SYSTEM</p>
+                <h3>执行保障先解决四件事：边界清楚、口令清楚、通讯清楚、复盘清楚。</h3>
                 <p>
-                  内容包括安全规则、口令、通讯、队形、CQB 基础、任务简报和 AAR 复盘。
-                  新人先学规则和安全，再跟着队伍参加低强度活动。
-                  老队员会继续练通讯、移动、掩护、指挥和复盘。
+                  每次活动都会先做 Briefing，明确 ROE、行动区域 AO、集合点、撤离点和停止口令。
+                  训练体系用于支撑现场执行：新人知道规则，老队员负责通讯、队形、移动、掩护和 AAR。
+                  对合作方来说，这些内容对应的是活动安全、人员调度和现场秩序。
                 </p>
               </div>
-              <img :src="esaUrban01" alt="甬士城市作战训练现场" />
+              <img :src="esaRoom" alt="甬士室内 Briefing 现场" />
             </div>
 
             <div class="training-loop">
@@ -405,12 +411,23 @@
                 这些条件能对上，再安排分组、简报、任务和影像记录。
               </p>
               <div class="partner-actions">
-                <button type="button" class="primary-cta" @click="$emit('enter-app')">进入报名系统</button>
+                <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
                 <button type="button" class="ghost-cta" @click="setView('media')">先看现场照片</button>
               </div>
             </div>
             <div class="partner-grid">
               <article v-for="item in partnerModes" :key="item.title">
+                <span>{{ item.code }}</span>
+                <h4>{{ item.title }}</h4>
+                <p>{{ item.text }}</p>
+              </article>
+            </div>
+            <div class="trial-flow">
+              <div class="board-title">
+                <p>TRIAL RUN</p>
+                <h3>一次小规模试场怎么开始</h3>
+              </div>
+              <article v-for="item in trialSteps" :key="item.title">
                 <span>{{ item.code }}</span>
                 <h4>{{ item.title }}</h4>
                 <p>{{ item.text }}</p>
@@ -422,6 +439,17 @@
                 <h3>试做前先确认这些</h3>
               </div>
               <article v-for="item in partnerChecklist" :key="item.title">
+                <span>{{ item.code }}</span>
+                <h4>{{ item.title }}</h4>
+                <p>{{ item.text }}</p>
+              </article>
+            </div>
+            <div class="deliverable-board">
+              <div class="board-title">
+                <p>WHAT REMAINS</p>
+                <h3>活动结束后能留下什么</h3>
+              </div>
+              <article v-for="item in cooperationDeliverables" :key="item.title">
                 <span>{{ item.code }}</span>
                 <h4>{{ item.title }}</h4>
                 <p>{{ item.text }}</p>
@@ -499,91 +527,98 @@ export default {
       fieldRecordVideo,
       trailerVideo,
       haiyingcheng01,
+      haiyingcheng02,
       hengdian01,
       xiaojiuzhaiTraining01,
+      esaRoom,
       patchBoard,
       activeView: hashToView(),
       navItems: [
-        { key: 'overview', cn: '概览', en: 'Overview' },
-        { key: 'evidence', cn: '脉络', en: 'Public Trace' },
-        { key: 'venues', cn: '场地', en: 'Field Network' },
-        { key: 'ops', cn: '活动', en: 'Operations' },
-        { key: 'doctrine', cn: '训练', en: 'Doctrine' },
-        { key: 'media', cn: '影像', en: 'Media Wall' },
-        { key: 'partners', cn: '合作', en: 'Partner Desk' }
+        { key: 'overview', cn: '首页', en: 'Start Here' },
+        { key: 'evidence', cn: '行动记录', en: 'Public Record' },
+        { key: 'venues', cn: '场地适配', en: 'Field Use' },
+        { key: 'ops', cn: '活动类型', en: 'What We Run' },
+        { key: 'doctrine', cn: '执行保障', en: 'Safe Ops' },
+        { key: 'media', cn: '影像档案', en: 'Media Archive' },
+        { key: 'partners', cn: '合作报名', en: 'Work With Us' }
       ],
       panels: {
         overview: {
-          code: '00 / ABOUT NBYS',
-          title: '宁波本地的军事模拟推演活动组织。',
-          subtitle: '周常活动、山地训练、影视城剧本、外地交流，都有照片和公开视频。'
+          code: '00 / START HERE',
+          title: '先看甬士能和你一起做什么。',
+          subtitle: '景区、园区、学校、街区、品牌活动和内容拍摄，都可以先从小规模试场开始。'
         },
         evidence: {
-          code: '01 / FIELD NOTES',
-          title: '按时间看，能看到甬士这些年去过哪里、做过什么。',
+          code: '01 / PUBLIC RECORD',
+          title: '公开记录按时间摆出来。',
           subtitle: '2018 训练照片、2019 户外视频、2021 扬州、2024 象山、2026 横店。'
         },
         venues: {
-          code: '02 / FIELD NETWORK',
-          title: '不同场地，对应不同玩法。',
-          subtitle: '影视城做剧本推进，山地做路线和通讯，园区、街区、校园做轻体验和训练。'
+          code: '02 / FIELD USE',
+          title: '先看空间，再定玩法。',
+          subtitle: '影视城适合剧本推进，山地适合路线和通讯，园区、街区、校园适合轻体验和展示。'
         },
         ops: {
-          code: '03 / OPERATION PORTFOLIO',
-          title: '活动按流程走：简报、分组、进场、任务、复盘。',
-          subtitle: '周常、远征、剧本活动都从集合和简报开始，区别在场地、人数和当天任务。'
+          code: '03 / WHAT WE RUN',
+          title: '活动类型按参与场景拆开。',
+          subtitle: '有人想参加，有人想看现场，有人想把一个场地做成活动；入口不同，流程也不同。'
         },
         doctrine: {
-          code: '04 / TRAINING DOCTRINE',
-          title: '训练内容按规则、安全、通讯、队形、CQB 和复盘拆开。',
-          subtitle: '新人先学 ROE 和安全边界，老队员继续练通讯、移动、掩护和 AAR。'
+          code: '04 / SAFE OPS',
+          title: '执行保障不是口号，是每次活动前后的固定动作。',
+          subtitle: 'Briefing、ROE、行动区域 AO、通讯纪律、集合点、撤离点和 AAR 都服务现场秩序。'
         },
         media: {
-          code: '05 / MEDIA WALL',
-          title: '训练、场地、远征和队员视角。',
+          code: '05 / MEDIA ARCHIVE',
+          title: '照片、视频和队员笔记分开放。',
           subtitle: '本地照片、小红书队员笔记和 B 站公开视频分开放。'
         },
         partners: {
-          code: '06 / PARTNER DESK',
-          title: '有场地、活动或拍摄计划，可以先做一次小规模试场。',
+          code: '06 / WORK WITH US',
+          title: '合作先从一次可控的小规模试场开始。',
           subtitle: '先确认人数、边界、动线、安全、时长和影像记录，再决定是否扩大。'
         }
       },
       heroByView: {
         overview: {
           lines: ['宁波甬士', '军事模拟', '推演活动。'],
-          lead: '我们在宁波组织 wargame、Milsim、剧本任务和训练活动。参加前会讲规则和安全，进场后按阵营、任务和路线推进，结束后复盘。'
+          lead: '我们在宁波组织 wargame、Milsim、影视城剧本、山地任务和外地交流。合作方可以先做小规模试场，个人参与者可以进入报名系统。'
         },
         evidence: {
           lines: ['从山地', '到影视城', '一路留下', '记录。'],
-          lead: '这里按时间放公开记录：2019 年“巡山”户外训练、2021 年扬州 MILSIM 镭射、2024 年象山海影城巨蟹行动、2026 年横店远征。'
+          lead: '这里按时间放公开记录和本地照片：2019 年“巡山”户外训练、2021 年扬州 MILSIM 镭射、2024 年象山海影城巨蟹行动、2026 年横店远征。'
         },
         venues: {
-          lines: ['场地一换', '玩法就变。'],
+          lines: ['先看场地', '再定玩法。'],
           lead: '象山海影城有街区和楼体，应梦里有夜间街区，浙东小九寨有山地路线。迎春里、天宫庄园、章水中心小学这类空间，可以安排短流程体验、展示和训练。'
         },
         ops: {
-          lines: ['周常', '远征', '剧本。'],
-          lead: '周常主要是集合、分组、跑局和复盘；远征是去外地同场交流；剧本行动会提前设定阵营、任务、路线和撤离条件。'
+          lines: ['参加', '观摩', '合作。'],
+          lead: '活动可以是周常跑局、影视城剧本、山地任务、远征交流，也可以是场地试场、轻量体验或内容拍摄。'
         },
         doctrine: {
-          lines: ['会玩', '也要会收。'],
-          lead: '训练先处理安全、口令、通讯、队形和复盘。新人从规则和低强度活动开始，再逐步进入通讯、队形和任务协同。'
+          lines: ['安全边界', '通讯纪律', '现场复盘。'],
+          lead: '执行保障先处理安全、口令、通讯、队形和复盘。新人知道规则，老队员负责协同，合作方能知道现场谁负责、哪里能进、哪里不能进。'
         },
         media: {
           lines: ['先看现场。'],
           lead: '训练室、影视城、山地、夜间活动、横店远征和队员笔记按来源分开放。能点开的公开链接单独标出。'
         },
         partners: {
-          lines: ['想一起做', '就来聊。'],
+          lines: ['先试场', '再扩大。'],
           lead: '景区、街区、园区、学校、品牌活动、内容拍摄和企业团建，都可以先从小规模活动试起。先确认场地能不能跑、哪里不能进、现场谁负责、照片和视频怎么留。'
         }
       },
       metrics: [
-        { value: '2018+', label: '训练照片可追溯', en: 'Training Photos' },
+        { value: '2018+', label: '公开影像可追溯', en: 'Public Record' },
         { value: '6+', label: '常用活动场地', en: 'Field Network' },
-        { value: '30周', label: '训练大纲周期', en: 'Training Cycle' },
-        { value: '多城', label: '远征交流半径', en: 'Expedition' }
+        { value: '30周', label: '执行训练周期', en: 'Safe Ops' },
+        { value: '多城', label: '外地交流记录', en: 'Expedition' }
+      ],
+      collaborationPaths: [
+        { code: 'VENUE', title: '景区 / 园区 / 街区', text: '先看边界、动线、观摩区和撤离路线，再判断能否做短流程任务。' },
+        { code: 'CONTENT', title: '内容拍摄 / 公开视频', text: '提前确认镜头点、行动路线、可拍区域和人员授权。' },
+        { code: 'PLAYER', title: '个人参与', text: '先看公开记录和活动规则，再进入报名系统等待下一场活动。' }
       ],
       history: [
         { year: '2018', title: 'ESA 城市作战训练', text: '室内训练、街区移动、队形照片，记录的是一批早期训练画面。' },
@@ -667,9 +702,9 @@ export default {
         { image: moto02, caption: '外出活动中的机车照片。' }
       ],
       evidenceNotes: [
-        { kicker: 'NEWCOMER', title: '第一次参加，先看集合和简报。', text: '新人到场后先听规则、安全边界、装备要求和当天任务，再跟队进入活动。' },
+        { kicker: 'FOR PARTNERS', title: '合作前先看过往记录。', text: '公开影像、本地照片和队员笔记能说明甬士做过哪些场地、哪些类型的活动。' },
         { kicker: 'FIELD', title: '场地先看边界和动线。', text: '能不能跑、哪里不能进、观摩区放哪里、撤离路线怎么走，这些要先确认。' },
-        { kicker: 'RECORD', title: '照片按活动留下来。', text: '时间、地点、活动名称和公开链接放在一起，方便新人和场地方回看。' }
+        { kicker: 'RECORD', title: '活动结束后留下可回看的资料。', text: '时间、地点、活动名称和公开链接放在一起，方便参与者和场地方回看。' }
       ],
       venues: [
         {
@@ -779,22 +814,28 @@ export default {
       ],
       activityTypes: [
         {
-          code: 'WEEKLY',
-          title: '周常规活动',
-          text: '周常活动以集合、热身、分组、跑局和 AAR 为主。新人先熟悉 ROE、装备要求和基本口令。',
+          code: 'PUBLIC / ENTRY',
+          title: '周常活动',
+          text: '适合新人熟悉规则，也适合合作方先观察甬士的组织方式。流程通常是集合、Briefing、分组、跑局和 AAR。',
           points: ['集合签到', 'ROE 说明', '分组跑局', 'AAR 复盘']
         },
         {
-          code: 'EXPEDITION',
+          code: 'SCRIPT / VENUE',
+          title: '影视城剧本',
+          text: '适合有街区、楼体、门洞、夜间灯光的场地。行动前设定阵营、任务点、AO、集结点和撤离条件。',
+          points: ['象山海影城', '巨蟹行动', '阵营任务', '撤离条件']
+        },
+        {
+          code: 'EXPEDITION / EXCHANGE',
           title: '远征交流',
           text: '外地交流会更换场地、规则和对抗对象。队伍需要重新完成 Briefing、分组、通讯、推进和复盘。',
           points: ['2021 扬州 MILSIM', '2026 横店影视城', '跨地区同场', '外部规则适应']
         },
         {
-          code: 'SCRIPT',
-          title: '沉浸式剧本',
-          text: '剧本行动会提前设定阵营、任务点、行动区域 AO、集结点和撤离条件。现场按 Briefing 推进。',
-          points: ['阵营设定', '任务点', 'AO 边界', '撤离条件']
+          code: 'PARTNER / TRIAL',
+          title: '轻量体验与试场',
+          text: '适合景区、园区、学校、街区和品牌活动。先控制人数和区域，用短流程验证动线、安全和观摩效果。',
+          points: ['小规模人数', '短流程任务', '观摩区', '影像记录']
         }
       ],
       opsScenes: [
@@ -875,25 +916,25 @@ export default {
         }
       ],
       trainingLoop: [
-        { code: '01', title: 'Briefing', text: '任务、规则、角色和安全边界先对齐。' },
-        { code: '02', title: 'Skill Drill', text: '一次只练一两件事，练明白再进场。' },
-        { code: '03', title: 'Scenario', text: '把动作放回任务里，看能不能用出来。' },
-        { code: '04', title: 'AAR', text: '活动结束后讲清楚哪里好、哪里乱、下次怎么改。' }
+        { code: '01', title: 'Briefing', text: '任务、规则、角色、安全边界和停止口令先对齐。' },
+        { code: '02', title: 'Comms', text: '对讲机用语、呼号、位置报告和异常情况要说清楚。' },
+        { code: '03', title: 'Control', text: '现场分清可进入区域、禁入区域、集合点和撤离路线。' },
+        { code: '04', title: 'AAR', text: '活动结束后复盘安全、通讯、路线、节奏和人员分工。' }
       ],
       phases: [
-        { code: 'W1-W6', name: '地基建设', weeks: '统一语言、标准、安全与基础动作。' },
-        { code: 'W7-W10', name: '单兵成型', weeks: '角度、移动、基础 CQB 和个人稳定性。' },
-        { code: 'W11-W14', name: '班组磨合', weeks: 'Bounding Overwatch、通讯、双组协同。' },
-        { code: 'W15-W18', name: '战术深化', weeks: 'SOP、进攻/防御、任务条件下执行。' },
-        { code: 'W19-W24', name: '综合演练', weeks: '全对抗、观察员记录、评分与 AAR。' },
-        { code: 'W25-W30', name: '综合准备', weeks: '任务推演、外部交流准备、指挥流程和 AAR。' }
+        { code: 'W1-W6', name: '规则与安全', weeks: 'ROE、安全距离、护具要求、停止口令和基础动作。' },
+        { code: 'W7-W10', name: '通讯与位置', weeks: '呼号、位置报告、任务点、集合点和撤离点。' },
+        { code: 'W11-W14', name: '队形与协同', weeks: '队伍间距、移动节奏、掩护和双组协同。' },
+        { code: 'W15-W18', name: '场地任务', weeks: 'AO 边界、路线、进攻/防守、护送和搜索任务。' },
+        { code: 'W19-W24', name: '完整演练', weeks: '带观察记录的完整流程：简报、进场、任务、AAR。' },
+        { code: 'W25-W30', name: '外部活动准备', weeks: '试场、远征交流、现场分工、影像记录和复盘。' }
       ],
       doctrineDocs: [
-        { type: '总纲', name: '30 周训练总纲', text: '按 6 个阶段安排规则、安全、动作、通讯、协同和复盘。' },
-        { type: '基础', name: '规则与安全', text: '先明确 ROE、场地边界、安全距离、护具要求和停止口令。' },
-        { type: '教案', name: '阶段教案 01-06', text: '从基础动作到班组协同，再进入完整任务执行。' },
-        { type: '专题', name: '通讯指挥 / 标靶训练', text: '练对讲机用语、目标识别、火力控制和安全距离。' },
-        { type: '工具', name: 'SOP / 执行指南 / 速查表', text: '活动前用于分工和检查，活动后用于复盘和调整。' }
+        { type: '总纲', name: '30 周执行训练', text: '按 6 个阶段安排规则、安全、动作、通讯、协同和复盘。' },
+        { type: '基础', name: '规则与安全', text: '明确 ROE、场地边界、安全距离、护具要求和停止口令。' },
+        { type: '通讯', name: '通讯指挥', text: '练对讲机用语、呼号、位置报告和现场指挥交接。' },
+        { type: '工具', name: 'SOP / 执行指南', text: '活动前用于分工和检查，活动后用于复盘和调整。' },
+        { type: '记录', name: 'AAR / 影像回看', text: '把安全、通讯、路线和现场节奏记录下来，下一场继续调整。' }
       ],
       trainingScenes: [
         { image: esaRoom, caption: '室内 Briefing：规则、安全边界和当天任务先讲清楚。' },
@@ -919,16 +960,27 @@ export default {
         { tag: 'HENGDIAN / TEAM', title: '横店队员合影', text: '横店远征交流照片。', image: xhsHengdianTeam, size: '' }
       ],
       partnerModes: [
-        { code: 'VENUE', title: '场地试场', text: '先看边界、动线、可进入区域、观摩区和撤离路线。' },
+        { code: 'VENUE', title: '场地试场', text: '适合景区、影视城、园区、街区。先看边界、动线、观摩区和撤离路线。' },
         { code: 'BRAND', title: '线下活动', text: '可以做短流程任务、装备展示、合影区和现场记录。' },
         { code: 'CONTENT', title: '内容拍摄', text: '提前确认镜头点、行动路线、可拍区域和人员授权。' },
         { code: 'TEAM', title: '团建/研学', text: '降低强度，保留规则、协作、通讯和复盘环节。' }
+      ],
+      trialSteps: [
+        { code: '01', title: '发场地信息', text: '提供地点、可用时间、可进入区域、禁入区域和预计人数。' },
+        { code: '02', title: '看边界与动线', text: '确认集合点、观摩区、休息区、撤离路线和现场负责人。' },
+        { code: '03', title: '设计短流程', text: '先做 30-90 分钟的小规模任务，验证规则、安全和节奏。' },
+        { code: '04', title: '复盘后扩大', text: '根据 AAR 调整人数、路线、任务和影像发布范围。' }
       ],
       partnerChecklist: [
         { code: '01', title: '人数与年龄', text: '确认参与人数、观摩人数、是否有未成年人和陪同人员。' },
         { code: '02', title: '场地边界', text: '标出可进入区域、禁入区域、集合点、休息区和撤离路线。' },
         { code: '03', title: '安全条件', text: '确认护具、道具、天气、照明、医疗点和现场负责人。' },
         { code: '04', title: '影像记录', text: '确认照片、视频、队员笔记和公开发布范围。' }
+      ],
+      cooperationDeliverables: [
+        { code: 'PHOTO', title: '现场照片', text: '保留活动现场、集合、任务推进、合影和场地环境记录。' },
+        { code: 'VIDEO', title: '公开视频素材', text: '根据授权范围剪出短视频、预告片或活动回顾。' },
+        { code: 'AAR', title: '复盘建议', text: '记录边界、动线、安全、人数、任务节奏和下次调整点。' }
       ]
     }
   },
