@@ -215,7 +215,16 @@
             </article>
           </div>
         </div>
-        <img :src="esaRoom" alt="室内 Briefing 现场" width="900" height="675" loading="lazy" decoding="async" />
+        <div class="safe-photos" aria-label="训练和简报照片">
+          <figure>
+            <img :src="esaRoom" alt="室内 Briefing 现场" width="900" height="675" loading="lazy" decoding="async" />
+            <figcaption>进场前先讲规则、任务和停止口令。</figcaption>
+          </figure>
+          <figure>
+            <img :src="esaDoorTraining" alt="门口队形训练" width="900" height="506" loading="lazy" decoding="async" />
+            <figcaption>门口、墙边和队友位置，平时先练过。</figcaption>
+          </figure>
+        </div>
       </div>
     </section>
 
@@ -285,6 +294,12 @@
             场地、园区、学校或品牌第一次接触，不需要一上来做大场。
             先选一段路线、一个任务、十几到几十人的规模。当天把入口、禁入区、旁观位置、影像发布范围说清楚，再决定下一场。
           </p>
+          <div class="partner-fit" aria-label="适合合作的场景">
+            <article v-for="item in partnerFit" :key="item.title">
+              <span>{{ item.tag }}</span>
+              <p>{{ item.title }}</p>
+            </article>
+          </div>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
             <button type="button" class="secondary-cta" @click="scrollToSection('media')">先看影像</button>
@@ -306,7 +321,7 @@
           <img :src="cooperateImage" alt="横店影视城交流现场" width="1200" height="900" loading="eager" decoding="async" />
           <figcaption>
             <span>TRIAL RUN / FIELD CHECK</span>
-            <strong>到现场先走一遍。入口、禁入区、任务点和撤离路线，都要落在具体位置上。</strong>
+            <strong>街区、入口、任务点和撤离路线，都要落在具体位置上。</strong>
           </figcaption>
         </figure>
 
@@ -339,9 +354,11 @@ import xiaojiuzhaiTraining02 from './assets/site/xiaojiuzhai-training-02.jpg'
 import xiaojiuzhaiEscape01 from './assets/site/xiaojiuzhai-escape-20211031-01.jpg'
 import esaRoom from './assets/site/esa-urban-training-07.jpg'
 import esaUrban01 from './assets/site/esa-urban-training-02.jpg'
+import esaDoorTraining from './assets/site/esa-urban-training-04.jpg'
 import esaUrban02 from './assets/site/esa-urban-training-05.jpg'
 import patchBoard from './assets/site/patch-board.jpg'
 import moto01 from './assets/site/moto-01.jpg'
+import hengdianStreetWide from './assets/site/hengdian-05.jpg'
 import xhsHengdianTeam from './assets/site/external/2026-03-15_xhs_hengdian-expedition_team.jpg'
 import xhsHengdianStreet from './assets/site/external/2026-03-15_xhs_hengdian-expedition_street.jpg'
 import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_grass.jpg'
@@ -360,8 +377,9 @@ export default {
       logo,
       heroImage: haiyingcheng04,
       esaRoom,
+      esaDoorTraining,
       activityFeatureImage: haiyingcheng02,
-      cooperateImage: xhsHengdianStreet,
+      cooperateImage: hengdianStreetWide,
       featuredRecord: {
         date: '2024.06 / 象山海影城',
         title: '巨蟹行动最终章',
@@ -586,6 +604,12 @@ export default {
         { code: '02', title: '划出边界', text: '集合点、休息区、旁边的人站哪里、撤离路线和负责人，当场定下来。' },
         { code: '03', title: '跑短任务', text: '30-90 分钟，先跑一个清楚的任务，不急着把流程做大。' },
         { code: '04', title: '当天复盘', text: '人数、路线、任务、照片和视频怎么发，试完再调整。' }
+      ],
+      partnerFit: [
+        { tag: 'FIELD', title: '影视城、街区、园区试场' },
+        { tag: 'CAMPUS', title: '校园规则课和低强度体验' },
+        { tag: 'EVENT', title: '小型主题活动和路线任务' },
+        { tag: 'MEDIA', title: '活动照片、短片和公开记录' }
       ],
       partnerNotes: [
         {
