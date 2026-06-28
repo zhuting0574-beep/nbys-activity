@@ -24,8 +24,13 @@
         <h1>在真实场地里跑 wargame。</h1>
         <p class="hero-lead">
           甬士在宁波做周常下场、影视城剧本、山地任务和外地交流。
-          规则先讲清楚，边界先划出来，任务再开始。
+          场地边界、ROE、任务点和撤离路线先讲清楚，任务再开始。
         </p>
+        <div class="hero-points" aria-label="甬士可以一起做什么">
+          <span>影视城 / 园区：街区任务、夜间短流程、观摩动线</span>
+          <span>学校 / 社群：规则课、低强度协作、队形演示</span>
+          <span>品牌 / 内容：公开视频、现场照片、活动记录</span>
+        </div>
         <div class="hero-actions">
           <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">先试一场</button>
           <button type="button" class="secondary-cta" @click="$emit('enter-app')">进入报名</button>
@@ -67,7 +72,7 @@
 
         <div class="about-photos" aria-label="甬士活动照片">
           <figure v-for="photo in aboutPhotos" :key="photo.caption">
-            <img :src="photo.image" :alt="photo.caption" />
+            <img :src="photo.image" :alt="photo.caption" width="900" height="1100" loading="lazy" decoding="async" />
             <figcaption>{{ photo.caption }}</figcaption>
           </figure>
         </div>
@@ -93,7 +98,7 @@
 
       <div class="record-grid">
         <article v-for="item in activityLog" :key="item.title">
-          <img :src="item.image" :alt="item.title" />
+          <img :src="item.image" :alt="item.title" width="900" height="675" loading="lazy" decoding="async" />
           <div>
             <span>{{ item.date }}</span>
             <h3>{{ item.title }}</h3>
@@ -112,7 +117,7 @@
 
       <div class="field-grid">
         <article v-for="venue in venues" :key="venue.name" :class="{ featured: venue.featured }">
-          <img :src="venue.image" :alt="venue.name" />
+          <img :src="venue.image" :alt="venue.name" width="1200" height="750" loading="lazy" decoding="async" />
           <div>
             <span>{{ venue.type }}</span>
             <h3>{{ venue.name }}</h3>
@@ -134,7 +139,7 @@
 
       <div class="activity-board">
         <figure class="activity-photo">
-          <img :src="activityFeatureImage" alt="象山海影城任务现场" />
+          <img :src="activityFeatureImage" alt="象山海影城任务现场" width="1200" height="900" loading="lazy" decoding="async" />
           <figcaption>
             <span>XIANGSHAN / SCRIPT</span>
             <strong>影视城剧本会提前讲清任务点、集合点和撤离条件。</strong>
@@ -179,7 +184,7 @@
             </article>
           </div>
         </div>
-        <img :src="esaRoom" alt="室内 Briefing 现场" />
+        <img :src="esaRoom" alt="室内 Briefing 现场" width="900" height="675" loading="lazy" decoding="async" />
       </div>
     </section>
 
@@ -192,7 +197,7 @@
 
       <div class="media-wall">
         <figure v-for="asset in assetStories" :key="asset.title" :class="asset.size">
-          <img :src="asset.image" :alt="asset.title" />
+          <img :src="asset.image" :alt="asset.title" width="900" height="900" loading="lazy" decoding="async" />
           <figcaption>
             <small>{{ asset.tag }}</small>
             <strong>{{ asset.title }}</strong>
@@ -216,8 +221,8 @@
         <div>
           <h2>想试场，先小规模跑一遍。</h2>
           <p>
-            先确认可进入区域、禁入区域、观摩位置、休息区、撤离路线和现场负责人。
-            小场跑通了，再谈人数、任务、影像记录和下一场。
+            第一次合作不用把场面做大。先选一段路线、一个任务、十几到几十人的规模，
+            把边界、安全、观摩、影像范围跑明白，再决定下一场怎么放大。
           </p>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
@@ -229,6 +234,26 @@
             <span>{{ item.code }}</span>
             <h3>{{ item.title }}</h3>
             <p>{{ item.text }}</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="partner-board">
+        <figure class="partner-photo">
+          <img :src="cooperateImage" alt="应梦里夜间活动现场" width="1200" height="900" loading="eager" decoding="async" />
+          <figcaption>
+            <span>TRIAL RUN / FIELD CHECK</span>
+            <strong>夜间街区、影视城、园区和校园，先看可进入范围，再决定任务。</strong>
+          </figcaption>
+        </figure>
+
+        <div class="partner-lanes">
+          <article v-for="group in partnerNotes" :key="group.title">
+            <span>{{ group.code }}</span>
+            <h3>{{ group.title }}</h3>
+            <ul>
+              <li v-for="point in group.points" :key="point">{{ point }}</li>
+            </ul>
           </article>
         </div>
       </div>
@@ -273,6 +298,7 @@ export default {
       heroVideo,
       esaRoom,
       activityFeatureImage: haiyingcheng05,
+      cooperateImage: yingmengliDate02,
       navItems: [
         { id: 'about', label: '关于' },
         { id: 'records', label: '记录' },
@@ -428,6 +454,23 @@ export default {
         { code: '02', title: '看边界和动线', text: '确认集合点、观摩区、休息区、撤离路线和现场负责人。' },
         { code: '03', title: '设计短流程', text: '先做 30-90 分钟的小规模任务，验证规则、安全和节奏。' },
         { code: '04', title: '复盘后调整', text: '根据当天情况调整人数、路线、任务和影像发布范围。' }
+      ],
+      partnerNotes: [
+        {
+          code: 'A',
+          title: '适合先试的场景',
+          points: ['影视城街区任务', '园区团建或研学', '夜间街区观摩', '小规模内容拍摄']
+        },
+        {
+          code: 'B',
+          title: '到场前先确认',
+          points: ['可进入区和禁入区', '集合点、休息区、观摩区', '撤离路线和停止口令', '现场负责人和联络方式']
+        },
+        {
+          code: 'C',
+          title: '试完留下什么',
+          points: ['当天照片和可公开视频', 'AAR 复盘记录', '下一场人数、路线和任务调整']
+        }
       ]
     }
   },
