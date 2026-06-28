@@ -189,10 +189,10 @@
       <div class="section-kicker">Safe ops</div>
       <div class="safe-layout">
         <div>
-          <h2>规则、通讯、复盘，先立住。</h2>
+          <h2>先把边界和通讯讲清楚。</h2>
           <p>
-            到陌生场地，最容易出问题的不是任务本身，而是边界、口令和通讯。
-            所以平时会反复练 Briefing、ROE、通讯纪律、队形和 AAR。人多的时候，现场也不能靠喊。
+            人一多，现场靠喊是不够的。进场前要说清禁入区、停止口令和频道；
+            结束后再复盘哪里卡住。平时训练练的，就是这些看起来不花哨、但现场最管用的东西。
           </p>
           <div class="safe-grid">
             <article v-for="item in trainingLoop" :key="item.title">
@@ -209,7 +209,26 @@
       <div class="section-kicker">Media</div>
       <div class="section-heading">
         <h2>现场影像。</h2>
-        <p>照片按场景放，公开链接单独列出。普通照片只是记录；能点开的内容，会放在下面的公开视频入口里。</p>
+        <p>这里先放照片。公开视频和外部帖子单独列在后面，能点开的会明确标出来。</p>
+      </div>
+
+      <div class="media-feature">
+        <figure class="media-lead">
+          <img :src="mediaLead.image" :alt="mediaLead.title" width="1400" height="960" loading="lazy" decoding="async" />
+          <figcaption>
+            <small>{{ mediaLead.tag }}</small>
+            <strong>{{ mediaLead.title }}</strong>
+            <span>{{ mediaLead.text }}</span>
+          </figcaption>
+        </figure>
+
+        <div class="media-notes" aria-label="影像记录说明">
+          <article v-for="item in mediaNotes" :key="item.title">
+            <span>{{ item.tag }}</span>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.text }}</p>
+          </article>
+        </div>
       </div>
 
       <div class="media-wall">
@@ -236,10 +255,10 @@
       <div class="section-kicker">Work with us</div>
       <div class="cooperate-layout">
         <div>
-          <h2>想试场，先小规模跑一遍。</h2>
+          <h2>先跑一个小场。</h2>
           <p>
-            如果是场地、园区、学校或品牌第一次接触，不建议一上来做大场。
-            先选一段路线、一个任务、十几到几十人的规模。当天把边界、安全、观摩位置和影像范围跑清楚，再决定下一场。
+            场地、园区、学校或品牌第一次接触，不需要一上来做大场。
+            先选一段路线、一个任务、十几到几十人的规模。当天把人从哪里进、哪里不能进、旁边的人站在哪里、照片和视频怎么发讲清楚，再决定下一场。
           </p>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
@@ -262,7 +281,7 @@
           <img :src="cooperateImage" alt="横店影视城交流现场" width="1200" height="900" loading="eager" decoding="async" />
           <figcaption>
             <span>TRIAL RUN / FIELD CHECK</span>
-            <strong>先走一遍现场。哪里能进，哪里停下，任务点放在哪里，当场看得最清楚。</strong>
+            <strong>到现场先走一遍。入口、禁入区、任务点和撤离路线，都要落在具体位置上。</strong>
           </figcaption>
         </figure>
 
@@ -305,7 +324,6 @@ import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_
 import xhsFieldTeam from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_team.jpg'
 import xhsWargameCover from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-cover.jpg'
 import xhsWargameFrame from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-frame01.jpg'
-import biliJujieFinalFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-final_frame01.jpg'
 
 export default {
   name: 'MarketingSite',
@@ -451,24 +469,46 @@ export default {
         { title: 'AAR', text: '结束后复盘安全、通讯、路线和分工。' }
       ],
       trainingLoop: [
-        { title: 'ROE', text: '可进入区域、禁入区域、安全距离、停止口令，先讲清楚。' },
-        { title: '通讯', text: '呼号、位置报告、异常情况，对讲机里不要抢话。' },
-        { title: '队形', text: '移动时保持距离，知道谁在前、谁在后、谁负责观察。' },
-        { title: 'AAR', text: '结束后复盘路线、节奏、风险点，下次再改。' }
+        { title: 'ROE', text: '哪些地方能进，哪些地方不能进；什么情况下停，进场前先讲清楚。' },
+        { title: '通讯', text: '呼号、位置、异常情况，尽量短句。对讲机里不要抢话。' },
+        { title: '队形', text: '移动时不要挤成一团。前后左右是谁，心里要有数。' },
+        { title: 'AAR', text: '结束后说问题，不讲漂亮话。路线、节奏、风险点，下次改。' }
+      ],
+      mediaLead: {
+        tag: 'XIANGSHAN / 2024',
+        title: '象山海影城夜间任务',
+        text: '灯一暗，街道、树影和建筑边缘会混在一起。队伍靠口令、手势和事先讲好的任务点往前推。',
+        image: haiyingcheng04
+      },
+      mediaNotes: [
+        {
+          tag: 'URBAN',
+          title: '影视城和夜间街区',
+          text: '建筑、巷口和灯光会影响路线。象山海影城、应梦里这类场地，适合做搜索、占点和撤离。'
+        },
+        {
+          tag: 'MOUNTAIN',
+          title: '山地和户外路线',
+          text: '山路里队伍容易拉开，通讯和体力比动作更重要。天气和路线会直接改变当天安排。'
+        },
+        {
+          tag: 'TRAINING',
+          title: '训练和队员记录',
+          text: '室内训练、队形、队员自拍视频放在一起，能看见平时活动的样子。'
+        }
       ],
       assetStories: [
-        { tag: 'XIANGSHAN / SCRIPT', title: '巨蟹行动现场', text: '夜色下来以后，街区的距离感会完全变掉。', image: haiyingcheng04, size: 'wide' },
-        { tag: 'HENGDIAN / 2026', title: '横店远征交流', text: '队伍在影视城街区前合影，装备和旗帜都在。', image: xhsHengdianTeam, size: '' },
-        { tag: 'YINGMENGLI / 2023', title: '应梦里夜间活动', text: '楼上视角能看清街区、射界和移动路线。', image: yingmengli02, size: '' },
-        { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨训练', text: '山地里最难的不是摆姿势，是队伍不要散。', image: xiaojiuzhaiTraining02, size: '' },
-        { tag: 'ESA / URBAN', title: 'ESA 城市作战训练', text: '早期室内训练，重点在门口、墙边和队形。', image: esaUrban01, size: 'tall' },
-        { tag: 'TEAM / NIGHT', title: '夜间队伍照片', text: '夜间集合时拍的队伍照，光线很少，气氛很足。', image: nightTeam, size: '' },
-        { tag: 'XHS / 2026', title: '5.30 下场日记', text: '草地场景，能看见队员之间的距离。', image: xhsFieldGrass, size: 'wide' },
+        { tag: 'HENGDIAN / 2026', title: '横店远征交流', text: '影视城街区前的队伍合影。', image: xhsHengdianTeam, size: '' },
+        { tag: 'YINGMENGLI / 2023', title: '应梦里夜间活动', text: '楼上视角能看清街道和移动路线。', image: yingmengli02, size: '' },
+        { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨训练', text: '山地路线里，队伍间距很容易被拉开。', image: xiaojiuzhaiTraining02, size: '' },
+        { tag: 'ESA / URBAN', title: 'ESA 城市作战训练', text: '门口、墙边和队形处理。', image: esaUrban01, size: '' },
+        { tag: 'TEAM / NIGHT', title: '夜间队伍照片', text: '夜间集合时的队伍记录。', image: nightTeam, size: '' },
+        { tag: 'XHS / 2026', title: '5.30 下场日记', text: '草地场景，队员距离能看得比较清楚。', image: xhsFieldGrass, size: '' },
         { tag: 'URBAN / CQB', title: '室内街区训练', text: '门口处理、墙边移动和互相掩护。', image: esaUrban02, size: '' },
-        { tag: 'YINGMENGLI / 2023', title: '应梦里活动', text: '2023 年 10 月 22 日，应梦里夜间场地。', image: yingmengliDate02, size: '' },
-        { tag: 'XHS / 2026', title: '6.22 队员视频', text: '队员自己发的视频封面，视角更接近日常。', image: xhsWargameCover, size: '' },
-        { tag: 'MOTO', title: '机车照片', text: '有些活动路程远，机车也会出现在记录里。', image: moto02, size: '' },
-        { tag: 'CANCER', title: '巨蟹行动道具', text: '地图、文件和现场道具，会让任务更容易进入状态。', image: haiyingcheng01, size: '' }
+        { tag: 'YINGMENGLI / 2023', title: '应梦里活动', text: '2023 年 10 月 22 日夜间场地。', image: yingmengliDate02, size: '' },
+        { tag: 'XHS / 2026', title: '6.22 队员视频', text: '小红书公开视频封面。', image: xhsWargameCover, size: '' },
+        { tag: 'MOTO', title: '机车照片', text: '活动路程较远时留下的记录。', image: moto02, size: '' },
+        { tag: 'CANCER', title: '巨蟹行动道具', text: '地图、文件和现场道具。', image: haiyingcheng01, size: '' }
       ],
       publicSources: [
         { platform: 'BILIBILI / 2019', title: '“巡山”行动——户外训练', href: 'https://www.bilibili.com/video/BV1hb411s7zL' },
