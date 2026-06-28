@@ -20,14 +20,14 @@
 
     <section id="top" class="hero section-shell">
       <div class="hero-copy">
-        <p class="plain-label">Ningbo Yongshi</p>
-        <h1>宁波甬士，做 wargame 和实景任务。</h1>
+        <p class="plain-label">NINGBO YONGSHI / FIELD WARGAME</p>
+        <h1>在真实场地里跑 wargame。</h1>
         <p class="hero-lead">
-          我们长期在宁波组织周常活动、影视城剧本、山地任务和跨城交流。
-          每次活动先讲规则和安全边界，再分组进场；结束后复盘，把下一次该改的地方说清楚。
+          甬士在宁波做周常下场、影视城剧本、山地任务和外地交流。
+          规则先讲清楚，边界先划出来，任务再开始。
         </p>
         <div class="hero-actions">
-          <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">聊一次试场</button>
+          <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">先试一场</button>
           <button type="button" class="secondary-cta" @click="$emit('enter-app')">进入报名</button>
         </div>
       </div>
@@ -52,10 +52,10 @@
       <div class="section-kicker">About</div>
       <div class="about-board">
         <div class="about-copy">
-          <h2>平时下场，遇到合适的场地就做成一次任务。</h2>
+          <h2>先看场地，再定玩法。</h2>
           <p>
-            影视城、夜间街区、山地、园区和校园都试过。我们会先看空间能不能跑、哪里不能进、
-            观摩的人放哪里，再决定当天怎么安排。
+            影视城看街区和楼体，山地看路线和通讯，夜间街区看灯光和观摩位置。
+            空间能不能跑、哪里不能进、撤离往哪走，这些先确认。
           </p>
           <div class="plain-list">
             <article v-for="item in aboutNotes" :key="item.title">
@@ -77,8 +77,8 @@
     <section id="records" class="section-shell records-section">
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
-        <h2>按时间看，活动是这样积累起来的。</h2>
-        <p>有些记录来自 B 站和小红书公开笔记，有些来自本地照片。能跳转的统一放在后面，普通照片只作为现场记录。</p>
+        <h2>这些年留下的记录。</h2>
+        <p>B 站视频、小红书笔记、本地照片分开放。能点开的链接放在后面，普通图片就按照片看。</p>
       </div>
 
       <div class="timeline-list">
@@ -106,8 +106,8 @@
     <section id="fields" class="section-shell fields-section">
       <div class="section-kicker">Fields</div>
       <div class="section-heading">
-        <h2>场地决定当天怎么组织。</h2>
-        <p>影视城、夜间街区、山地路线、园区、校园，能做的强度和流程不一样。边界、动线和撤离路线要先看。</p>
+        <h2>不同场地，不同跑法。</h2>
+        <p>影视城、夜间街区、山地、园区、校园，强度和流程不一样。能不能观摩、怎么集合、哪里停，都要按场地来。</p>
       </div>
 
       <div class="field-grid">
@@ -128,8 +128,8 @@
     <section id="activities" class="section-shell activities-section">
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
-        <h2>活动有几种做法。</h2>
-        <p>周常、剧本、山地、远征、试场，目的不一样。参加前会说明规则、人数、场地边界和当天任务。</p>
+        <h2>周常、剧本、远征分开做。</h2>
+        <p>有的活动适合新人熟悉规则，有的活动适合跑剧情和阵营任务，也有外地交流和合作试场。</p>
       </div>
 
       <div class="activity-board">
@@ -137,7 +137,7 @@
           <img :src="activityFeatureImage" alt="象山海影城任务现场" />
           <figcaption>
             <span>XIANGSHAN / SCRIPT</span>
-            <strong>剧本活动会按场地路线推进，任务点、撤离点和集合点提前讲清楚。</strong>
+            <strong>影视城剧本会提前讲清任务点、集合点和撤离条件。</strong>
           </figcaption>
         </figure>
 
@@ -167,10 +167,10 @@
       <div class="section-kicker">Safe ops</div>
       <div class="safe-layout">
         <div>
-          <h2>训练服务每一次现场活动。</h2>
+          <h2>规则、通讯、复盘，先立住。</h2>
           <p>
-            人到了陌生场地，要知道边界在哪里、口令怎么听、对讲机怎么说、什么时候停。
-            这些不是为了摆样子，是为了让现场能按规则走下去。
+            到陌生场地，最怕边界不清、口令听不懂、对讲机乱成一团。
+            所以平时会练 ROE、Briefing、通讯纪律、队形和 AAR。
           </p>
           <div class="safe-grid">
             <article v-for="item in trainingLoop" :key="item.title">
@@ -186,8 +186,8 @@
     <section id="media" class="section-shell media-section">
       <div class="section-kicker">Media</div>
       <div class="section-heading">
-        <h2>照片和公开视频分开看。</h2>
-        <p>照片是现场记录，公开视频和公开笔记放在链接区。能点的地方会写“点击打开”，不会让图片和链接混在一起。</p>
+        <h2>照片是照片，链接是链接。</h2>
+        <p>影像墙放现场照片。B 站视频和小红书公开笔记放在下方链接区，能点开的地方会写清楚。</p>
       </div>
 
       <div class="media-wall">
@@ -214,10 +214,10 @@
       <div class="section-kicker">Work with us</div>
       <div class="cooperate-layout">
         <div>
-          <h2>有场地或活动计划，先从小场开始。</h2>
+          <h2>想试场，先小规模跑一遍。</h2>
           <p>
-            先把可进入区域、禁入区域、观摩位置、休息区、撤离路线和现场负责人说清楚。
-            合适的话，再定人数、Briefing、任务和影像记录。
+            先确认可进入区域、禁入区域、观摩位置、休息区、撤离路线和现场负责人。
+            小场跑通了，再谈人数、任务、影像记录和下一场。
           </p>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
@@ -283,23 +283,23 @@ export default {
         { id: 'cooperate', label: '合作' }
       ],
       metrics: [
-        { value: '2018+', label: '影像记录' },
-        { value: '6+', label: '常用活动场地' },
-        { value: '30周', label: '训练内容' },
-        { value: '多城', label: '跨城交流' }
+        { value: '2018+', label: '活动影像' },
+        { value: '6+', label: '跑过的场地' },
+        { value: '30周', label: '训练教案' },
+        { value: '多城', label: '外地交流' }
       ],
       aboutNotes: [
         {
-          title: '平时怎么来',
-          text: '周常活动从集合、讲规则、分组开始。新人可以先跟一场，熟悉安全距离、口令和基本流程。'
+          title: '周常',
+          text: '集合、讲规则、分组、跑局、复盘。新人先跟一场，知道安全距离和停止口令。'
         },
         {
-          title: '场地怎么用',
-          text: '影视城看街区和楼体，山地看路线和通讯，园区、校园更看边界、观摩区和撤离路线。'
+          title: '场地',
+          text: '影视城看街区和楼体，山地看路线和通讯，园区、校园看边界和观摩位置。'
         },
         {
-          title: '合作怎么试',
-          text: '先做小规模试场。人数、动线、安全和影像发布范围都跑通了，再考虑更完整的活动。'
+          title: '试场',
+          text: '先用小规模人数跑一遍。动线、安全、节奏、影像发布范围，都现场确认。'
         }
       ],
       aboutPhotos: [
@@ -317,19 +317,19 @@ export default {
         }
       ],
       history: [
-        { year: '2018', title: 'ESA 城市作战训练', text: '室内讲解、街区移动和队形训练照片，留下了早期训练画面。' },
-        { year: '2019', title: '“巡山”户外训练', text: 'B 站有公开记录，画面里有山路、林线和队伍行进。' },
-        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '甬士到扬州参加跨城交流，公开记录仍能看到。' },
-        { year: '2021.10.31', title: '浙东小九寨“逃离荒野”', text: '山地活动主要看路线、体力、通讯和队伍间距。' },
-        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区活动，照片里能看到灯光、街道和队员移动。' },
-        { year: '2024.06', title: '象山海影城·巨蟹行动最终章', text: '巨蟹行动在影视城街区展开，路线和任务围绕建筑推进。' },
-        { year: '2026.03', title: '横店远征交流', text: '横店影视城交流，留下队伍合影、街区行进照片和队员笔记。' }
+        { year: '2018', title: 'ESA 城市作战训练', text: '室内简报、贴墙移动、门口队形。早期训练照片主要来自这一批。' },
+        { year: '2019', title: '“巡山”户外训练', text: '山路、林线、队伍行进。B 站还有公开视频。' },
+        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '到扬州和外地队伍同场交流，按对方场地规则跑。' },
+        { year: '2021.10.31', title: '浙东小九寨“逃离荒野”', text: '山地路线，重点是体力、通讯、队伍间距。' },
+        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区，灯光、店铺外立面和观摩位置都比较清楚。' },
+        { year: '2024.06', title: '象山海影城·巨蟹行动最终章', text: '影视城街区任务，围绕建筑、巷口和任务点推进。' },
+        { year: '2026.03', title: '横店远征交流', text: '横店影视城交流，有队伍合影、街区照片和队员笔记。' }
       ],
       activityLog: [
-        { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员发布的视频切片，画面来自一次下场活动。', image: xhsWargameFrame },
-        { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '队员视角记录了草地场景、队伍合影和现场动作。', image: xhsFieldTeam },
-        { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '队伍到横店与外地队伍同场交流。', image: xhsHengdianStreet },
-        { date: '2024.06 / 象山', title: '巨蟹行动最终章', text: '象山海影城街区任务，公开视频已有记录。', image: biliJujieFinalFrame }
+        { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员视角的视频切片，能看到一次下场的移动和接触距离。', image: xhsWargameFrame },
+        { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '草地场景、队伍合影、现场动作。', image: xhsFieldTeam },
+        { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '外地影视城场地，和其他队伍同场。', image: xhsHengdianStreet },
+        { date: '2024.06 / 象山', title: '巨蟹行动最终章', text: '象山海影城街区任务，B 站有公开视频。', image: biliJujieFinalFrame }
       ],
       venues: [
         {
@@ -337,7 +337,7 @@ export default {
           type: '影视城街区',
           image: haiyingcheng03,
           featured: true,
-          text: '这里有街道、楼体和巷口，适合做剧本推进、搜索、据点攻防和夜间任务。',
+          text: '街道、楼体、巷口都能用。适合剧本推进、搜索、据点攻防和夜间任务。',
           points: ['巨蟹行动', '街区推进', '夜间任务']
         },
         {
@@ -345,7 +345,7 @@ export default {
           type: '夜间街区',
           image: yingmengliDate01,
           featured: false,
-          text: '灯光、店铺外立面和街道空间适合轻剧本、观摩和短流程任务。',
+          text: '夜间灯光足，街道完整，适合轻剧本、观摩和短流程任务。',
           points: ['夜间街区', '观摩友好']
         },
         {
@@ -353,7 +353,7 @@ export default {
           type: '山地路线',
           image: xiaojiuzhaiEscape01,
           featured: false,
-          text: '山地活动主要看路线、通讯、体力和队伍间距。',
+          text: '山地活动先看路线和通讯。体力、天气、队伍间距都会影响节奏。',
           points: ['路线规划', '通讯纪律']
         },
         {
@@ -361,7 +361,7 @@ export default {
           type: '街区空间',
           image: moto01,
           featured: false,
-          text: '适合短流程体验、器材摆放、公众观摩和内容拍摄。',
+          text: '街区尺度小，适合短流程体验、器材摆放、公众观摩和内容拍摄。',
           points: ['轻量任务', '器材摆放']
         },
         {
@@ -369,7 +369,7 @@ export default {
           type: '园区活动',
           image: patchBoard,
           featured: false,
-          text: '边界清楚，动线容易控制，可以安排团建、研学和低强度任务。',
+          text: '边界清楚，动线容易控制。适合团建、研学和低强度任务。',
           points: ['团建', '研学']
         },
         {
@@ -382,24 +382,24 @@ export default {
         }
       ],
       activityTypes: [
-        { code: '周常', title: '周常活动', text: '集合、讲规则、分组、跑局、复盘。新人一般从这里开始。' },
-        { code: '剧本', title: '影视城剧本', text: '提前设定阵营、任务点、行动区域和撤离条件，按场地路线推进。' },
-        { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气都会影响当天节奏。' },
-        { code: '远征', title: '外地交流', text: '到外地场地同场交流，重新适应规则、队伍和空间。' },
-        { code: '试场', title: '合作试场', text: '用小规模人数先验证边界、动线、安全和影像记录方式。' }
+        { code: '周常', title: '周常活动', text: '新人从这里熟悉规则。老队员在这里磨通讯、队形和节奏。' },
+        { code: '剧本', title: '影视城剧本', text: '有阵营、任务点、行动区域和撤离条件，按场地路线推进。' },
+        { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气都会影响当天安排。' },
+        { code: '远征', title: '外地交流', text: '到外地场地，重新适应规则、队伍和空间。' },
+        { code: '试场', title: '合作试场', text: '用小规模人数先验证边界、动线、安全和影像记录。' }
       ],
       opFlow: [
-        { title: '集合', text: '确认人数、装备、分组和当天场地边界。' },
-        { title: 'Briefing', text: '说明规则、任务点、集合点、撤离点和停止口令。' },
-        { title: '进场', text: '按阵营或班组进入场地，保持通讯和队形。' },
-        { title: '任务', text: '围绕搜索、占点、护送、撤离或剧情节点推进。' },
-        { title: 'AAR', text: '结束后复盘安全、通讯、路线和人员分工。' }
+        { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
+        { title: 'Briefing', text: '讲规则、任务点、集合点、撤离点和停止口令。' },
+        { title: '进场', text: '按阵营或班组进场，保持通讯和队形。' },
+        { title: '任务', text: '搜索、占点、护送、撤离，按当天任务走。' },
+        { title: 'AAR', text: '结束后复盘安全、通讯、路线和分工。' }
       ],
       trainingLoop: [
-        { title: '规则', text: '先讲清楚可进入区域、禁入区域、安全距离和停止口令。' },
-        { title: '通讯', text: '对讲机用语、呼号、位置报告和异常情况要说清楚。' },
+        { title: 'ROE', text: '可进入区域、禁入区域、安全距离、停止口令，先讲清楚。' },
+        { title: '通讯', text: '呼号、位置报告、异常情况，对讲机里不要抢话。' },
         { title: '队形', text: '移动时保持距离，知道谁在前、谁在后、谁负责观察。' },
-        { title: '复盘', text: '活动结束后把路线、节奏、风险点和下次调整说清楚。' }
+        { title: 'AAR', text: '结束后复盘路线、节奏、风险点和下次调整。' }
       ],
       assetStories: [
         { tag: 'XIANGSHAN / SCRIPT', title: '巨蟹行动现场', text: '队伍沿象山海影城街区推进。', image: haiyingcheng04, size: 'wide' },
