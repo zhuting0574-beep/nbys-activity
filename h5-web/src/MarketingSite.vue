@@ -26,12 +26,12 @@
           <span>带到现场。</span>
         </h1>
         <p class="hero-lead">
-          甬士是一支长期在宁波活动的军事模拟推演队伍。我们在影视城、街区、山地和园区做下场活动，
-          也和外地队伍交流。每次进场前，先把边界、ROE、任务点和撤离路线讲清楚。
+          甬士平时在宁波下场。影视城、街区、山地、园区都会去，也会和外地队伍交流。
+          进场前先讲边界、ROE、任务点、停止口令和撤离路线。第一次来，不急着表现，先跟队走完一场。
         </p>
         <div class="hero-brief" aria-label="活动开始前会确认的事项">
-          <span>FIELD CHECK</span>
-          <p>玩家可以从周常报名开始。场地、园区、学校和品牌活动，建议先从一场小规模试场开始。</p>
+          <span>START HERE</span>
+          <p>想参加，先报周常。想合作，先用一段路线、一个任务，跑一场人数可控的小场。</p>
         </div>
         <div class="hero-actions">
           <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">先试一场</button>
@@ -65,10 +65,10 @@
       <div class="section-kicker">About</div>
       <div class="about-board">
         <div class="about-copy">
-          <h2>先看场地，再定玩法。</h2>
+          <h2>先走现场。</h2>
           <p>
-            甬士做的不是坐在房间里的桌面推演。我们会先到现场看路、看门、看楼梯、看人能站在哪里。
-            能跑到哪里，哪里必须停，观摩的人站在哪里，这些确认以后，再把任务放进去。
+            一块场地能怎么玩，不靠想象。我们会先看路口、楼梯、门、死角、集合点和能停下来的地方。
+            场地能承受什么强度，任务就做到哪里。
           </p>
           <div class="plain-list">
             <article v-for="item in aboutNotes" :key="item.title">
@@ -90,8 +90,8 @@
     <section id="records" class="section-shell records-section">
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
-        <h2>有些活动留下了照片和视频。</h2>
-        <p>这里放的是能对上时间和地点的记录。早期训练、山地路线、影视城剧本、外地交流，都能看见一点当时的样子。</p>
+        <h2>记录从这里开始。</h2>
+        <p>时间和地点能对上的记录，按顺序放在这里。早期训练、山地路线、影视城剧本、外地交流，都能看到一点当时的现场。</p>
       </div>
 
       <div class="timeline-list">
@@ -128,8 +128,8 @@
     <section id="fields" class="section-shell fields-section">
       <div class="section-kicker">Fields</div>
       <div class="section-heading">
-        <h2>场地决定任务怎么跑。</h2>
-        <p>影视城适合街区推进，山地先看路线和通讯，夜间街区要看灯光和观摩位置。场地不同，规则、人数和节奏都会变。</p>
+        <h2>场地不同，玩法不同。</h2>
+        <p>影视城看街道和建筑，山地看路线和通讯，夜间街区看灯光和旁边的人站在哪里。先看场地，再定人数和节奏。</p>
       </div>
 
       <div class="field-grid">
@@ -150,8 +150,8 @@
     <section id="activities" class="section-shell activities-section">
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
-        <h2>平时下场，也做剧本和远征。</h2>
-        <p>周常活动用来熟悉规则和队友。影视城剧本会有角色、任务点和撤离条件。去外地交流时，先按对方场地的规则来。</p>
+        <h2>周常、剧本、远征。</h2>
+        <p>周常先把规则走顺。影视城剧本会有角色、任务点和撤离条件。去外地交流，先按对方场地的规则来。</p>
       </div>
 
       <div class="activity-board">
@@ -192,7 +192,7 @@
           <h2>先把边界和通讯讲清楚。</h2>
           <p>
             人一多，现场靠喊是不够的。进场前要说清禁入区、停止口令和频道；
-            结束后再复盘哪里卡住。平时训练练的，就是这些看起来不花哨、但现场最管用的东西。
+            结束后再复盘哪里卡住。平时练的东西，最后都会落到这些细节上。
           </p>
           <div class="safe-grid">
             <article v-for="item in trainingLoop" :key="item.title">
@@ -209,7 +209,7 @@
       <div class="section-kicker">Media</div>
       <div class="section-heading">
         <h2>现场影像。</h2>
-        <p>这里先放照片。公开视频和外部帖子单独列在后面，能点开的会明确标出来。</p>
+        <p>先看照片，再看公开视频。能点开的内容放在链接区，普通照片只做现场记录。</p>
       </div>
 
       <div class="media-feature">
@@ -351,9 +351,9 @@ export default {
         { id: 'cooperate', label: '合作 Join' }
       ],
       visitorRoutes: [
-        { title: '玩家', text: '从周常报名开始，先跟队熟悉规则。' },
-        { title: '场地', text: '先看边界、观摩区和撤离路线。' },
-        { title: '学校 / 园区', text: '适合从规则课和低强度试场开始。' }
+        { title: '玩家', text: '先报周常，跟队走一场。' },
+        { title: '场地', text: '先看边界、入口和撤离线。' },
+        { title: '学校 / 园区', text: '先做规则课和低强度试场。' }
       ],
       metrics: [
         { value: '2018', label: '早期训练记录' },
@@ -364,15 +364,15 @@ export default {
       aboutNotes: [
         {
           title: '玩家怎么进来',
-          text: '先报名参加周常。第一次主要熟悉规则、安全距离、停止口令和队伍节奏，不急着上强度。'
+          text: '先参加周常。第一次主要听规则、跟队走、记停止口令和安全距离。'
         },
         {
           title: '活动怎么开始',
-          text: '到场先集合，讲边界和任务，再分组进场。结束后会复盘路线、通讯和当天出过的问题。'
+          text: '到场先集合，讲边界和任务，再分组进场。结束后复盘路线、通讯和当天的问题。'
         },
         {
           title: '合作怎么试',
-          text: '场地如果想尝试，可以先做短流程。人数、区域、观摩位置和影像发布范围，当天就能看出是否合适。'
+          text: '先做短流程。人数、区域、旁边的人站在哪里、照片能发到哪里，当天说清楚。'
         }
       ],
       aboutPhotos: [
@@ -390,19 +390,19 @@ export default {
         }
       ],
       history: [
-        { year: '2018', title: 'ESA 城市作战训练', text: '室内简报、贴墙移动、门口队形。很多早期训练照片来自这一批。' },
-        { year: '2019', title: '“巡山”户外训练', text: '山路、林线、队伍行进。B 站保留了当时的视频。' },
-        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '到扬州和外地队伍同场，先按对方场地规则来。' },
+        { year: '2018', title: 'ESA 城市作战训练', text: '室内简报、贴墙移动、门口队形。早期训练照片很多来自这一批。' },
+        { year: '2019', title: '“巡山”户外训练', text: '山路、林线、队伍行进。B 站还能看到当时的视频。' },
+        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '去扬州同场交流，先听对方规则，再进场。' },
         { year: '2021.10.31', title: '浙东小九寨“逃离荒野”', text: '山地路线，体力、通讯和队伍间距都很吃紧。' },
-        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区活动，灯光和街面条件比较适合短流程。' },
-        { year: '2024.06', title: '象山海影城·巨蟹行动最终章', text: '影视城街区任务，围绕建筑、巷口和任务点推进。' },
-        { year: '2026.03', title: '横店远征交流', text: '横店影视城交流，留下了队伍合影、街区照片和队员记录。' }
+        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区活动。灯光够，街面完整，短流程能跑起来。' },
+        { year: '2024.06', title: '象山海影城·巨蟹行动最终章', text: '在影视城街区跑任务，沿建筑、巷口和任务点推进。' },
+        { year: '2026.03', title: '横店远征交流', text: '横店影视城交流。队伍合影、街区照片和队员帖子都留下来了。' }
       ],
       activityLog: [
-        { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员视角的视频切片，能看到移动、掩护和接触距离。', image: xhsWargameFrame },
-        { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '草地场景、队伍合影，还有当天的行动照片。', image: xhsFieldTeam },
-        { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '外地影视城场地，街区尺度和宁波常用场地不一样。', image: xhsHengdianStreet },
-        { date: '2021.10.31 / 山地', title: '浙东小九寨路线', text: '山路和林线里，队伍间距和通讯很容易拉开。', image: xiaojiuzhaiEscape01 }
+        { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员视角，能看到移动、掩护和接触距离。', image: xhsWargameFrame },
+        { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '草地场景、队伍合影，还有当天照片。', image: xhsFieldTeam },
+        { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '外地影视城的街区尺度，和宁波常用场地不一样。', image: xhsHengdianStreet },
+        { date: '2021.10.31 / 山地', title: '浙东小九寨路线', text: '山路和林线里，队伍间距很容易被拉开。', image: xiaojiuzhaiEscape01 }
       ],
       venues: [
         {
@@ -410,7 +410,7 @@ export default {
           type: '影视城街区',
           image: haiyingcheng03,
           featured: true,
-          text: '街道、楼体、巷口都能用。剧本推进、搜索、据点攻防和夜间任务都在这里跑过。',
+          text: '街道、楼体、巷口都能用。搜索、据点、撤离和夜间任务都跑过。',
           points: ['巨蟹行动', '街区推进', '夜间任务']
         },
         {
@@ -418,7 +418,7 @@ export default {
           type: '夜间街区',
           image: yingmengliDate01,
           featured: false,
-          text: '夜间灯光足，街道完整。适合短流程任务，也方便旁边的人看清队伍怎么移动。',
+          text: '夜间灯光足，街道完整。短流程能跑，旁边也能看清队伍移动。',
           points: ['夜间街区', '短流程']
         },
         {
@@ -426,7 +426,7 @@ export default {
           type: '山地路线',
           image: xiaojiuzhaiEscape01,
           featured: false,
-          text: '山地活动先看路线和通讯。体力、天气、队伍间距都会影响节奏。',
+          text: '山地先看路线和通讯。体力、天气、队伍间距都会影响安排。',
           points: ['路线规划', '通讯纪律']
         },
         {
@@ -434,7 +434,7 @@ export default {
           type: '街区空间',
           image: moto01,
           featured: false,
-          text: '街区尺度小，动线短。器材能摆开，旁边也能留出看活动的位置。',
+          text: '街区尺度小，动线短。短任务好控制，也能留出观看位置。',
           points: ['短流程', '器材摆放']
         },
         {
@@ -442,7 +442,7 @@ export default {
           type: '园区活动',
           image: patchBoard,
           featured: false,
-          text: '边界清楚，动线容易控制。人数不大的任务，可以先从这里试。',
+          text: '边界清楚，动线容易控制。人数不多时，可以先从这里试。',
           points: ['边界清楚', '低强度']
         },
         {
@@ -450,16 +450,16 @@ export default {
           type: '校园训练',
           image: esaRoom,
           featured: false,
-          text: '适合做规则课、队形演示、口令和安全边界讲解。强度不高，但能把基础讲透。',
+          text: '可以讲规则、演示队形、练口令和安全边界。强度不高，基础能讲清。',
           points: ['规则讲解', '基础队形']
         }
       ],
       activityTypes: [
-        { code: '周常', title: '周常活动', text: '新人先跟队走一场。老队员在这里磨通讯、队形和节奏。' },
-        { code: '剧本', title: '影视城剧本', text: '有阵营、任务点、行动区域和撤离条件，任务跟着场地走。' },
-        { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气都会改变当天的安排。' },
-        { code: '远征', title: '外地交流', text: '到外地场地，先听规则，再适应新的队伍和空间。' },
-        { code: '试场', title: '合作试场', text: '先跑一段短流程。边界、动线和安全区，看现场最直接。' }
+        { code: '周常', title: '周常活动', text: '新人先跟队走一场。老队员在这里磨通讯和队形。' },
+        { code: '剧本', title: '影视城剧本', text: '有阵营、任务点、行动区域和撤离条件。任务跟着场地走。' },
+        { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气，都会改变当天安排。' },
+        { code: '远征', title: '外地交流', text: '到外地场地，先听规则，再适应新的空间。' },
+        { code: '试场', title: '合作试场', text: '先跑一段短流程。边界、动线和安全区，现场看最清楚。' }
       ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
@@ -484,7 +484,7 @@ export default {
         {
           tag: 'URBAN',
           title: '影视城和夜间街区',
-          text: '建筑、巷口和灯光会影响路线。象山海影城、应梦里这类场地，适合做搜索、占点和撤离。'
+          text: '建筑、巷口和灯光会影响路线。象山海影城、应梦里这类场地，可以做搜索、占点和撤离。'
         },
         {
           tag: 'MOUNTAIN',
@@ -520,20 +520,20 @@ export default {
       ],
       trialSteps: [
         { code: '01', title: '先看场地', text: '地点、时间、可进入区、禁入区和预计人数，先说清楚。' },
-        { code: '02', title: '划出边界', text: '集合点、观摩区、休息区、撤离路线和负责人，当场定下来。' },
+        { code: '02', title: '划出边界', text: '集合点、休息区、旁边的人站哪里、撤离路线和负责人，当场定下来。' },
         { code: '03', title: '跑短任务', text: '30-90 分钟，先跑一个清楚的任务，不急着把流程做大。' },
         { code: '04', title: '当天复盘', text: '人数、路线、任务、照片和视频怎么发，试完再调整。' }
       ],
       partnerNotes: [
         {
           code: 'A',
-          title: '哪些地方适合先试',
+          title: '哪些地方可以先试',
           points: ['有街区或楼体的影视城', '边界清楚的园区', '旁边能站人观看的夜间街区', '能留出安全区的校园或营地']
         },
         {
           code: 'B',
           title: '到场前说清楚',
-          points: ['哪些地方能进，哪些地方不能进', '人从哪里集合，观摩站在哪里', '停止口令、撤离路线和联络人', '照片和视频能发到什么范围']
+          points: ['哪些地方能进，哪些地方不能进', '人从哪里集合，旁边的人站在哪里', '停止口令、撤离路线和联络人', '照片和视频能发到什么范围']
         },
         {
           code: 'C',
