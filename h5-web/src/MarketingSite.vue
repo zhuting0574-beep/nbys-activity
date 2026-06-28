@@ -135,7 +135,7 @@
       <div class="field-grid">
         <article v-for="venue in venues" :key="venue.name" :class="{ featured: venue.featured }">
           <img :src="venue.image" :alt="venue.name" width="1200" height="750" loading="lazy" decoding="async" />
-          <div>
+          <div class="field-card-copy">
             <span>{{ venue.type }}</span>
             <h3>{{ venue.name }}</h3>
             <p>{{ venue.text }}</p>
@@ -315,9 +315,7 @@ import esaRoom from './assets/site/esa-urban-training-07.jpg'
 import esaUrban01 from './assets/site/esa-urban-training-02.jpg'
 import esaUrban02 from './assets/site/esa-urban-training-05.jpg'
 import patchBoard from './assets/site/patch-board.jpg'
-import nightTeam from './assets/site/night-team-2022.jpg'
 import moto01 from './assets/site/moto-01.jpg'
-import moto02 from './assets/site/moto-02.jpg'
 import xhsHengdianTeam from './assets/site/external/2026-03-15_xhs_hengdian-expedition_team.jpg'
 import xhsHengdianStreet from './assets/site/external/2026-03-15_xhs_hengdian-expedition_street.jpg'
 import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_grass.jpg'
@@ -408,7 +406,7 @@ export default {
         {
           name: '象山海影城',
           type: '影视城街区',
-          image: haiyingcheng03,
+          image: haiyingcheng05,
           featured: true,
           text: '街道、楼体、巷口都能用。搜索、据点、撤离和夜间任务都跑过。',
           points: ['巨蟹行动', '街区推进', '夜间任务']
@@ -439,11 +437,11 @@ export default {
         },
         {
           name: '天宫庄园',
-          type: '园区活动',
+          type: '边界清楚',
           image: patchBoard,
           featured: false,
-          text: '边界清楚，动线容易控制。人数不多时，可以先从这里试。',
-          points: ['边界清楚', '低强度']
+          text: '这类场地先看边界和动线。人数不多时，可以从低强度任务开始试。',
+          points: ['试场', '低强度']
         },
         {
           name: '章水中心小学',
@@ -493,8 +491,8 @@ export default {
         },
         {
           tag: 'TRAINING',
-          title: '训练和队员记录',
-          text: '室内训练、队形、队员自拍视频放在一起，能看见平时活动的样子。'
+          title: '平时怎么练',
+          text: '室内训练、队形和队员自拍视频放在一起，能看见日常活动的样子。'
         }
       ],
       assetStories: [
@@ -502,12 +500,10 @@ export default {
         { tag: 'YINGMENGLI / 2023', title: '应梦里夜间活动', text: '楼上视角能看清街道和移动路线。', image: yingmengli02, size: '' },
         { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨训练', text: '山地路线里，队伍间距很容易被拉开。', image: xiaojiuzhaiTraining02, size: '' },
         { tag: 'ESA / URBAN', title: 'ESA 城市作战训练', text: '门口、墙边和队形处理。', image: esaUrban01, size: '' },
-        { tag: 'TEAM / NIGHT', title: '夜间队伍照片', text: '夜间集合时的队伍记录。', image: nightTeam, size: '' },
         { tag: 'XHS / 2026', title: '5.30 下场日记', text: '草地场景，队员距离能看得比较清楚。', image: xhsFieldGrass, size: '' },
         { tag: 'URBAN / CQB', title: '室内街区训练', text: '门口处理、墙边移动和互相掩护。', image: esaUrban02, size: '' },
         { tag: 'YINGMENGLI / 2023', title: '应梦里活动', text: '2023 年 10 月 22 日夜间场地。', image: yingmengliDate02, size: '' },
         { tag: 'XHS / 2026', title: '6.22 队员视频', text: '小红书公开视频封面。', image: xhsWargameCover, size: '' },
-        { tag: 'MOTO', title: '机车照片', text: '活动路程较远时留下的记录。', image: moto02, size: '' },
         { tag: 'CANCER', title: '巨蟹行动道具', text: '地图、文件和现场道具。', image: haiyingcheng01, size: '' }
       ],
       publicSources: [
