@@ -21,15 +21,17 @@
     <section id="top" class="hero section-shell">
       <div class="hero-copy">
         <p class="plain-label">NINGBO YONGSHI / FIELD WARGAME</p>
-        <h1>在真实场地里跑 wargame。</h1>
+        <h1>
+          <span>真实场地。</span>
+          <span>现场 wargame。</span>
+        </h1>
         <p class="hero-lead">
-          甬士在宁波做周常下场、影视城剧本、山地任务和外地交流。
-          场地边界、ROE、任务点和撤离路线先讲清楚，任务再开始。
+          甬士在宁波组织军事模拟推演。周常下场、影视城剧本、山地任务、外地交流，
+          都从 Briefing 开始：边界、ROE、任务点、撤离路线，讲清楚再进场。
         </p>
-        <div class="hero-points" aria-label="甬士可以一起做什么">
-          <span>影视城 / 园区：街区任务、夜间短流程、观摩动线</span>
-          <span>学校 / 社群：规则课、低强度协作、队形演示</span>
-          <span>品牌 / 内容：公开视频、现场照片、活动记录</span>
+        <div class="hero-brief" aria-label="活动开始前会确认的事项">
+          <span>Briefing</span>
+          <p>集合点、禁入区、停止口令、观摩位置，先在场边讲完。</p>
         </div>
         <div class="hero-actions">
           <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">先试一场</button>
@@ -82,8 +84,8 @@
     <section id="records" class="section-shell records-section">
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
-        <h2>这些年留下的记录。</h2>
-        <p>B 站视频、小红书笔记、本地照片分开放。能点开的链接放在后面，普通图片就按照片看。</p>
+        <h2>从训练场到影视城。</h2>
+        <p>有公开视频，也有队员留下的照片。时间、地点和活动名称能对上的，就放在这里。</p>
       </div>
 
       <div class="timeline-list">
@@ -133,8 +135,8 @@
     <section id="activities" class="section-shell activities-section">
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
-        <h2>周常、剧本、远征分开做。</h2>
-        <p>有的活动适合新人熟悉规则，有的活动适合跑剧情和阵营任务，也有外地交流和合作试场。</p>
+        <h2>日常下场，剧本任务，外地交流。</h2>
+        <p>规模不一样，准备方式也不一样。周常先跑顺规则，剧本看任务线，远征先适应对方场地。</p>
       </div>
 
       <div class="activity-board">
@@ -191,8 +193,8 @@
     <section id="media" class="section-shell media-section">
       <div class="section-kicker">Media</div>
       <div class="section-heading">
-        <h2>照片是照片，链接是链接。</h2>
-        <p>影像墙放现场照片。B 站视频和小红书公开笔记放在下方链接区，能点开的地方会写清楚。</p>
+        <h2>现场影像。</h2>
+        <p>照片按场景放，公开链接单独列出。想看完整视频，可以从下面跳到 B 站和小红书。</p>
       </div>
 
       <div class="media-wall">
@@ -221,8 +223,8 @@
         <div>
           <h2>想试场，先小规模跑一遍。</h2>
           <p>
-            第一次合作不用把场面做大。先选一段路线、一个任务、十几到几十人的规模，
-            把边界、安全、观摩、影像范围跑明白，再决定下一场怎么放大。
+            第一次不用做大场。先选一段路线、一个任务、十几到几十人的规模，
+            现场把边界、安全、观摩和影像范围跑明白，再决定下一场怎么做。
           </p>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
@@ -232,18 +234,20 @@
         <div class="trial-list">
           <article v-for="item in trialSteps" :key="item.title">
             <span>{{ item.code }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.text }}</p>
+            <div>
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.text }}</p>
+            </div>
           </article>
         </div>
       </div>
 
       <div class="partner-board">
         <figure class="partner-photo">
-          <img :src="cooperateImage" alt="应梦里夜间活动现场" width="1200" height="900" loading="eager" decoding="async" />
+          <img :src="cooperateImage" alt="横店影视城交流现场" width="1200" height="900" loading="eager" decoding="async" />
           <figcaption>
             <span>TRIAL RUN / FIELD CHECK</span>
-            <strong>夜间街区、影视城、园区和校园，先看可进入范围，再决定任务。</strong>
+            <strong>先看能走到哪里，哪里不能进；任务放在哪里，现场再定。</strong>
           </figcaption>
         </figure>
 
@@ -298,7 +302,7 @@ export default {
       heroVideo,
       esaRoom,
       activityFeatureImage: haiyingcheng05,
-      cooperateImage: yingmengliDate02,
+      cooperateImage: xhsHengdianStreet,
       navItems: [
         { id: 'about', label: '关于' },
         { id: 'records', label: '记录' },
@@ -412,7 +416,7 @@ export default {
         { code: '剧本', title: '影视城剧本', text: '有阵营、任务点、行动区域和撤离条件，按场地路线推进。' },
         { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气都会影响当天安排。' },
         { code: '远征', title: '外地交流', text: '到外地场地，重新适应规则、队伍和空间。' },
-        { code: '试场', title: '合作试场', text: '用小规模人数先验证边界、动线、安全和影像记录。' }
+        { code: '试场', title: '合作试场', text: '先跑一段短流程，看边界、动线、安全和影像范围。' }
       ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
@@ -450,26 +454,26 @@ export default {
         { platform: 'XIAOHONGSHU / 2026', title: '甬士横店远征', href: 'https://www.xiaohongshu.com/search_result/69b956af000000002202686f' }
       ],
       trialSteps: [
-        { code: '01', title: '发场地信息', text: '提供地点、可用时间、可进入区域、禁入区域和预计人数。' },
-        { code: '02', title: '看边界和动线', text: '确认集合点、观摩区、休息区、撤离路线和现场负责人。' },
-        { code: '03', title: '设计短流程', text: '先做 30-90 分钟的小规模任务，验证规则、安全和节奏。' },
-        { code: '04', title: '复盘后调整', text: '根据当天情况调整人数、路线、任务和影像发布范围。' }
+        { code: '01', title: '先看场地', text: '地点、时间、可进入区、禁入区和预计人数，先对齐。' },
+        { code: '02', title: '划出边界', text: '集合点、观摩区、休息区、撤离路线和负责人，当场确认。' },
+        { code: '03', title: '跑短任务', text: '30-90 分钟，先跑一个清楚的任务，不急着把流程做复杂。' },
+        { code: '04', title: '当天复盘', text: '人数、路线、任务和影像发布范围，试完再调整。' }
       ],
       partnerNotes: [
         {
           code: 'A',
-          title: '适合先试的场景',
-          points: ['影视城街区任务', '园区团建或研学', '夜间街区观摩', '小规模内容拍摄']
+          title: '哪些地方适合试',
+          points: ['有街区或楼体的影视城', '边界清楚的园区', '适合观摩的夜间街区', '能留出安全区的校园或营地']
         },
         {
           code: 'B',
-          title: '到场前先确认',
-          points: ['可进入区和禁入区', '集合点、休息区、观摩区', '撤离路线和停止口令', '现场负责人和联络方式']
+          title: '到场前说清楚',
+          points: ['哪些地方能进，哪些地方不能进', '人从哪里集合，观摩站在哪里', '停止口令、撤离路线和联络人', '照片和视频能发到什么范围']
         },
         {
           code: 'C',
-          title: '试完留下什么',
-          points: ['当天照片和可公开视频', 'AAR 复盘记录', '下一场人数、路线和任务调整']
+          title: '试完怎么继续',
+          points: ['当天照片和可公开片段', 'AAR 复盘记录', '下一场人数、路线和任务调整']
         }
       ]
     }

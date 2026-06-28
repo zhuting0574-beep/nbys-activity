@@ -244,7 +244,11 @@ video {
 
 .hero h1 {
   max-width: 760px;
-  font-size: clamp(64px, 8.2vw, 134px);
+  font-size: clamp(62px, 7.2vw, 118px);
+}
+
+.hero h1 span {
+  display: block;
 }
 
 .hero-lead,
@@ -259,20 +263,31 @@ video {
   line-height: 1.75;
 }
 
-.hero-points {
+.hero-brief {
   display: grid;
-  gap: 8px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
   max-width: 720px;
   margin-top: 24px;
-}
-
-.hero-points span {
-  padding: 10px 12px;
+  padding: 14px 16px;
   border-left: 3px solid rgba(213, 71, 53, 0.86);
   color: #d8ccb1;
   background: rgba(255, 255, 255, 0.055);
+}
+
+.hero-brief span {
+  color: var(--ys-sand);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero-brief p {
+  margin: 0;
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.62;
 }
 
 .hero-actions {
@@ -761,7 +776,9 @@ h3 {
 }
 
 .trial-list {
+  gap: 0;
   grid-template-columns: 1fr;
+  border-top: 1px solid var(--ys-line);
 }
 
 .partner-board {
@@ -843,6 +860,24 @@ h3 {
   transform: rotate(45deg);
 }
 
+.trial-list article {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid var(--ys-line);
+  background: transparent;
+}
+
+.trial-list article span {
+  margin-top: 5px;
+}
+
+.trial-list h3 {
+  margin-top: 0;
+}
+
 @media (max-width: 1080px) {
   .ys-nav {
     grid-template-columns: 1fr auto;
@@ -921,7 +956,7 @@ h3 {
   }
 
   .hero h1 {
-    font-size: clamp(44px, 13.5vw, 60px);
+    font-size: clamp(42px, 12.6vw, 56px);
     line-height: 0.98;
   }
 
@@ -934,12 +969,13 @@ h3 {
     line-height: 1.72;
   }
 
-  .hero-points span {
-    font-size: 14px;
+  .hero-brief {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
-  .hero-points span:nth-child(n + 3) {
-    display: none;
+  .hero-brief p {
+    font-size: 14px;
   }
 
   .hero-actions {
@@ -997,7 +1033,8 @@ h3 {
 
   .plain-list article,
   .timeline-list article,
-  .activity-list article {
+  .activity-list article,
+  .trial-list article {
     grid-template-columns: 1fr;
     gap: 8px;
   }
