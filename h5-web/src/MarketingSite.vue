@@ -21,14 +21,14 @@
     <section id="top" class="hero section-shell">
       <div class="hero-copy">
         <p class="plain-label">Ningbo Yongshi</p>
-        <h1>宁波甬士，军事模拟推演活动。</h1>
+        <h1>宁波甬士，做 wargame 和实景任务。</h1>
         <p class="hero-lead">
-          我们在宁波组织 wargame、Milsim、影视城剧本、山地任务和外地交流。
-          到场后先讲规则和安全边界，再分组进入任务，结束后复盘。
+          我们长期在宁波组织周常活动、影视城剧本、山地任务和跨城交流。
+          每次活动先讲规则和安全边界，再分组进场；结束后复盘，把下一次该改的地方说清楚。
         </p>
         <div class="hero-actions">
-          <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">合作试场</button>
-          <button type="button" class="secondary-cta" @click="$emit('enter-app')">参加活动</button>
+          <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">聊一次试场</button>
+          <button type="button" class="secondary-cta" @click="$emit('enter-app')">进入报名</button>
         </div>
       </div>
 
@@ -50,30 +50,35 @@
 
     <section id="about" class="section-shell intro-section">
       <div class="section-kicker">About</div>
-      <div class="section-heading">
-        <h2>甬士主要做三类事。</h2>
-        <p>
-          平时有周常活动和训练，也会去影视城、山地和外地场地做任务。
-          如果有合适的空间，也可以先做一次小规模试场。
-        </p>
-      </div>
-
-      <div class="intro-grid">
-        <article v-for="item in introCards" :key="item.title">
-          <img :src="item.image" :alt="item.title" />
-          <div>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.text }}</p>
+      <div class="about-board">
+        <div class="about-copy">
+          <h2>平时下场，遇到合适的场地就做成一次任务。</h2>
+          <p>
+            影视城、夜间街区、山地、园区和校园都试过。我们会先看空间能不能跑、哪里不能进、
+            观摩的人放哪里，再决定当天怎么安排。
+          </p>
+          <div class="plain-list">
+            <article v-for="item in aboutNotes" :key="item.title">
+              <span>{{ item.title }}</span>
+              <p>{{ item.text }}</p>
+            </article>
           </div>
-        </article>
+        </div>
+
+        <div class="about-photos" aria-label="甬士活动照片">
+          <figure v-for="photo in aboutPhotos" :key="photo.caption">
+            <img :src="photo.image" :alt="photo.caption" />
+            <figcaption>{{ photo.caption }}</figcaption>
+          </figure>
+        </div>
       </div>
     </section>
 
     <section id="records" class="section-shell records-section">
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
-        <h2>按时间看，甬士做过这些事。</h2>
-        <p>这里放公开影像、本地照片和队员公开笔记。能跳转的内容单独标出来，普通照片只当现场记录。</p>
+        <h2>按时间看，活动是这样积累起来的。</h2>
+        <p>有些记录来自 B 站和小红书公开笔记，有些来自本地照片。能跳转的统一放在后面，普通照片只作为现场记录。</p>
       </div>
 
       <div class="timeline-list">
@@ -123,16 +128,28 @@
     <section id="activities" class="section-shell activities-section">
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
-        <h2>活动不是只有一种。</h2>
+        <h2>活动有几种做法。</h2>
         <p>周常、剧本、山地、远征、试场，目的不一样。参加前会说明规则、人数、场地边界和当天任务。</p>
       </div>
 
-      <div class="activity-type-grid">
-        <article v-for="item in activityTypes" :key="item.title">
-          <span>{{ item.code }}</span>
-          <h3>{{ item.title }}</h3>
-          <p>{{ item.text }}</p>
-        </article>
+      <div class="activity-board">
+        <figure class="activity-photo">
+          <img :src="activityFeatureImage" alt="象山海影城任务现场" />
+          <figcaption>
+            <span>XIANGSHAN / SCRIPT</span>
+            <strong>剧本活动会按场地路线推进，任务点、撤离点和集合点提前讲清楚。</strong>
+          </figcaption>
+        </figure>
+
+        <div class="activity-list">
+          <article v-for="item in activityTypes" :key="item.title">
+            <span>{{ item.code }}</span>
+            <div>
+              <h3>{{ item.title }}</h3>
+              <p>{{ item.text }}</p>
+            </div>
+          </article>
+        </div>
       </div>
 
       <div class="flow-panel">
@@ -150,10 +167,10 @@
       <div class="section-kicker">Safe ops</div>
       <div class="safe-layout">
         <div>
-          <h2>训练主要服务现场秩序。</h2>
+          <h2>训练服务每一次现场活动。</h2>
           <p>
-            训练的作用很直接：让人知道边界、听得懂口令、会用对讲机、知道什么时候停。
-            对合作方来说，这些东西对应的是现场秩序和安全。
+            人到了陌生场地，要知道边界在哪里、口令怎么听、对讲机怎么说、什么时候停。
+            这些不是为了摆样子，是为了让现场能按规则走下去。
           </p>
           <div class="safe-grid">
             <article v-for="item in trainingLoop" :key="item.title">
@@ -169,8 +186,8 @@
     <section id="media" class="section-shell media-section">
       <div class="section-kicker">Media</div>
       <div class="section-heading">
-        <h2>先看照片和公开视频。</h2>
-        <p>本地照片、小红书队员笔记、B 站公开视频分开放。能点的地方会写“点击打开”。</p>
+        <h2>照片和公开视频分开看。</h2>
+        <p>照片是现场记录，公开视频和公开笔记放在链接区。能点的地方会写“点击打开”，不会让图片和链接混在一起。</p>
       </div>
 
       <div class="media-wall">
@@ -197,10 +214,10 @@
       <div class="section-kicker">Work with us</div>
       <div class="cooperate-layout">
         <div>
-          <h2>有场地或活动计划，可以先做一次小规模试场。</h2>
+          <h2>有场地或活动计划，先从小场开始。</h2>
           <p>
-            先确认人数、边界、动线、禁入区域、集合点、休息区和现场负责人。
-            条件合适，再安排分组、简报、任务和影像记录。
+            先把可进入区域、禁入区域、观摩位置、休息区、撤离路线和现场负责人说清楚。
+            合适的话，再定人数、Briefing、任务和影像记录。
           </p>
           <div class="hero-actions">
             <button type="button" class="primary-cta" @click="$emit('enter-app')">查看报名入口</button>
@@ -227,15 +244,10 @@ import haiyingcheng02 from './assets/site/haiyingcheng-jujie-02.jpg'
 import haiyingcheng03 from './assets/site/haiyingcheng-jujie-03.jpg'
 import haiyingcheng04 from './assets/site/haiyingcheng-jujie-04.jpg'
 import haiyingcheng05 from './assets/site/haiyingcheng-jujie-05.jpg'
-import hengdian01 from './assets/site/hengdian-01.jpg'
-import hengdian02 from './assets/site/hengdian-02.jpg'
-import yingmengli01 from './assets/site/yingmengli-01.jpg'
 import yingmengli02 from './assets/site/yingmengli-02.jpg'
 import yingmengliDate01 from './assets/site/yingmengli-20231022-01.jpg'
 import yingmengliDate02 from './assets/site/yingmengli-20231022-02.jpg'
-import xiaojiuzhaiTraining01 from './assets/site/xiaojiuzhai-training-01.jpg'
 import xiaojiuzhaiTraining02 from './assets/site/xiaojiuzhai-training-02.jpg'
-import xiaojiuzhaiTraining03 from './assets/site/xiaojiuzhai-training-03.jpg'
 import xiaojiuzhaiEscape01 from './assets/site/xiaojiuzhai-escape-20211031-01.jpg'
 import esaRoom from './assets/site/esa-urban-training-07.jpg'
 import esaUrban01 from './assets/site/esa-urban-training-02.jpg'
@@ -244,16 +256,12 @@ import patchBoard from './assets/site/patch-board.jpg'
 import nightTeam from './assets/site/night-team-2022.jpg'
 import moto01 from './assets/site/moto-01.jpg'
 import moto02 from './assets/site/moto-02.jpg'
-import biliXunshan from './assets/site/bili-xunshan-2019.jpg'
-import biliYangzhou from './assets/site/bili-yangzhou-20210327.png'
-import biliJujiePreview from './assets/site/bili-jujie-preview.jpg'
 import xhsHengdianTeam from './assets/site/external/2026-03-15_xhs_hengdian-expedition_team.jpg'
 import xhsHengdianStreet from './assets/site/external/2026-03-15_xhs_hengdian-expedition_street.jpg'
 import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_grass.jpg'
 import xhsFieldTeam from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_team.jpg'
 import xhsWargameCover from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-cover.jpg'
 import xhsWargameFrame from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-frame01.jpg'
-import biliJujieFieldFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-field_frame01.jpg'
 import biliJujieFinalFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-final_frame01.jpg'
 
 export default {
@@ -264,6 +272,7 @@ export default {
       logo,
       heroVideo,
       esaRoom,
+      activityFeatureImage: haiyingcheng05,
       navItems: [
         { id: 'about', label: '关于' },
         { id: 'records', label: '记录' },
@@ -274,25 +283,36 @@ export default {
         { id: 'cooperate', label: '合作' }
       ],
       metrics: [
-        { value: '2018+', label: '可追溯影像' },
-        { value: '6+', label: '常用场地' },
-        { value: '30周', label: '训练周期' },
-        { value: '多城', label: '外地交流' }
+        { value: '2018+', label: '影像记录' },
+        { value: '6+', label: '常用活动场地' },
+        { value: '30周', label: '训练内容' },
+        { value: '多城', label: '跨城交流' }
       ],
-      introCards: [
+      aboutNotes: [
         {
-          title: '真实场地',
-          text: '影视城、街区、山地、园区都能成为活动场。先看边界和动线，再设计任务。',
+          title: '平时怎么来',
+          text: '周常活动从集合、讲规则、分组开始。新人可以先跟一场，熟悉安全距离、口令和基本流程。'
+        },
+        {
+          title: '场地怎么用',
+          text: '影视城看街区和楼体，山地看路线和通讯，园区、校园更看边界、观摩区和撤离路线。'
+        },
+        {
+          title: '合作怎么试',
+          text: '先做小规模试场。人数、动线、安全和影像发布范围都跑通了，再考虑更完整的活动。'
+        }
+      ],
+      aboutPhotos: [
+        {
+          caption: '象山海影城 / 巨蟹行动',
           image: haiyingcheng02
         },
         {
-          title: '公开记录',
-          text: 'B 站、小红书和本地照片里能看到活动时间、地点和现场画面。',
+          caption: '横店影视城 / 远征交流',
           image: xhsHengdianTeam
         },
         {
-          title: '先试一场',
-          text: '合作不用一上来做大。先用小规模人数验证场地、规则和现场节奏。',
+          caption: '宁波周常 / 队员记录',
           image: xhsFieldGrass
         }
       ],
@@ -341,15 +361,15 @@ export default {
           type: '街区空间',
           image: moto01,
           featured: false,
-          text: '适合短流程体验、装备展示、公众观摩和内容拍摄。',
-          points: ['轻量任务', '装备展示']
+          text: '适合短流程体验、器材摆放、公众观摩和内容拍摄。',
+          points: ['轻量任务', '器材摆放']
         },
         {
           name: '天宫庄园',
           type: '园区活动',
           image: patchBoard,
           featured: false,
-          text: '边界清楚，动线容易控制，可以安排展示、团建和研学体验。',
+          text: '边界清楚，动线容易控制，可以安排团建、研学和低强度任务。',
           points: ['团建', '研学']
         },
         {
