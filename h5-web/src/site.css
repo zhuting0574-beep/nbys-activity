@@ -80,7 +80,7 @@ body.ys-marketing-mode #app {
 }
 
 body.ys-member-mode #app {
-  max-width: 430px;
+  max-width: 900px;
 }
 
 button,
@@ -430,7 +430,7 @@ video {
 .public-links span,
 .trial-list span,
 .activity-photo span,
-.activity-list span {
+.ys-marketing-mode .activity-list span {
   display: block;
   color: var(--ys-sand);
   font-size: 12px;
@@ -654,7 +654,7 @@ video {
   font-weight: 900;
 }
 
-h3 {
+.ys-marketing-mode h3 {
   color: var(--ys-text);
 }
 
@@ -766,7 +766,7 @@ h3 {
 .media-lead span,
 .media-wall span,
 .media-notes p,
-.activity-list p,
+.ys-marketing-mode .activity-list p,
 .flow-panel span {
   margin: 0;
   color: #c2b79f;
