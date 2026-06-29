@@ -2,7 +2,7 @@
   <main class="ys-site">
     <header class="ys-nav" aria-label="甬士网页导航">
       <button class="ys-brand" type="button" @click="scrollToSection('top')" aria-label="回到顶部">
-        <img :src="logo" alt="宁波甬士标志" />
+        <img :src="logo" alt="宁波甬士标志" width="256" height="256" />
         <span>
           <strong>宁波甬士</strong>
           <small>Ningbo Field Wargame</small>
@@ -91,7 +91,7 @@
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
         <h2>这些年去过哪里。</h2>
-        <p>这里放能对上时间和地点的记录。早期训练、山地路线、影视城剧本、外地交流，照片和公开视频放在一起看。</p>
+        <p>这些记录能对上时间和地点。早期训练、山地路线、影视城剧本和外地交流，都有照片或公开视频留下来。</p>
       </div>
 
       <div class="timeline-list">
@@ -232,7 +232,7 @@
       <div class="section-kicker">Media</div>
       <div class="section-heading">
         <h2>现场影像。</h2>
-        <p>照片看场地，视频看节奏。能点开的公开视频单独列出来；普通照片只做现场记录，不提示点击。</p>
+        <p>照片看场地，视频看节奏。公开视频保留出处，现场照片按时间和场地留档。</p>
       </div>
 
       <div class="video-board" aria-label="活动视频片段">
@@ -280,7 +280,7 @@
         <a v-for="source in publicSources" :key="source.title" :href="source.href" target="_blank" rel="noreferrer">
           <span>{{ source.platform }}</span>
           <strong>{{ source.title }}</strong>
-          <em>点击打开</em>
+          <em>查看来源</em>
         </a>
       </div>
     </section>
@@ -417,7 +417,7 @@ export default {
         },
         {
           title: '试场合作',
-          text: '从短流程开始。人数、区域、旁观位置、照片能发到哪里，当天定清楚。'
+          text: '从短流程开始。人数、区域、旁观位置和影像发布范围，当天定清楚。'
         }
       ],
       aboutPhotos: [
@@ -516,7 +516,7 @@ export default {
         {
           date: '2021.03.27 / 扬州',
           title: 'MILSIM 镭射交流',
-          text: '公开记录留在 B 站。这里写清时间、地点和内容，链接放到影像区。',
+          text: '公开视频留在 B 站。时间、地点和交流内容都能对上。',
           mark: 'BILIBILI'
         }
       ],
