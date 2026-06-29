@@ -91,7 +91,7 @@
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
         <h2>这些年去过哪里。</h2>
-        <p>这里放能对上时间和地点的记录。早期训练、山地路线、影视城剧本、外地交流，尽量用照片和公开视频说话。</p>
+        <p>这里放能对上时间和地点的记录。早期训练、山地路线、影视城剧本、外地交流，照片和公开视频放在一起看。</p>
       </div>
 
       <div class="timeline-list">
@@ -232,7 +232,7 @@
       <div class="section-kicker">Media</div>
       <div class="section-heading">
         <h2>现场影像。</h2>
-        <p>照片看场地，视频看节奏。能点开的公开视频单独列出来；普通照片就当现场记录，不混在一起装链接。</p>
+        <p>照片看场地，视频看节奏。能点开的公开视频单独列出来；普通照片只做现场记录，不提示点击。</p>
       </div>
 
       <div class="video-board" aria-label="活动视频片段">
@@ -516,7 +516,7 @@ export default {
         {
           date: '2021.03.27 / 扬州',
           title: 'MILSIM 镭射交流',
-          text: '公开记录留在 B 站。这里保留时间、地点和内容，不把截图混进普通照片里。',
+          text: '公开记录留在 B 站。这里写清时间、地点和内容，链接放到影像区。',
           mark: 'BILIBILI'
         }
       ],
