@@ -108,6 +108,7 @@ public class AuthService {
                 "venue:create", "venue:update", "venue:delete", "gameMode:create", "gameMode:update", "gameMode:delete",
                 "user:update", "user:delete", "user:disable", "user:resetPassword", "role:update", "permission:update",
                 "launcher:update", "launcher:delete", "systemImage:update",
+                "extraction:view", "extraction:item", "extraction:shop", "extraction:season", "extraction:match", "extraction:asset", "extraction:reset", "extraction:manage",
                 "attendance:create", "attendance:update", "attendance:delete", "attendance:export");
         return p;
     }

@@ -350,6 +350,136 @@
         </el-table>
       </section>
 
+      <section v-if="active === 'extraction'" class="card extraction-admin">
+        <el-tabs v-model="extractionTab" @tab-change="loadExtraction">
+          <el-tab-pane label="对局管理" name="matches">
+            <div class="toolbar">
+              <el-button type="primary" v-if="can('extraction:match')" @click="editExtractionMatch = { name: '', venue_name: '', squad_count: 2, squad_limit: 5 }">创建对局</el-button>
+              <el-button @click="loadExtraction">刷新</el-button>
+            </div>
+            <el-table :data="extraction.matches" border>
+              <el-table-column prop="name" label="对局名称" min-width="160" />
+              <el-table-column prop="venue_name" label="场地" min-width="130" />
+              <el-table-column label="状态" width="100"><template #default="{ row }">{{ extractionStatus(row.status) }}</template></el-table-column>
+              <el-table-column prop="participant_count" label="人数" width="80" />
+              <el-table-column label="操作" width="260">
+                <template #default="{ row }">
+                  <el-button size="small" @click="openExtractionMatch(row)">详情</el-button>
+                  <el-button size="small" v-if="row.status === 'preparing' && can('extraction:match')" @click="editExtractionMatch = { ...row }">编辑</el-button>
+                  <el-button size="small" type="success" v-if="row.status === 'preparing' && can('extraction:match')" @click="startExtractionMatch(row)">开局</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="物品管理" name="items">
+            <div class="toolbar">
+              <el-button type="primary" v-if="can('extraction:item')" @click="editExtractionItem = { level: '普通', item_category: '常规物品', min_price: 1, max_price: 100, width: 1, height: 1, active: true }">新增物品</el-button>
+            </div>
+            <el-table :data="extraction.items" border>
+              <el-table-column prop="name" label="名称" min-width="150" />
+              <el-table-column prop="level" label="等级" width="90" />
+              <el-table-column prop="item_category" label="分类" width="110" />
+              <el-table-column label="价格" width="130"><template #default="{ row }">{{ row.min_price }}-{{ row.max_price }}</template></el-table-column>
+              <el-table-column label="体积" width="90"><template #default="{ row }">{{ row.width }}×{{ row.height }}</template></el-table-column>
+              <el-table-column label="状态" width="90"><template #default="{ row }">{{ row.active ? '启用' : '停用' }}</template></el-table-column>
+              <el-table-column label="操作" width="160">
+                <template #default="{ row }">
+                  <el-button size="small" @click="editExtractionItem = { ...row, active: !!row.active }">编辑</el-button>
+                  <el-button size="small" type="danger" @click="remove(`/api/admin/extraction/items/${row.id}`, loadExtraction)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="物品录入" name="entry">
+            <el-form class="entry-form" label-width="90px">
+              <el-form-item label="用户"><el-select v-model="extractionEntry.user_id" filterable><el-option v-for="u in extraction.users" :key="u.id" :label="`${u.callsign || u.username}（${u.username}）`" :value="u.id" /></el-select></el-form-item>
+              <el-form-item label="物品"><el-select v-model="extractionEntry.item_def_id" filterable><el-option v-for="i in extraction.items" :key="i.id" :label="`${i.name} / ${i.level} / ${i.item_category}`" :value="i.id" /></el-select></el-form-item>
+              <el-form-item label="数量"><el-input-number v-model="extractionEntry.quantity" :min="1" /></el-form-item>
+              <el-form-item><el-button type="primary" @click="submitExtractionEntry">录入到缓冲区</el-button></el-form-item>
+            </el-form>
+          </el-tab-pane>
+
+          <el-tab-pane label="商店管理" name="shop">
+            <div class="toolbar"><el-button type="primary" @click="editExtractionShop = { category: 'storage', price: 0, stock: 1, storage_rows: 8, storage_cols: 12, active: true }">新增商品</el-button></div>
+            <el-table :data="extraction.shop" border>
+              <el-table-column prop="name" label="商品" min-width="150" />
+              <el-table-column label="分类" width="110"><template #default="{ row }">{{ shopCategoryName(row.category) }}</template></el-table-column>
+              <el-table-column prop="price" label="价格" width="90" />
+              <el-table-column prop="stock" label="库存" width="90" />
+              <el-table-column prop="shelf_until" label="下架日期" width="120" />
+              <el-table-column label="状态" width="90"><template #default="{ row }">{{ row.active ? '上架' : '下架' }}</template></el-table-column>
+              <el-table-column label="操作" width="150"><template #default="{ row }"><el-button size="small" @click="editExtractionShop = { ...row, active: !!row.active }">编辑</el-button><el-button size="small" type="danger" @click="remove(`/api/admin/extraction/shop/${row.id}`, loadExtraction)">删除</el-button></template></el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="赛季管理" name="seasons">
+            <div class="toolbar">
+              <el-button type="primary" @click="editExtractionSeason = { name: '', start_date: '', end_date: '', kill_reward_cash: 0, active: true }">新增赛季</el-button>
+              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="saveExtractionBanner"><el-button>上传入口图</el-button></el-upload>
+            </div>
+            <el-table :data="extraction.seasons" border>
+              <el-table-column prop="name" label="赛季" min-width="150" />
+              <el-table-column prop="start_date" label="开始" width="120" />
+              <el-table-column prop="end_date" label="结束" width="120" />
+              <el-table-column prop="kill_reward_cash" label="人头奖励" width="110" />
+              <el-table-column label="状态" width="90"><template #default="{ row }">{{ row.active ? '启用' : '停用' }}</template></el-table-column>
+              <el-table-column label="操作" width="100"><template #default="{ row }"><el-button size="small" @click="editExtractionSeason = { ...row, active: !!row.active }">编辑</el-button></template></el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="兵种武器" name="rules">
+            <h3>兵种管理</h3>
+            <el-table :data="extraction.classes" border>
+              <el-table-column prop="name" label="名称"><template #default="{ row }"><el-input v-model="row.name" /></template></el-table-column>
+              <el-table-column prop="health" label="血量" width="160"><template #default="{ row }"><el-input-number v-model="row.health" :min="1" /></template></el-table-column>
+              <el-table-column prop="maintenance_fee" label="维护费" width="160"><template #default="{ row }"><el-input-number v-model="row.maintenance_fee" :min="0" /></template></el-table-column>
+            </el-table>
+            <el-button type="primary" class="rule-save" @click="saveExtractionClasses">保存兵种</el-button>
+            <h3>武器管理</h3>
+            <el-table :data="extraction.weapons" border>
+              <el-table-column label="类型" width="120"><template #default="{ row }">{{ weaponTypeName(row.weapon_type) }}</template></el-table-column>
+              <el-table-column prop="name" label="名称" />
+              <el-table-column prop="usage_fee" label="使用费" width="160"><template #default="{ row }"><el-input-number v-model="row.usage_fee" :min="0" :disabled="row.weapon_type !== 'regular'" /></template></el-table-column>
+              <el-table-column prop="durability_cost_percent" label="耐久消耗%" width="180"><template #default="{ row }"><el-input-number v-model="row.durability_cost_percent" :min="0" :max="100" :disabled="row.weapon_type !== 'special'" /></template></el-table-column>
+            </el-table>
+            <el-button type="primary" class="rule-save" @click="saveExtractionWeapons">保存武器</el-button>
+          </el-tab-pane>
+
+          <el-tab-pane label="用户资产" name="assets">
+            <div class="toolbar">
+              <el-select v-model="assetUserId" filterable placeholder="选择用户" style="width: 260px"><el-option v-for="u in extraction.users" :key="u.id" :label="`${u.callsign || u.username}（${u.username}）`" :value="u.id" /></el-select>
+              <el-button @click="loadExtractionAssets">查看</el-button>
+            </div>
+            <div v-if="extractionAssets.profile" class="asset-summary">甬士币：{{ extractionAssets.profile.cash || 0 }}　仓库：{{ extractionAssets.profile.storage_rows }}×{{ extractionAssets.profile.storage_cols }}</div>
+            <el-table :data="[...(extractionAssets.storage || []), ...(extractionAssets.buffer || [])]" border>
+              <el-table-column prop="name" label="物品" />
+              <el-table-column prop="level" label="等级" width="90" />
+              <el-table-column prop="item_category" label="分类" width="110" />
+              <el-table-column prop="location" label="位置" width="100" />
+              <el-table-column prop="quantity" label="数量" width="90" />
+            </el-table>
+          </el-tab-pane>
+
+          <el-tab-pane label="重置记录" name="reset">
+            <div class="toolbar">
+              <el-input v-model="resetConfirmText" placeholder="输入 资产重置 或 数据重置" style="width: 240px" />
+              <el-button type="warning" @click="resetExtraction('assets')">资产重置</el-button>
+              <el-button type="danger" @click="resetExtraction('data')">数据重置</el-button>
+            </div>
+            <el-table :data="extraction.reset_records" border>
+              <el-table-column prop="reset_type" label="类型" width="110" />
+              <el-table-column prop="requested_by_name" label="申请人" width="120" />
+              <el-table-column prop="confirmed_by_name" label="确认人" width="120" />
+              <el-table-column prop="status" label="状态" width="110" />
+              <el-table-column prop="created_at" label="申请时间" min-width="160" />
+              <el-table-column prop="confirmed_at" label="确认时间" min-width="160" />
+            </el-table>
+          </el-tab-pane>
+        </el-tabs>
+      </section>
+
       <section v-if="active === 'system' && !systemActive" class="system-page">
         <p v-if="!systemMenus.length" class="muted">暂无可访问的系统管理功能</p>
       </section>
@@ -411,6 +541,72 @@
       <el-form-item label="上架状态"><el-switch v-model="editLauncher.active" active-text="上架" inactive-text="下架" /></el-form-item>
     </el-form>
     <template #footer><el-button @click="editLauncher = null">取消</el-button><el-button type="primary" @click="saveLauncher">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="extractionItemVisible" title="逃离物品" width="620px">
+    <el-form v-if="editExtractionItem" label-width="100px">
+      <el-form-item label="图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => editExtractionItem.photo_filename = r.data.url"><el-button>上传图片</el-button></el-upload></div><img v-if="editExtractionItem.photo_filename" class="venue-preview" :src="editExtractionItem.photo_filename" /></el-form-item>
+      <el-form-item label="名称"><el-input v-model="editExtractionItem.name" /></el-form-item>
+      <el-form-item label="等级"><el-select v-model="editExtractionItem.level"><el-option label="超凡" value="超凡" /><el-option label="史诗" value="史诗" /><el-option label="精品" value="精品" /><el-option label="普通" value="普通" /></el-select></el-form-item>
+      <el-form-item label="分类"><el-select v-model="editExtractionItem.item_category"><el-option label="常规物品" value="常规物品" /><el-option label="武器" value="武器" /><el-option label="钱币" value="钱币" /></el-select></el-form-item>
+      <el-form-item label="价格区间"><el-input-number v-model="editExtractionItem.min_price" :min="1" /> <span class="range-sep">至</span> <el-input-number v-model="editExtractionItem.max_price" :min="1" /></el-form-item>
+      <el-form-item label="体积"><el-input-number v-model="editExtractionItem.width" :min="1" :max="30" /> <span class="range-sep">×</span> <el-input-number v-model="editExtractionItem.height" :min="1" :max="12" /></el-form-item>
+      <el-form-item label="启用"><el-switch v-model="editExtractionItem.active" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editExtractionItem = null">取消</el-button><el-button type="primary" @click="saveExtractionItem">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="extractionShopVisible" title="逃离商店商品" width="620px">
+    <el-form v-if="editExtractionShop" label-width="100px">
+      <el-form-item label="分类"><el-select v-model="editExtractionShop.category"><el-option label="仓库扩充" value="storage" /><el-option label="常规物品" value="item" /><el-option label="武器" value="weapon" /><el-option label="钱币" value="money" /></el-select></el-form-item>
+      <el-form-item label="名称"><el-input v-model="editExtractionShop.name" /></el-form-item>
+      <el-form-item label="绑定物品"><el-select v-model="editExtractionShop.item_def_id" clearable filterable><el-option v-for="i in extraction.items" :key="i.id" :label="i.name" :value="i.id" /></el-select></el-form-item>
+      <el-form-item label="价格"><el-input-number v-model="editExtractionShop.price" :min="0" /></el-form-item>
+      <el-form-item label="库存"><el-input-number v-model="editExtractionShop.stock" :min="0" /></el-form-item>
+      <el-form-item label="下架日期"><el-date-picker v-model="editExtractionShop.shelf_until" value-format="YYYY-MM-DD" /></el-form-item>
+      <template v-if="editExtractionShop.category === 'storage'">
+        <el-form-item label="仓库尺寸"><el-input-number v-model="editExtractionShop.storage_rows" :min="1" /> <span class="range-sep">×</span> <el-input-number v-model="editExtractionShop.storage_cols" :min="1" /></el-form-item>
+      </template>
+      <el-form-item label="上架"><el-switch v-model="editExtractionShop.active" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editExtractionShop = null">取消</el-button><el-button type="primary" @click="saveExtractionShop">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="extractionSeasonVisible" title="逃离赛季" width="560px">
+    <el-form v-if="editExtractionSeason" label-width="100px">
+      <el-form-item label="名称"><el-input v-model="editExtractionSeason.name" /></el-form-item>
+      <el-form-item label="开始日期"><el-date-picker v-model="editExtractionSeason.start_date" value-format="YYYY-MM-DD" /></el-form-item>
+      <el-form-item label="结束日期"><el-date-picker v-model="editExtractionSeason.end_date" value-format="YYYY-MM-DD" /></el-form-item>
+      <el-form-item label="人头奖励"><el-input-number v-model="editExtractionSeason.kill_reward_cash" :min="0" /></el-form-item>
+      <el-form-item label="启用"><el-switch v-model="editExtractionSeason.active" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editExtractionSeason = null">取消</el-button><el-button type="primary" @click="saveExtractionSeason">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="extractionMatchVisible" title="逃离对局" width="560px">
+    <el-form v-if="editExtractionMatch" label-width="110px">
+      <el-form-item label="名称"><el-input v-model="editExtractionMatch.name" /></el-form-item>
+      <el-form-item label="场地"><el-select v-model="editExtractionMatch.venue_name" clearable filterable><el-option v-for="v in venues" :key="v.id" :label="v.name" :value="v.name" /></el-select></el-form-item>
+      <el-form-item label="小队数"><el-input-number v-model="editExtractionMatch.squad_count" :min="1" :max="20" /></el-form-item>
+      <el-form-item label="每队人数"><el-input-number v-model="editExtractionMatch.squad_limit" :min="1" :max="50" /></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editExtractionMatch = null">取消</el-button><el-button type="primary" @click="saveExtractionMatch">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="extractionMatchDetailVisible" title="对局详情" width="900px">
+    <template v-if="extractionMatchDetail.match">
+      <div class="toolbar">
+        <strong>{{ extractionMatchDetail.match.name }}</strong>
+        <el-tag>{{ extractionStatus(extractionMatchDetail.match.status) }}</el-tag>
+        <el-button type="danger" v-if="extractionMatchDetail.match.status === 'started'" @click="settleExtractionMatch">终局结算</el-button>
+      </div>
+      <el-table :data="extractionMatchDetail.participants || []" border>
+        <el-table-column prop="callsign" label="用户" width="120" />
+        <el-table-column prop="squad_no" label="小队" width="70" />
+        <el-table-column prop="class_name" label="兵种" width="120" />
+        <el-table-column prop="weapon_name" label="武器" width="140" />
+        <el-table-column label="锁定" width="100"><template #default="{ row }">{{ row.locked ? '已锁定' : '未锁定' }}</template></el-table-column>
+        <el-table-column label="撤离" width="90"><template #default="{ row }"><el-switch v-model="row.evacuated" /></template></el-table-column>
+        <el-table-column label="人头" width="130"><template #default="{ row }"><el-input-number v-model="row.kills" :min="0" /></template></el-table-column>
+        <el-table-column label="现金" width="130"><template #default="{ row }"><el-input-number v-model="row.earned_cash" :min="0" /></template></el-table-column>
+        <el-table-column label="操作" width="110"><template #default="{ row }"><el-button size="small" v-if="row.locked && extractionMatchDetail.match.status === 'preparing'" @click="unlockExtractionParticipant(row)">解锁</el-button></template></el-table-column>
+      </el-table>
+    </template>
   </el-dialog>
   <el-dialog v-model="activityVisible" title="活动" width="760px">
     <el-form v-if="activityForm" label-width="130px">
@@ -652,6 +848,17 @@ export default {
       launcherManageFilters: {},
       editLauncher: null,
       systemImages: {},
+      extractionTab: 'matches',
+      extraction: { items: [], shop: [], seasons: [], classes: [], weapons: [], matches: [], users: [], reset_records: [] },
+      extractionEntry: { quantity: 1 },
+      editExtractionItem: null,
+      editExtractionShop: null,
+      editExtractionSeason: null,
+      editExtractionMatch: null,
+      extractionMatchDetail: {},
+      extractionAssets: {},
+      assetUserId: '',
+      resetConfirmText: '',
 	      convertPickerVisible: false,
 	      convertPickerTitle: '',
 	      convertPickerOptions: [],
@@ -685,7 +892,8 @@ export default {
         { key: 'modes', name: '模式管理', permission: 'gameMode:view' },
         { key: 'users', name: '用户管理', permission: 'user:view' },
         { key: 'attendance', name: '出勤统计', permission: 'attendance:view' },
-        { key: 'launchers', name: '发射器管理', permission: 'launcher:view' }
+        { key: 'launchers', name: '发射器管理', permission: 'launcher:view' },
+        { key: 'extraction', name: '逃离管理', permission: 'extraction:view' }
       ].filter(item => !item.permission || this.can(item.permission))
       if (this.systemMenus.length) topItems.push({ key: 'system', name: '系统管理' })
       return topItems
@@ -727,7 +935,14 @@ export default {
         restore: '恢复',
         disable: '禁用',
         resetPassword: '重置密码',
-        export: '导出'
+        export: '导出',
+        item: '物品',
+        shop: '商店',
+        season: '赛季',
+        match: '对局',
+        asset: '资产',
+        reset: '重置',
+        manage: '管理'
       }
       return this.permissionPages.map(page => ({
         id: page.key,
@@ -745,6 +960,11 @@ export default {
     modeVisible: { get() { return !!this.editMode }, set(v) { if (!v) this.editMode = null } },
     userVisible: { get() { return !!this.editUser }, set(v) { if (!v) this.editUser = null } },
     launcherVisible: { get() { return !!this.editLauncher }, set(v) { if (!v) this.editLauncher = null } },
+    extractionItemVisible: { get() { return !!this.editExtractionItem }, set(v) { if (!v) this.editExtractionItem = null } },
+    extractionShopVisible: { get() { return !!this.editExtractionShop }, set(v) { if (!v) this.editExtractionShop = null } },
+    extractionSeasonVisible: { get() { return !!this.editExtractionSeason }, set(v) { if (!v) this.editExtractionSeason = null } },
+    extractionMatchVisible: { get() { return !!this.editExtractionMatch }, set(v) { if (!v) this.editExtractionMatch = null } },
+    extractionMatchDetailVisible: { get() { return !!this.extractionMatchDetail.match }, set(v) { if (!v) this.extractionMatchDetail = {} } },
     activityVisible: { get() { return !!this.activityForm }, set(v) { if (!v) this.activityForm = null } },
     planVisible: { get() { return !!this.planForm }, set(v) { if (!v) this.planForm = null } },
     eventVisible: { get() { return !!this.editEvent }, set(v) { if (!v) this.editEvent = null } }
@@ -778,7 +998,7 @@ export default {
       await Promise.all([this.loadModes(), this.loadVenues(), this.load()])
     },
     load() {
-      return ({ dashboard: this.loadDashboard, activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
+      return ({ dashboard: this.loadDashboard, activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, extraction: this.loadExtraction, system: this.loadSystem }[this.active] || this.loadActivities)()
     },
     loadSystem() {
       if (!this.systemMenus.some(item => item.key === this.systemActive)) {
@@ -787,6 +1007,24 @@ export default {
       if (this.systemActive === 'permissions') return this.loadPermissions()
       if (this.systemActive === 'systemImages') return this.loadSystemImages()
       return Promise.resolve()
+    },
+    async loadExtraction() {
+      this.extraction = await api('/api/admin/extraction/bootstrap')
+      if (!this.assetUserId && this.extraction.users?.length) this.assetUserId = this.extraction.users[0].id
+      if (this.extractionTab === 'assets' && this.assetUserId) await this.loadExtractionAssets()
+    },
+    async loadExtractionAssets() {
+      if (!this.assetUserId) return
+      this.extractionAssets = await api(`/api/admin/extraction/assets?userId=${this.assetUserId}`)
+    },
+    extractionStatus(status) {
+      return ({ preparing: '整备中', started: '进行中', ended: '已结束', cancelled: '已取消' })[status] || status || ''
+    },
+    shopCategoryName(value) {
+      return ({ storage: '仓库扩充', item: '常规物品', weapon: '武器', money: '钱币' })[value] || value || '-'
+    },
+    weaponTypeName(value) {
+      return ({ knife: '刀', regular: '常规武器', special: '特殊武器' })[value] || value || '-'
     },
     switchSystemTab(key) {
       this.systemActive = key
@@ -797,6 +1035,82 @@ export default {
       if (this.dashboardYear) params.set('year', this.dashboardYear)
       this.dashboardOverview = await api(`/api/admin/dashboard/overview?${params.toString()}`)
       this.$nextTick(() => this.renderDashboardCharts())
+    },
+    async openExtractionMatch(row) {
+      this.extractionMatchDetail = await api(`/api/admin/extraction/matches/${row.id}`)
+    },
+    saveExtractionItem() {
+      const method = this.editExtractionItem.id ? 'PUT' : 'POST'
+      const url = this.editExtractionItem.id ? `/api/admin/extraction/items/${this.editExtractionItem.id}` : '/api/admin/extraction/items'
+      return api(url, { method, body: this.editExtractionItem }).then(() => {
+        this.editExtractionItem = null
+        this.loadExtraction()
+      })
+    },
+    saveExtractionShop() {
+      const method = this.editExtractionShop.id ? 'PUT' : 'POST'
+      const url = this.editExtractionShop.id ? `/api/admin/extraction/shop/${this.editExtractionShop.id}` : '/api/admin/extraction/shop'
+      return api(url, { method, body: this.editExtractionShop }).then(() => {
+        this.editExtractionShop = null
+        this.loadExtraction()
+      })
+    },
+    saveExtractionSeason() {
+      const method = this.editExtractionSeason.id ? 'PUT' : 'POST'
+      const url = this.editExtractionSeason.id ? `/api/admin/extraction/seasons/${this.editExtractionSeason.id}` : '/api/admin/extraction/seasons'
+      return api(url, { method, body: this.editExtractionSeason }).then(() => {
+        this.editExtractionSeason = null
+        this.loadExtraction()
+      })
+    },
+    saveExtractionMatch() {
+      const method = this.editExtractionMatch.id ? 'PUT' : 'POST'
+      const url = this.editExtractionMatch.id ? `/api/admin/extraction/matches/${this.editExtractionMatch.id}` : '/api/admin/extraction/matches'
+      return api(url, { method, body: this.editExtractionMatch }).then(() => {
+        this.editExtractionMatch = null
+        this.loadExtraction()
+      })
+    },
+    saveExtractionClasses() {
+      return api('/api/admin/extraction/classes', { method: 'PUT', body: { rules: this.extraction.classes } }).then(() => this.loadExtraction())
+    },
+    saveExtractionWeapons() {
+      return api('/api/admin/extraction/weapons', { method: 'PUT', body: { rules: this.extraction.weapons } }).then(() => this.loadExtraction())
+    },
+    submitExtractionEntry() {
+      return api('/api/admin/extraction/entry', { method: 'POST', body: this.extractionEntry }).then(() => {
+        this.extractionEntry.quantity = 1
+        ElMessage.success('已录入')
+      })
+    },
+    saveExtractionBanner(response) {
+      return api('/api/admin/extraction/banner', { method: 'PUT', body: { banner_filename: response.data.url } }).then(() => this.loadExtraction())
+    },
+    async startExtractionMatch(row) {
+      await api(`/api/admin/extraction/matches/${row.id}/start`, { method: 'POST', body: {} })
+      await this.loadExtraction()
+    },
+    async unlockExtractionParticipant(row) {
+      await api(`/api/admin/extraction/matches/${this.extractionMatchDetail.match.id}/unlock/${row.id}`, { method: 'POST', body: {} })
+      await this.openExtractionMatch(this.extractionMatchDetail.match)
+    },
+    async settleExtractionMatch() {
+      const body = {
+        participants: (this.extractionMatchDetail.participants || []).map(row => ({
+          id: row.id,
+          evacuated: !!row.evacuated,
+          kills: row.kills || 0,
+          earned_cash: row.earned_cash || 0,
+          rewards: []
+        }))
+      }
+      await api(`/api/admin/extraction/matches/${this.extractionMatchDetail.match.id}/settle`, { method: 'POST', body })
+      await this.loadExtraction()
+      await this.openExtractionMatch(this.extractionMatchDetail.match)
+    },
+    async resetExtraction(type) {
+      await api(`/api/admin/extraction/reset/${type}`, { method: 'POST', body: { confirm_text: this.resetConfirmText } })
+      await this.loadExtraction()
     },
     renderDashboardCharts() {
       if (this.active !== 'dashboard') return
@@ -1157,35 +1471,125 @@ export default {
         ElMessage.success('已保存')
       })
     },
+    async saveExtractionItemImage(response) {
+      if (this.editExtractionItem) this.editExtractionItem.photo_filename = response.data.url
+    },
+    async saveExtractionMatchItemImage(response) {
+      if (this.editExtractionShop) this.editExtractionShop.photo_filename = response.data.url
+    },
+    async loadExtractionMatchDetail() {
+      if (!this.extractionMatchDetail.match) return
+      await this.openExtractionMatch(this.extractionMatchDetail.match)
+    },
+    weaponTypeName(value) {
+      return ({ knife: '刀', regular: '常规武器', special: '特殊武器' })[value] || value || '-'
+    },
+    shopCategoryName(value) {
+      return ({ storage: '仓库扩充', item: '常规物品', weapon: '武器', money: '钱币' })[value] || value || '-'
+    },
+    extractionStatus(status) {
+      return ({ preparing: '整备中', started: '进行中', ended: '已结束', cancelled: '已取消' })[status] || status || ''
+    },
+    async saveExtractionItem() {
+      const method = this.editExtractionItem.id ? 'PUT' : 'POST'
+      const url = this.editExtractionItem.id ? `/api/admin/extraction/items/${this.editExtractionItem.id}` : '/api/admin/extraction/items'
+      await api(url, { method, body: this.editExtractionItem })
+      this.editExtractionItem = null
+      await this.loadExtraction()
+    },
+    async saveExtractionShop() {
+      const method = this.editExtractionShop.id ? 'PUT' : 'POST'
+      const url = this.editExtractionShop.id ? `/api/admin/extraction/shop/${this.editExtractionShop.id}` : '/api/admin/extraction/shop'
+      await api(url, { method, body: this.editExtractionShop })
+      this.editExtractionShop = null
+      await this.loadExtraction()
+    },
+    async saveExtractionSeason() {
+      const method = this.editExtractionSeason.id ? 'PUT' : 'POST'
+      const url = this.editExtractionSeason.id ? `/api/admin/extraction/seasons/${this.editExtractionSeason.id}` : '/api/admin/extraction/seasons'
+      await api(url, { method, body: this.editExtractionSeason })
+      this.editExtractionSeason = null
+      await this.loadExtraction()
+    },
+    async saveExtractionMatch() {
+      const method = this.editExtractionMatch.id ? 'PUT' : 'POST'
+      const url = this.editExtractionMatch.id ? `/api/admin/extraction/matches/${this.editExtractionMatch.id}` : '/api/admin/extraction/matches'
+      await api(url, { method, body: this.editExtractionMatch })
+      this.editExtractionMatch = null
+      await this.loadExtraction()
+    },
+    async saveExtractionClasses() {
+      await api('/api/admin/extraction/classes', { method: 'PUT', body: { rules: this.extraction.classes } })
+      await this.loadExtraction()
+    },
+    async saveExtractionWeapons() {
+      await api('/api/admin/extraction/weapons', { method: 'PUT', body: { rules: this.extraction.weapons } })
+      await this.loadExtraction()
+    },
+    async submitExtractionEntry() {
+      await api('/api/admin/extraction/entry', { method: 'POST', body: this.extractionEntry })
+      this.extractionEntry = { quantity: 1 }
+      ElMessage.success('已录入')
+    },
+    async saveExtractionBanner(response) {
+      await api('/api/admin/extraction/banner', { method: 'PUT', body: { banner_filename: response.data.url } })
+      await this.loadExtraction()
+    },
+    async startExtractionMatch(row) {
+      await api(`/api/admin/extraction/matches/${row.id}/start`, { method: 'POST', body: {} })
+      await this.loadExtraction()
+    },
+    async unlockExtractionParticipant(row) {
+      await api(`/api/admin/extraction/matches/${this.extractionMatchDetail.match.id}/unlock/${row.id}`, { method: 'POST', body: {} })
+      await this.loadExtractionMatchDetail()
+    },
+    async settleExtractionMatch() {
+      const body = {
+        participants: (this.extractionMatchDetail.participants || []).map(row => ({
+          id: row.id,
+          evacuated: !!row.evacuated,
+          kills: row.kills || 0,
+          earned_cash: row.earned_cash || 0,
+          rewards: []
+        }))
+      }
+      await api(`/api/admin/extraction/matches/${this.extractionMatchDetail.match.id}/settle`, { method: 'POST', body })
+      await this.loadExtraction()
+      await this.loadExtractionMatchDetail()
+    },
+    async resetExtraction(type) {
+      await api(`/api/admin/extraction/reset/${type}`, { method: 'POST', body: { confirm_text: this.resetConfirmText } })
+      await this.loadExtraction()
+    },
     resetUserPassword(row) {
       return api(`/api/admin/users/${row.id}/reset-password`, { method: 'PUT', body: {} }).then(() => {
         ElMessage.success('已经将密码置为初始密码 nb123456')
         this.loadUsers()
       })
     },
-	    saveEvent() {
-	      return api(`/api/admin/attendance/history-activities${this.editEvent.id ? `/${this.editEvent.id}` : ''}`, { method: this.editEvent.id ? 'PUT' : 'POST', body: this.editEvent }).then(() => { this.editEvent = null; this.loadAttendance() })
-	    },
-	    deleteAttendanceEvent(event) {
-	      return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
-	    },
-	    post(url, callback) { return api(url, { method: 'POST', body: {} }).then(() => callback && callback()) },
-	    remove(url, callback) {
-	      return ElMessageBox.confirm('确认删除？').then(() => api(url, { method: 'DELETE' }).then(() => callback && callback()))
-	    },
+    saveEvent() {
+      return api(`/api/admin/attendance/history-activities${this.editEvent.id ? `/${this.editEvent.id}` : ''}`, { method: this.editEvent.id ? 'PUT' : 'POST', body: this.editEvent }).then(() => { this.editEvent = null; this.loadAttendance() })
+    },
+    deleteAttendanceEvent(event) {
+      return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
+    },
+    post(url, callback) { return api(url, { method: 'POST', body: {} }).then(() => callback && callback()) },
+    remove(url, callback) {
+      return ElMessageBox.confirm('确认删除？').then(() => api(url, { method: 'DELETE' }).then(() => callback && callback()))
+    },
     isPresent(eventId, userId) {
       return this.attendanceRecords.some(r => r.event_id === eventId && r.user_id === userId && r.present)
     },
-	    countPresent(userId) {
-	      return this.attendanceRecords.filter(r => r.user_id === userId && r.present).length
-	    },
-	    eventPresentCount(eventId) {
-	      return this.attendanceRecords.filter(r => r.event_id === eventId && r.present).length
-	    },
-	    eventFormalPresentCount(eventId) {
-	      const formalIds = new Set(this.attendanceUsers.filter(u => !!u.is_regular_member).map(u => Number(u.id)))
-	      return this.attendanceRecords.filter(r => r.event_id === eventId && r.present && formalIds.has(Number(r.user_id))).length
-	    },
+    countPresent(userId) {
+      return this.attendanceRecords.filter(r => r.user_id === userId && r.present).length
+    },
+    eventPresentCount(eventId) {
+      return this.attendanceRecords.filter(r => r.event_id === eventId && r.present).length
+    },
+    eventFormalPresentCount(eventId) {
+      const formalIds = new Set(this.attendanceUsers.filter(u => !!u.is_regular_member).map(u => Number(u.id)))
+      return this.attendanceRecords.filter(r => r.event_id === eventId && r.present && formalIds.has(Number(r.user_id))).length
+    },
     togglePresent(eventId, userId) {
       if (!this.can('attendance:update')) return
       return api('/api/admin/attendance/records', { method: 'PUT', body: { event_id: eventId, user_id: userId, present: !this.isPresent(eventId, userId) } }).then(this.loadAttendance)

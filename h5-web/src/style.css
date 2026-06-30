@@ -54,6 +54,7 @@ select {
 
 .page {
   padding: 16px;
+  min-width: 0;
 }
 
 .topbar {
@@ -202,6 +203,7 @@ select {
   gap: 14px;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
 }
 
 .section-title {
@@ -1107,6 +1109,224 @@ select:focus {
   color: #bbf7d0;
 }
 
+.extraction-page {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.extraction-title {
+  align-items: flex-start;
+}
+
+.extraction-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.extraction-stats div,
+.extraction-panel,
+.extraction-shop-card,
+.match-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.extraction-stats div {
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.extraction-stats span,
+.extraction-shop-card span,
+.match-card span,
+.match-card small,
+.match-member small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.extraction-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+  font-size: 18px;
+}
+
+.extraction-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.extraction-tabs button {
+  min-height: 38px;
+  color: var(--muted);
+  background: rgba(15, 23, 42, .72);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.extraction-tabs button.active {
+  color: #bbf7d0;
+  border-color: rgba(34, 197, 94, .4);
+}
+
+.extraction-panel {
+  padding: 14px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.extraction-panel h3 {
+  margin: 0 0 10px;
+}
+
+.sell-box {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 72px;
+  padding: 12px;
+  color: var(--muted);
+  background: rgba(2, 6, 23, .42);
+  border: 1px dashed rgba(148, 163, 184, .42);
+  border-radius: 12px;
+}
+
+.sell-box.active {
+  border-color: rgba(34, 197, 94, .48);
+}
+
+.sell-chip {
+  min-height: 30px;
+  padding: 0 10px;
+  color: #dcfce7;
+  background: rgba(34, 197, 94, .16);
+  border: 1px solid rgba(34, 197, 94, .32);
+  border-radius: 999px;
+}
+
+.warehouse-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.warehouse-grid {
+  position: relative;
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(2, 6, 23, .45);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 12px;
+}
+
+.warehouse-cell {
+  width: 34px;
+  height: 34px;
+  background: rgba(15, 23, 42, .68);
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 4px;
+}
+
+.warehouse-item {
+  z-index: 2;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 3px;
+  color: #fff;
+  background: rgba(30, 41, 59, .95);
+  border: 1px solid rgba(226, 232, 240, .28);
+  border-radius: 6px;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.warehouse-item.selected {
+  outline: 2px solid #22c55e;
+}
+
+.warehouse-item img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+
+.warehouse-item strong,
+.warehouse-item span,
+.warehouse-item small {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warehouse-item.level-超凡 { border-color: #facc15; }
+.warehouse-item.level-史诗 { border-color: #c084fc; }
+.warehouse-item.level-精品 { border-color: #38bdf8; }
+.warehouse-item.level-普通 { border-color: #94a3b8; }
+
+.extraction-shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.extraction-shop-card,
+.match-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.match-card {
+  margin-bottom: 8px;
+}
+
+.prep-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.match-squad {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  background: rgba(2, 6, 23, .32);
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 12px;
+}
+
+.match-member {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  background: rgba(15, 23, 42, .62);
+  border-radius: 10px;
+}
+
 .tabs {
   position: fixed;
   bottom: 0;
@@ -1131,6 +1351,37 @@ select:focus {
 .tab.active {
   color: #bbf7d0;
   font-weight: 700;
+}
+
+.nav-with-center {
+  align-items: stretch;
+}
+
+.center-tab {
+  display: flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.center-tab span {
+  position: absolute;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  color: #052e16;
+  font-weight: 900;
+  background: linear-gradient(135deg, #86efac, #22c55e);
+  border: 5px solid #020617;
+  border-radius: 50%;
+  box-shadow: 0 12px 30px rgba(34, 197, 94, .35);
+}
+
+.center-tab.active span {
+  color: #02140a;
+  background: linear-gradient(135deg, #bbf7d0, #4ade80);
 }
 
 .squad {
@@ -1213,5 +1464,9 @@ select:focus {
 
   .activity-rental-grid {
     grid-template-columns: 1fr;
+  }
+
+  .extraction-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

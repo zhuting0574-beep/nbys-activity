@@ -14,11 +14,11 @@ spring:
         - id: activity-center-admin
           uri: lb://activity-center
           predicates:
-            - Path=/api/admin/dashboard,/api/admin/dashboard/**,/api/admin/activities,/api/admin/activities/**,/api/admin/activity-plans,/api/admin/activity-plans/**,/api/admin/attendance,/api/admin/attendance/**,/api/admin/launcher-rentals,/api/admin/launcher-rentals/**,/api/admin/launchers,/api/admin/launchers/**,/api/admin/system,/api/admin/system/**
+            - Path=/api/admin/dashboard,/api/admin/dashboard/**,/api/admin/activities,/api/admin/activities/**,/api/admin/activity-plans,/api/admin/activity-plans/**,/api/admin/attendance,/api/admin/attendance/**,/api/admin/launcher-rentals,/api/admin/launcher-rentals/**,/api/admin/launchers,/api/admin/launchers/**,/api/admin/system,/api/admin/system/**,/api/admin/extraction,/api/admin/extraction/**
         - id: activity-center-h5
           uri: lb://activity-center
           predicates:
-            - Path=/api/h5/activities,/api/h5/activities/**,/api/h5/activity-plans,/api/h5/activity-plans/**,/api/h5/attendance,/api/h5/attendance/**,/api/h5/launcher-rentals,/api/h5/launcher-rentals/**,/api/h5/notifications,/api/h5/notifications/**
+            - Path=/api/h5/activities,/api/h5/activities/**,/api/h5/activity-plans,/api/h5/activity-plans/**,/api/h5/attendance,/api/h5/attendance/**,/api/h5/launcher-rentals,/api/h5/launcher-rentals/**,/api/h5/notifications,/api/h5/notifications/**,/api/h5/extraction,/api/h5/extraction/**
         - id: user-center
           uri: lb://user-center
           predicates:

@@ -310,6 +310,147 @@
       <div v-if="rentalItems.length === 0" class="empty-state">暂无发射器出租信息</div>
     </div>
 
+    <div v-if="tab === 'extraction' && !selectedExtractionMatch" class="page extraction-page">
+      <div class="section-title extraction-title">
+        <div>
+          <h2>逃离西撇镇</h2>
+          <p class="muted">甬士币 {{ extraction.profile.cash || 0 }} · 仓库 {{ extraction.storage_rows || 8 }}×{{ extraction.storage_cols || 12 }}</p>
+        </div>
+        <button class="btn secondary" @click="loadExtraction">刷新</button>
+      </div>
+
+      <div class="extraction-stats">
+        <div><span>总对局</span><strong>{{ extraction.stats?.total?.match_count || 0 }}</strong></div>
+        <div><span>总撤离率</span><strong>{{ extraction.stats?.total?.evac_rate || 0 }}%</strong></div>
+        <div><span>赛季对局</span><strong>{{ extraction.stats?.season?.match_count || 0 }}</strong></div>
+        <div><span>赛季撤离</span><strong>{{ extraction.stats?.season?.evac_rate || 0 }}%</strong></div>
+      </div>
+
+      <div class="extraction-tabs">
+        <button :class="{ active: extractionView === 'warehouse' }" @click="extractionView = 'warehouse'">仓库</button>
+        <button :class="{ active: extractionView === 'shop' }" @click="extractionView = 'shop'; loadExtractionShop()">商店</button>
+        <button :class="{ active: extractionView === 'matches' }" @click="extractionView = 'matches'; loadExtractionMatches()">对局</button>
+      </div>
+
+      <template v-if="extractionView === 'warehouse'">
+        <section class="extraction-panel">
+          <div class="panel-head">
+            <div>
+              <h3>出售箱</h3>
+              <p class="muted">拖入物品，或点选物品后点击出售箱。</p>
+            </div>
+            <button class="btn" :disabled="!sellBox.length" @click="sellExtractionItems">全部出售</button>
+          </div>
+          <div class="sell-box" :class="{ active: sellBox.length }" @dragover.prevent @drop="dropToSellBox" @click="addSelectedToSellBox">
+            <span v-if="!sellBox.length">暂无物品</span>
+            <button v-for="item in sellBoxItems" :key="item.id" class="sell-chip" @click.stop="removeSellItem(item.id)">{{ item.name }}</button>
+          </div>
+        </section>
+
+        <section class="extraction-panel">
+          <div class="panel-head"><h3>缓冲区仓库</h3><span class="muted">{{ extraction.buffer_rows || 16 }}×{{ extraction.buffer_cols || 48 }}</span></div>
+          <div class="warehouse-scroll">
+            <div class="warehouse-grid buffer-grid" :style="gridStyle(extraction.buffer_rows || 16, extraction.buffer_cols || 48)" @dragover.prevent @drop="dropExtractionItem($event, 'buffer')" @click="clickWarehouseCell($event, 'buffer')">
+              <div v-for="n in (extraction.buffer_rows || 16) * (extraction.buffer_cols || 48)" :key="`b${n}`" class="warehouse-cell" :data-row="cellRow(n, extraction.buffer_cols || 48)" :data-col="cellCol(n, extraction.buffer_cols || 48)"></div>
+              <div v-for="item in extraction.buffer" :key="item.id" class="warehouse-item" draggable="true" :class="[`level-${item.level}`, { selected: selectedExtractionItem === item.id }]" :style="itemStyle(item)" @dragstart="dragExtractionItem(item)" @click.stop="selectExtractionItem(item)">
+                <img v-if="item.photo_filename" :src="item.photo_filename" alt="" />
+                <strong>{{ item.name }}</strong>
+                <span v-if="item.quantity > 1">×{{ item.quantity }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="extraction-panel">
+          <div class="panel-head"><h3>个人仓库</h3><span class="muted">{{ extraction.storage_rows || 8 }}×{{ extraction.storage_cols || 12 }}</span></div>
+          <div class="warehouse-scroll">
+            <div class="warehouse-grid" :style="gridStyle(extraction.storage_rows || 8, extraction.storage_cols || 12)" @dragover.prevent @drop="dropExtractionItem($event, 'storage')" @click="clickWarehouseCell($event, 'storage')">
+              <div v-for="n in (extraction.storage_rows || 8) * (extraction.storage_cols || 12)" :key="`s${n}`" class="warehouse-cell" :data-row="cellRow(n, extraction.storage_cols || 12)" :data-col="cellCol(n, extraction.storage_cols || 12)"></div>
+              <div v-for="item in extraction.storage" :key="item.id" class="warehouse-item" draggable="true" :class="[`level-${item.level}`, { selected: selectedExtractionItem === item.id }]" :style="itemStyle(item)" @dragstart="dragExtractionItem(item)" @click.stop="selectExtractionItem(item)">
+                <img v-if="item.photo_filename" :src="item.photo_filename" alt="" />
+                <strong>{{ item.name }}</strong>
+                <span v-if="item.quantity > 1">×{{ item.quantity }}</span>
+                <small v-if="item.durability_percent < 100">{{ item.durability_percent }}%</small>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <template v-if="extractionView === 'shop'">
+        <div class="extraction-shop-grid">
+          <div v-for="item in extractionShop" :key="item.id" class="extraction-shop-card">
+            <strong>{{ item.name }}</strong>
+            <span>{{ shopCategoryName(item.category) }} · {{ item.price }} 甬士币</span>
+            <span>库存 {{ item.stock }}</span>
+            <button class="btn" @click="buyExtractionShopItem(item)">购买</button>
+          </div>
+          <div v-if="!extractionShop.length" class="empty-state">暂无上架商品</div>
+        </div>
+      </template>
+
+      <template v-if="extractionView === 'matches'">
+        <section class="extraction-panel">
+          <div class="panel-head"><h3>活跃对局</h3><button class="btn secondary" @click="loadExtractionMatches">刷新</button></div>
+          <div v-for="match in extractionMatches.active" :key="match.id" class="match-card" @click="openExtractionMatch(match.id)">
+            <strong>{{ match.name }}</strong>
+            <span>{{ match.venue_name || '未选择场地' }} · {{ extractionStatus(match.status) }}</span>
+            <small>{{ match.participant_count || 0 }} 人</small>
+          </div>
+          <div v-if="!extractionMatches.active.length" class="empty-state">暂无活跃对局</div>
+        </section>
+        <section class="extraction-panel">
+          <div class="panel-head"><h3>我的对局记录</h3></div>
+          <div v-for="match in extractionMatches.records" :key="match.id" class="match-card" @click="openExtractionMatch(match.id)">
+            <strong>{{ match.name }}</strong>
+            <span>{{ formatDateTime(match.ended_at) }} · 已结束</span>
+          </div>
+          <div v-if="!extractionMatches.records.length" class="empty-state">暂无对局记录</div>
+        </section>
+      </template>
+    </div>
+
+    <div v-if="tab === 'extraction' && selectedExtractionMatch" class="page extraction-page">
+      <section class="extraction-panel">
+        <div class="panel-head">
+          <div>
+            <h2>{{ extractionMatch.match?.name }}</h2>
+            <p class="muted">{{ extractionMatch.match?.venue_name || '未选择场地' }} · {{ extractionStatus(extractionMatch.match?.status) }}</p>
+          </div>
+          <button class="btn secondary" @click="selectedExtractionMatch = null">返回</button>
+        </div>
+        <button v-if="!extractionMatch.participant && extractionMatch.match?.status === 'preparing'" class="btn" @click="joinExtractionMatch">加入对局</button>
+      </section>
+
+      <section v-if="extractionMatch.participant && extractionMatch.match?.status === 'preparing'" class="extraction-panel">
+        <h3>我的开局整备</h3>
+        <select v-model="extractionPrep.squad_no">
+          <option v-for="n in extractionMatch.match?.squad_count || 1" :key="n" :value="n">小队 {{ n }}</option>
+        </select>
+        <select v-model="extractionPrep.class_rule_id">
+          <option v-for="rule in extractionMatch.classes || []" :key="rule.id" :value="rule.id">{{ rule.name }}｜血量{{ rule.health }}｜维护费{{ rule.maintenance_fee }}</option>
+        </select>
+        <select v-model="extractionPrep.weapon_choice">
+          <option v-for="weapon in extractionMatch.weapons || []" :key="weapon.value" :value="weapon.value">{{ weapon.label }}</option>
+        </select>
+        <div class="prep-actions">
+          <button class="btn secondary" :disabled="extractionMatch.participant.locked" @click="saveExtractionPrep">保存整备</button>
+          <button class="btn" :disabled="extractionMatch.participant.locked" @click="lockExtractionPrep">{{ extractionMatch.participant.locked ? '已锁定' : '锁定整备' }}</button>
+        </div>
+      </section>
+
+      <section class="extraction-panel">
+        <h3>小队与人员</h3>
+        <div v-for="n in extractionMatch.match?.squad_count || 1" :key="n" class="match-squad">
+          <strong>小队 {{ n }}</strong>
+          <div v-for="p in extractionParticipantsBySquad(n)" :key="p.id" class="match-member">
+            <span>{{ p.callsign || p.username }}</span>
+            <small>{{ p.class_name || '已隐藏' }} / {{ p.weapon_name || '已隐藏' }} / {{ p.locked ? '已锁定' : '未锁定' }}</small>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div v-if="tab === 'notifications'" class="page">
       <h2>通知</h2>
       <div v-for="notice in notifications" :key="notice.id" class="card notice-card" :class="{ unread: !notice.read_at }">
@@ -372,9 +513,12 @@
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">浙ICP 备2026046394</a>
     </footer>
 
-    <div class="tabs">
+    <div class="tabs nav-with-center">
       <div class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'; selectedActivity = null; selectedPlan = null; loadActivities()">活动</div>
       <div class="tab" :class="{ active: tab === 'rentals' }" @click="tab = 'rentals'; loadRentals()">发射器租赁</div>
+      <div class="tab center-tab" :class="{ active: tab === 'extraction' }" @click="openExtraction">
+        <span>逃离</span>
+      </div>
       <div class="tab" :class="{ active: tab === 'notifications' }" @click="openNotifications">
         通知<span v-if="unreadCount" class="tab-dot"></span>
       </div>
@@ -495,6 +639,16 @@ export default {
       showQr: false,
       qrDataUrl: '',
       notifications: [],
+      extraction: { profile: {}, stats: {}, buffer: [], storage: [], buffer_rows: 16, buffer_cols: 48, storage_rows: 8, storage_cols: 12 },
+      extractionView: 'warehouse',
+      extractionShop: [],
+      extractionMatches: { active: [], records: [] },
+      selectedExtractionMatch: null,
+      extractionMatch: {},
+      extractionPrep: {},
+      draggedExtractionItem: null,
+      selectedExtractionItem: null,
+      sellBox: [],
       toastTimer: null,
       toast: { show: false, message: '' },
       confirmDialog: { show: false, title: '确认操作', message: '', resolve: null },
@@ -534,6 +688,10 @@ export default {
     },
     displayLogoUrl() {
       return this.systemImages.login_logo_url || this.logoUrl
+    },
+    sellBoxItems() {
+      const all = [...(this.extraction.buffer || []), ...(this.extraction.storage || [])]
+      return this.sellBox.map(id => all.find(item => Number(item.id) === Number(id))).filter(Boolean)
     },
     authPageStyle() {
       const url = this.systemImages.login_background_url
@@ -912,6 +1070,161 @@ export default {
         this.showToast('已确认租借')
         await this.loadMine()
       })
+    },
+    async openExtraction() {
+      this.selectedActivity = null
+      this.selectedPlan = null
+      this.selectedExtractionMatch = null
+      try {
+        await this.loadExtraction()
+        this.tab = 'extraction'
+      } catch (error) {
+        this.showToast(error.message || '逃离页面加载失败')
+      }
+    },
+    async loadExtraction() {
+      this.extraction = await api('/api/h5/extraction/overview')
+      this.sellBox = this.sellBox.filter(id => this.findExtractionItem(id))
+      if (this.extractionView === 'shop') await this.loadExtractionShop()
+      if (this.extractionView === 'matches') await this.loadExtractionMatches()
+    },
+    async loadExtractionShop() {
+      this.extractionShop = await api('/api/h5/extraction/shop')
+    },
+    async loadExtractionMatches() {
+      this.extractionMatches = await api('/api/h5/extraction/matches')
+    },
+    gridStyle(rows, cols) {
+      return {
+        gridTemplateRows: `repeat(${rows}, 34px)`,
+        gridTemplateColumns: `repeat(${cols}, 34px)`
+      }
+    },
+    cellRow(n, cols) {
+      return Math.floor((n - 1) / cols) + 1
+    },
+    cellCol(n, cols) {
+      return ((n - 1) % cols) + 1
+    },
+    itemStyle(item) {
+      return {
+        gridRow: `${item.row || 1} / span ${item.height || 1}`,
+        gridColumn: `${item.col || 1} / span ${item.width || 1}`
+      }
+    },
+    dragExtractionItem(item) {
+      this.draggedExtractionItem = item
+    },
+    selectExtractionItem(item) {
+      this.selectedExtractionItem = Number(item.id)
+      this.showToast('已选择物品，请点击目标格子或出售箱')
+    },
+    async dropExtractionItem(event, location) {
+      const item = this.draggedExtractionItem
+      this.draggedExtractionItem = null
+      if (!item) return
+      const cell = this.targetWarehouseCell(event)
+      if (!cell) return
+      await this.moveExtractionItem(item.id, location, cell.row, cell.col)
+    },
+    async clickWarehouseCell(event, location) {
+      if (!this.selectedExtractionItem) return
+      const cell = this.targetWarehouseCell(event)
+      if (!cell) return
+      const id = this.selectedExtractionItem
+      this.selectedExtractionItem = null
+      await this.moveExtractionItem(id, location, cell.row, cell.col)
+    },
+    targetWarehouseCell(event) {
+      const cell = event.target.closest('.warehouse-cell')
+      if (cell) return { row: Number(cell.dataset.row), col: Number(cell.dataset.col) }
+      const grid = event.currentTarget
+      const rect = grid.getBoundingClientRect()
+      const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length
+      const cellSize = rect.width / cols
+      return {
+        row: Math.max(1, Math.floor((event.clientY - rect.top) / cellSize) + 1),
+        col: Math.max(1, Math.floor((event.clientX - rect.left) / cellSize) + 1)
+      }
+    },
+    async moveExtractionItem(id, location, row, col) {
+      await api(`/api/h5/extraction/inventory/${id}/place`, { method: 'POST', body: { location, row, col } })
+      await this.loadExtraction()
+    },
+    findExtractionItem(id) {
+      return [...(this.extraction.buffer || []), ...(this.extraction.storage || [])].find(item => Number(item.id) === Number(id))
+    },
+    dropToSellBox(event) {
+      const item = this.draggedExtractionItem
+      this.draggedExtractionItem = null
+      if (item) this.addSellItem(item.id)
+    },
+    addSelectedToSellBox() {
+      if (!this.selectedExtractionItem) return
+      this.addSellItem(this.selectedExtractionItem)
+      this.selectedExtractionItem = null
+    },
+    addSellItem(id) {
+      if (!this.sellBox.includes(Number(id))) this.sellBox.push(Number(id))
+    },
+    removeSellItem(id) {
+      this.sellBox = this.sellBox.filter(item => Number(item) !== Number(id))
+    },
+    async sellExtractionItems() {
+      if (!this.sellBox.length) return
+      await api('/api/h5/extraction/inventory/sell', { method: 'POST', body: { item_ids: this.sellBox } })
+      this.sellBox = []
+      await this.loadExtraction()
+      this.showToast('出售成功')
+    },
+    shopCategoryName(value) {
+      return ({ storage: '仓库扩充', item: '常规物品', weapon: '武器', money: '钱币' })[value] || '常规物品'
+    },
+    async buyExtractionShopItem(item) {
+      if (!(await this.askConfirm(`确认购买 ${item.name}？`))) return
+      await api(`/api/h5/extraction/shop/${item.id}/buy`, { method: 'POST' })
+      await this.loadExtraction()
+      await this.loadExtractionShop()
+      this.showToast('购买成功')
+    },
+    extractionStatus(status) {
+      return ({ preparing: '整备中', started: '进行中', ended: '已结束', cancelled: '已取消' })[status] || status || ''
+    },
+    async openExtractionMatch(id) {
+      this.selectedExtractionMatch = id
+      this.extractionMatch = await api(`/api/h5/extraction/matches/${id}`)
+      this.prepareExtractionPrep()
+    },
+    prepareExtractionPrep() {
+      const p = this.extractionMatch.participant || {}
+      const weapon = (this.extractionMatch.weapons || []).find(item => {
+        if (p.weapon_inventory_item_id && item.inventory_item_id) return Number(item.inventory_item_id) === Number(p.weapon_inventory_item_id)
+        return Number(item.id) === Number(p.weapon_rule_id) && !item.inventory_item_id
+      })
+      this.extractionPrep = {
+        squad_no: p.squad_no || 1,
+        class_rule_id: p.class_rule_id || this.extractionMatch.classes?.[0]?.id || '',
+        weapon_choice: weapon?.value || this.extractionMatch.weapons?.[0]?.value || ''
+      }
+    },
+    async joinExtractionMatch() {
+      await api(`/api/h5/extraction/matches/${this.selectedExtractionMatch}/join`, { method: 'POST' })
+      await this.openExtractionMatch(this.selectedExtractionMatch)
+      this.showToast('已加入对局')
+    },
+    async saveExtractionPrep() {
+      await api(`/api/h5/extraction/matches/${this.selectedExtractionMatch}/configure`, { method: 'POST', body: this.extractionPrep })
+      await this.openExtractionMatch(this.selectedExtractionMatch)
+      this.showToast('整备已保存')
+    },
+    async lockExtractionPrep() {
+      if (!(await this.askConfirm('锁定后不能自行修改，确认锁定？'))) return
+      await api(`/api/h5/extraction/matches/${this.selectedExtractionMatch}/lock`, { method: 'POST' })
+      await this.openExtractionMatch(this.selectedExtractionMatch)
+      this.showToast('已锁定')
+    },
+    extractionParticipantsBySquad(squadNo) {
+      return (this.extractionMatch.participants || []).filter(item => Number(item.squad_no) === Number(squadNo))
     },
     openProfileDialog() {
       this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }

@@ -30,6 +30,7 @@ public class PermissionController {
         add(pages, "launcher", "发射器管理", "view,update,delete");
         add(pages, "attendance", "出勤统计", "view,create,update,delete,export");
         add(pages, "systemImage", "图片管理", "view,update");
+        add(pages, "extraction", "逃离管理", "view,item,shop,season,match,asset,reset,manage");
         add(pages, "permission", "权限管理", "view,update");
         return ApiResponse.ok(pages);
     }
