@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -32,7 +33,7 @@ public class UserAdminController {
         String r = role == null ? "" : role.trim();
         Integer d = disabled == null ? -1 : disabled;
         return ApiResponse.ok(Rows.list(jdbc,
-                "select u.*, i.username inviter_name, i.callsign inviter_callsign from users u left join users i on u.invited_by_id=i.id " +
+                "select u.id,u.username,u.callsign,u.role,u.disabled,u.is_regular_member,u.invited_by_id,u.created_at,u.last_seen, i.username inviter_name, i.callsign inviter_callsign from users u left join users i on u.invited_by_id=i.id " +
                 "where (?='' or u.username like concat('%',?,'%') or u.callsign like concat('%',?,'%')) " +
                         "and u.username not like '已删除用户%' and (?='' or u.role=?) and (?=-1 or u.disabled=?) order by u.id desc",
                 q, q, q, r, r, d, d));
@@ -57,10 +58,16 @@ public class UserAdminController {
     }
 
     @PutMapping("/users/{id}/reset-password")
-    public ApiResponse<Void> resetPassword(@PathVariable int id, HttpServletRequest req) {
+    public ApiResponse<Map<String, Object>> resetPassword(@PathVariable int id, HttpServletRequest req) {
         auth.require(req, "user:resetPassword");
-        jdbc.update("update users set password_hash=? where id=?", passwords.encodeDefaultPassword(), id);
-        return ApiResponse.ok(null);
+        if (Rows.one(jdbc, "select id from users where id=? and disabled=0", id) == null) throw new IllegalArgumentException("用户不存在或已禁用");
+        String temporaryPassword = passwords.generateTemporaryPassword();
+        jdbc.update("update users set password_hash=?, must_change_password=1, temp_password_expires_at=date_add(now(), interval 24 hour) where id=?",
+                passwords.encode(temporaryPassword), id);
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("temporary_password", temporaryPassword);
+        result.put("expires_in_hours", 24);
+        return ApiResponse.ok(result);
     }
 
     @DeleteMapping("/users/{id}")
@@ -73,7 +80,7 @@ public class UserAdminController {
         if ("superadmin".equals(String.valueOf(user.get("role"))) || "admin".equals(String.valueOf(user.get("role")))) {
             throw new IllegalArgumentException("超级管理员账号不允许删除");
         }
-        jdbc.update("update users set username=?, callsign=?, avatar_url=null, phone=null, id_card=null, role='guest', disabled=1, is_regular_member=0 where id=?",
+        jdbc.update("update users set username=?, callsign=?, avatar_url=null, role='guest', disabled=1, is_regular_member=0 where id=?",
                 "已删除用户" + id, "已删除" + id, id);
         return ApiResponse.ok(null);
     }

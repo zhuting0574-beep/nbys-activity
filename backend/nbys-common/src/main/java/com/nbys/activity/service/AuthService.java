@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 
 import javax.servlet.http.HttpServletRequest;
 import java.security.MessageDigest;
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -25,6 +26,9 @@ public class AuthService {
         if (user == null || !passwords.matches(password, String.valueOf(user.get("password_hash")))) {
             throw new SecurityException("账号或密码错误");
         }
+        if (truthy(user.get("must_change_password")) && temporaryPasswordExpired(user.get("temp_password_expires_at"))) {
+            throw new SecurityException("临时密码已过期，请联系管理员重新重置");
+        }
         String role = String.valueOf(user.get("role"));
         if (admin && ("guest".equals(role) || "user".equals(role) && !hasAnyBackofficeAccess((Number) user.get("id")))) {
             throw new SecurityException("无后管访问权限");
@@ -33,22 +37,42 @@ public class AuthService {
         sessions.put(token, ((Number) user.get("id")).intValue());
         user.remove("password_hash");
         user.put("invite_code", inviteCode(user));
-        user.put("profile_complete", profileComplete(user));
         user.put("token", token);
         user.put("permissions", permissions(role));
         return user;
     }
 
     public Map<String, Object> current(HttpServletRequest request) {
+        Map<String, Object> user = currentForPasswordChange(request);
+        if (truthy(user.get("must_change_password"))) throw new SecurityException("请先修改临时密码");
+        return user;
+    }
+
+    public Map<String, Object> currentForPasswordChange(HttpServletRequest request) {
         Integer id = currentUserId(request);
         if (id == null) throw new SecurityException("未登录");
         Map<String, Object> user = Rows.one(jdbc, "select * from users where id=?", id);
         if (user == null) throw new SecurityException("用户不存在");
         user.remove("password_hash");
         user.put("invite_code", inviteCode(user));
-        user.put("profile_complete", profileComplete(user));
         user.put("permissions", permissions(String.valueOf(user.get("role"))));
         return user;
+    }
+
+    private boolean temporaryPasswordExpired(Object value) {
+        if (value == null) return true;
+        if (value instanceof Timestamp) return ((Timestamp) value).before(new Timestamp(System.currentTimeMillis()));
+        try {
+            return Timestamp.valueOf(String.valueOf(value).replace('T', ' ')).before(new Timestamp(System.currentTimeMillis()));
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    private boolean truthy(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
     public Integer currentUserId(HttpServletRequest request) {
@@ -114,14 +138,6 @@ public class AuthService {
 
     public static String inviteCode(Map<String, Object> user) {
         return md5(String.valueOf(user.get("callsign")) + String.valueOf(user.get("username"))).substring(0, 10);
-    }
-
-    private boolean profileComplete(Map<String, Object> user) {
-        return notBlank(user.get("phone")) && notBlank(user.get("id_card"));
-    }
-
-    private boolean notBlank(Object value) {
-        return value != null && !String.valueOf(value).trim().isEmpty();
     }
 
     private static String md5(String value) {

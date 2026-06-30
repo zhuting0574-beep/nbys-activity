@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
 import os
-import re
 import uuid
 from datetime import datetime
 
@@ -44,28 +43,9 @@ def text(value):
     return "" if value is None else str(value).strip()
 
 
-def normalized_phone(value):
-    return text(value).replace(" ", "")
-
-
-def normalized_id_card(value):
-    return text(value).replace(" ", "").upper()
-
-
-def validate_identity(phone, id_card):
-    if not re.fullmatch(r"1\d{10}", phone):
-        raise ValueError("请输入合法手机号")
-    if not re.fullmatch(r"\d{17}[0-9X]", id_card):
-        raise ValueError("请输入合法身份证号")
-
-
 def invite_code(user):
     base = f"{text(user.get('callsign'))}{text(user.get('username'))}"
     return hashlib.md5(base.encode("utf-8")).hexdigest()[:10]
-
-
-def profile_complete(user):
-    return bool(text(user.get("phone"))) and bool(text(user.get("id_card")))
 
 
 def permissions(role):
@@ -111,7 +91,6 @@ def public_user(user):
     out = dict(user)
     out.pop("password_hash", None)
     out["invite_code"] = invite_code(out)
-    out["profile_complete"] = profile_complete(out)
     out["permissions"] = permissions(text(out.get("role")))
     return out
 
@@ -153,17 +132,10 @@ def register():
     username = text(payload.get("username"))
     callsign = text(payload.get("callsign"))
     password = text(payload.get("password"))
-    phone = normalized_phone(payload.get("phone"))
-    id_card = normalized_id_card(payload.get("id_card"))
     avatar_url = text(payload.get("avatar_url"))
     invite = text(payload.get("invite_code"))
     if not username or not password:
         return fail("用户名、密码不能为空")
-    try:
-        validate_identity(phone, id_card)
-    except ValueError as exc:
-        return fail(str(exc))
-
     with db_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("select id from users where username=%s", (username,))
@@ -173,10 +145,6 @@ def register():
                 cur.execute("select id from users where callsign=%s", (callsign,))
                 if cur.fetchone():
                     return fail("呼号已存在")
-            cur.execute("select id from users where id_card=%s", (id_card,))
-            if cur.fetchone():
-                return fail("该身份证号已注册，禁止重复注册")
-
             invited_by_id = None
             if invite:
                 cur.execute("select id,username,callsign from users where disabled=0")
@@ -190,12 +158,12 @@ def register():
             cur.execute(
                 """
                 insert into users(
-                    username,callsign,avatar_url,phone,id_card,password_hash,role,disabled,
+                    username,callsign,avatar_url,password_hash,role,disabled,
                     is_regular_member,attendance_manager,extraction_authorized,extraction_manager,
                     invited_by_id,created_at,last_seen
-                ) values(%s,%s,%s,%s,%s,%s,'user',0,0,0,0,0,%s,now(),now())
+                ) values(%s,%s,%s,%s,'user',0,0,0,0,0,%s,now(),now())
                 """,
-                (username, callsign, avatar_url, phone, id_card, encode_password(password), invited_by_id),
+                (username, callsign, avatar_url, encode_password(password), invited_by_id),
             )
     return ok(None)
 

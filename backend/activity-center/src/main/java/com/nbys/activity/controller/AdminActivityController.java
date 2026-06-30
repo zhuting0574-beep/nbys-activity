@@ -165,18 +165,16 @@ public class AdminActivityController {
     public void exportEnrollments(@PathVariable int id, HttpServletRequest req, HttpServletResponse response) throws IOException {
         auth.require(req, "activity:view");
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select u.username,u.phone,u.id_card from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.id",
+                "select u.username from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.id",
                 id);
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("报名表");
-        writeHeader(sheet, "序号", "名字", "手机号", "身份证号");
+        writeHeader(sheet, "序号", "名字");
         int i = 1;
         for (Map<String, Object> item : rows) {
             Row row = sheet.createRow(i);
             row.createCell(0).setCellValue(i);
             row.createCell(1).setCellValue(text(item.get("username")));
-            row.createCell(2).setCellValue(text(item.get("phone")));
-            row.createCell(3).setCellValue(text(item.get("id_card")));
             i++;
         }
         writeWorkbook(response, workbook, "活动报名表.xlsx");

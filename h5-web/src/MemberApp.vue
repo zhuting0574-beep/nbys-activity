@@ -23,12 +23,10 @@
         <h2>注册</h2>
         <input v-model="registerForm.username" placeholder="用户名" required />
         <input v-model="registerForm.callsign" placeholder="呼号（选填）" />
-        <input v-model="registerForm.phone" placeholder="手机号" required />
-        <input v-model="registerForm.id_card" placeholder="身份证号" required />
         <input v-model="registerForm.password" placeholder="密码" type="password" required />
         <input v-model="registerForm.confirm_password" placeholder="确认密码" type="password" />
         <input v-model="registerForm.invite_code" placeholder="邀请码（选填）" />
-        <p class="muted">用户名、手机号、身份证号、密码为必填项</p>
+        <p class="muted">用户名、密码为必填项</p>
         <label class="upload-field">
           <span>头像</span>
           <input type="file" accept="image/*" @change="uploadRegisterAvatar" />
@@ -36,16 +34,6 @@
         <img v-if="registerForm.avatar_url" class="avatar-preview" :src="registerForm.avatar_url" alt="头像预览" />
         <button class="btn" style="width: 100%" type="submit">注册</button>
         <p class="muted"><a @click="view = 'login'">返回登录</a></p>
-      </form>
-    </div>
-
-    <div v-else-if="view === 'completeProfile'" class="page auth-page" :style="authPageStyle">
-      <form class="auth-card" @submit.prevent="completeProfile()">
-        <h2>完善资料</h2>
-        <p class="muted">请先完善手机号和身份证号，完善后才能进入活动页面。</p>
-        <input v-model="profileForm.phone" placeholder="手机号" required />
-        <input v-model="profileForm.id_card" placeholder="身份证号" required />
-        <button class="btn" style="width: 100%" type="submit">确认保存</button>
       </form>
     </div>
 
@@ -406,8 +394,6 @@
         </div>
         <input v-model="profileForm.username" placeholder="用户名" />
         <input v-model="profileForm.callsign" placeholder="呼号" />
-        <input v-model="profileForm.phone" placeholder="手机号" />
-        <input v-model="profileForm.id_card" placeholder="身份证号" />
         <input type="file" accept="image/*" @change="uploadProfileAvatar" />
         <img v-if="profileForm.avatar_url" class="avatar-preview" :src="profileForm.avatar_url" alt="头像预览" />
         <button class="btn" style="width: 100%" @click="saveProfile">确认修改</button>
@@ -415,12 +401,13 @@
     </div>
 
     <div v-if="showPasswordDialog" class="modal">
-      <div class="modal-backdrop" @click="showPasswordDialog = false"></div>
+      <div class="modal-backdrop" @click="closePasswordDialog"></div>
       <div class="modal-panel">
         <div class="modal-head">
-          <h2>修改密码</h2>
-          <button class="btn secondary" @click="showPasswordDialog = false">关闭</button>
+          <h2>{{ me.must_change_password ? '请先修改临时密码' : '修改密码' }}</h2>
+          <button v-if="!me.must_change_password" class="btn secondary" @click="showPasswordDialog = false">关闭</button>
         </div>
+        <p v-if="me.must_change_password" class="muted">当前使用的是管理员生成的临时密码。设置至少8位的新密码后才能继续使用。</p>
         <input v-model="passwordForm.password" type="password" placeholder="新密码" />
         <input v-model="passwordForm.confirm_password" type="password" placeholder="确认密码" />
         <button class="btn" style="width: 100%" @click="savePassword">确认修改</button>
@@ -455,8 +442,9 @@
       </div>
     </div>
 
-    <div v-if="toast.show" class="toast">{{ toast.message }}</div>
     </template>
+
+    <div v-if="toast.show" class="toast" role="alert" aria-live="assertive">{{ toast.message }}</div>
   </div>
 </template>
 
@@ -576,6 +564,12 @@ export default {
         const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
         setToken(data.token)
         this.view = 'app'
+        if (data.must_change_password) {
+          this.me = data
+          this.showPasswordDialog = true
+          this.showToast('请先修改临时密码')
+          return
+        }
         await this.init()
       } catch (error) {
         this.showToast(error.message || '登录失败')
@@ -587,8 +581,6 @@ export default {
         if (!this.registerForm.password) return this.showToast('请输入密码')
         if (!this.registerForm.confirm_password) return this.showToast('请再次输入密码')
         if (this.registerForm.password !== this.registerForm.confirm_password) return this.showToast('两次密码不一致')
-        if (!this.validPhone(this.registerForm.phone)) return this.showToast('请输入合法手机号')
-        if (!this.validIdCard(this.registerForm.id_card)) return this.showToast('请输入合法身份证号')
         await api('/api/h5/auth/register', { method: 'POST', body: this.registerForm })
         this.view = 'login'
         this.showToast('注册成功，请登录。')
@@ -598,12 +590,7 @@ export default {
     },
     async init() {
       this.me = await api('/api/h5/me')
-      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }
-      if (!this.me.profile_complete) {
-        this.showToast('请先完善手机号和身份证号')
-        this.view = 'completeProfile'
-        return
-      }
+      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '' }
       this.view = 'app'
       await this.loadActivities()
       await this.loadAttendanceSummary()
@@ -914,35 +901,32 @@ export default {
       })
     },
     openProfileDialog() {
-      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '', phone: this.me.phone || '', id_card: this.me.id_card || '' }
+      this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '' }
       this.showProfileDialog = true
     },
     saveProfile() {
-      if (!this.validPhone(this.profileForm.phone)) return this.showToast('请输入合法手机号')
-      if (!this.validIdCard(this.profileForm.id_card)) return this.showToast('请输入合法身份证号')
       return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
         this.showProfileDialog = false
         await this.init()
         this.showToast('已修改')
       })
     },
-    completeProfile() {
-      if (!this.validPhone(this.profileForm.phone)) return this.showToast('请输入合法手机号')
-      if (!this.validIdCard(this.profileForm.id_card)) return this.showToast('请输入合法身份证号')
-      return api('/api/h5/me/profile', { method: 'PUT', body: this.profileForm }).then(async () => {
-        this.showToast('资料已完善')
-        await this.init()
-      })
-    },
     openPasswordDialog() {
       this.passwordForm = {}
       this.showPasswordDialog = true
     },
+    closePasswordDialog() {
+      if (!this.me.must_change_password) this.showPasswordDialog = false
+    },
     savePassword() {
+      if (String(this.passwordForm.password || '').length < 8) return this.showToast('密码至少需要8位')
+      if (this.passwordForm.password !== this.passwordForm.confirm_password) return this.showToast('两次密码不一致')
       return api('/api/h5/me/password', { method: 'PUT', body: this.passwordForm }).then(() => {
         this.showPasswordDialog = false
         this.passwordForm = {}
-        this.showToast('已修改')
+        this.me.must_change_password = false
+        this.showToast('密码已修改')
+        return this.init()
       })
     },
     copyInvite() {
@@ -966,12 +950,6 @@ export default {
       this.selectedActivity = null
       this.selectedPlan = null
       this.me = {}
-    },
-    validPhone(value) {
-      return /^1\d{10}$/.test(String(value || '').trim())
-    },
-    validIdCard(value) {
-      return /^\d{17}[0-9Xx]$/.test(String(value || '').trim())
     }
   }
 }

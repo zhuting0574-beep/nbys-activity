@@ -25,8 +25,10 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
             addColumn("users", "avatar_url", "varchar(500) DEFAULT NULL COMMENT '用户头像'", "callsign");
-            addColumn("users", "phone", "varchar(20) DEFAULT NULL COMMENT '手机号'", "avatar_url");
-            addColumn("users", "id_card", "varchar(30) DEFAULT NULL COMMENT '身份证号'", "phone");
+            dropColumn("users", "phone");
+            dropColumn("users", "id_card");
+            addColumn("users", "must_change_password", "tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否必须修改临时密码'", "password_hash");
+            addColumn("users", "temp_password_expires_at", "datetime DEFAULT NULL COMMENT '临时密码过期时间'", "must_change_password");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
             jdbc.execute("create table if not exists activity_launcher_options (id int not null auto_increment, activity_id int not null, launcher_id int not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_activity_launcher_option(activity_id, launcher_id), key idx_launcher_option_activity(activity_id)) engine=InnoDB default charset=utf8mb4");
@@ -43,6 +45,13 @@ public class DbMigrationRunner implements ApplicationRunner {
         Integer exists = jdbc.queryForObject("select count(*) from information_schema.columns where table_schema=database() and table_name=? and column_name=?", Integer.class, table, column);
         if (exists != null && exists == 0) {
             jdbc.execute("alter table " + table + " add column " + column + " " + definition + " after " + after);
+        }
+    }
+
+    private void dropColumn(String table, String column) {
+        Integer exists = jdbc.queryForObject("select count(*) from information_schema.columns where table_schema=database() and table_name=? and column_name=?", Integer.class, table, column);
+        if (exists != null && exists > 0) {
+            jdbc.execute("alter table " + table + " drop column " + column);
         }
     }
 }

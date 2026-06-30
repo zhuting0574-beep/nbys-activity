@@ -167,16 +167,6 @@
         </ol>
       </div>
 
-      <div class="expedition-strip" aria-label="远征交流记录">
-        <article v-for="item in expeditions" :key="item.title" class="text-only">
-          <div class="expedition-mark"><span>{{ item.mark || 'FIELD LOG' }}</span></div>
-          <div>
-            <span>{{ item.date }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.text }}</p>
-          </div>
-        </article>
-      </div>
     </section>
 
     <section id="safe" class="section-shell safe-section carousel-section">
@@ -208,8 +198,18 @@
       </div>
 
       <div class="video-board" aria-label="活动视频片段">
-        <figure v-for="clip in videoClips" :key="clip.title">
-          <video :src="clip.src" :poster="clip.poster" controls muted playsinline preload="metadata"></video>
+        <figure
+          v-for="clip in videoClips"
+          :key="clip.title"
+          role="button"
+          tabindex="0"
+          :aria-label="`播放视频：${clip.title}`"
+          @click="openVideo(clip)"
+          @keydown.enter.prevent="openVideo(clip)"
+          @keydown.space.prevent="openVideo(clip)"
+        >
+          <img :src="clip.poster" :alt="clip.title" />
+          <span class="video-play" aria-hidden="true">▶</span>
           <figcaption>
             <small>{{ clip.tag }}</small>
             <strong>{{ clip.title }}</strong>
@@ -287,6 +287,20 @@
         </div>
       </div>
     </section>
+
+    <Teleport to="body">
+      <div v-if="activeVideo" class="video-lightbox" role="dialog" aria-modal="true" :aria-label="activeVideo.title" @click.self="closeVideo">
+        <div class="video-lightbox-panel">
+          <button type="button" class="video-lightbox-close" aria-label="关闭视频" @click="closeVideo">×</button>
+          <video :key="activeVideo.src" :src="activeVideo.src" :poster="activeVideo.poster" controls autoplay playsinline preload="auto"></video>
+          <div class="video-lightbox-copy">
+            <small>{{ activeVideo.tag }}</small>
+            <strong>{{ activeVideo.title }}</strong>
+            <span>{{ activeVideo.text }}</span>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>
 
@@ -341,6 +355,7 @@ export default {
     return {
       logo,
       homepageCarousels: {},
+      activeVideo: null,
       heroImage: haiyingcheng04,
       esaRoom,
       esaDoorTraining,
@@ -472,20 +487,6 @@ export default {
         { code: '远征', title: '外地交流', text: '到外地场地，按对方规则来，再适应新的空间。' },
         { code: '试场', title: '合作试场', text: '跑一段短流程。边界、动线和安全区，现场看最清楚。' }
       ],
-      expeditions: [
-        {
-          date: '2026.03.15 / 横店影视城',
-          title: '横店远征交流',
-          text: '街区尺度更大，窗口、楼体和开阔地的距离都要重新适应；同样的队形，换个场地就会有不同节奏。',
-          image: xhsHengdianStreet
-        },
-        {
-          date: '2021.03.27 / 扬州',
-          title: 'MILSIM 镭射交流',
-          text: '公开视频留在 B 站。时间、地点和交流内容都能对上。',
-          mark: 'BILIBILI'
-        }
-      ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
         { title: 'Briefing', text: '讲规则、任务点、集合点、撤离点和停止口令。' },
@@ -598,8 +599,24 @@ export default {
   },
   mounted() {
     this.loadHomepageCarousels()
+    window.addEventListener('keydown', this.handleVideoKeydown)
+  },
+  beforeUnmount() {
+    window.removeEventListener('keydown', this.handleVideoKeydown)
+    document.body.style.overflow = ''
   },
   methods: {
+    openVideo(clip) {
+      this.activeVideo = clip
+      document.body.style.overflow = 'hidden'
+    },
+    closeVideo() {
+      this.activeVideo = null
+      document.body.style.overflow = ''
+    },
+    handleVideoKeydown(event) {
+      if (event.key === 'Escape' && this.activeVideo) this.closeVideo()
+    },
     async loadHomepageCarousels() {
       try {
         this.homepageCarousels = await api('/api/public/system-settings/homepage-carousels') || {}
