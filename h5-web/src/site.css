@@ -1115,9 +1115,36 @@ video {
 }
 
 .video-board {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: stretch;
+  display: block;
+  overflow: hidden;
   margin-bottom: 14px;
+}
+
+.video-carousel {
+  position: relative;
+}
+
+.video-track {
+  display: flex;
+  animation: video-marquee var(--video-loop-duration) linear infinite;
+  will-change: transform;
+}
+
+.video-loop-group {
+  display: flex;
+  flex: 0 0 50%;
+}
+
+.video-loop-group figure {
+  flex: 0 0 calc(100% / var(--video-count));
+  border-right: 7px solid transparent;
+  border-left: 7px solid transparent;
+  background-clip: padding-box;
+}
+
+@keyframes video-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }
 
 .video-board figure {
@@ -1154,29 +1181,6 @@ video {
   outline-offset: 3px;
 }
 
-.video-play {
-  position: absolute;
-  z-index: 2;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  width: 68px;
-  height: 68px;
-  padding-left: 4px;
-  border: 1px solid rgba(255, 240, 221, 0.72);
-  border-radius: 50%;
-  color: #fff0dd;
-  background: rgba(10, 11, 8, 0.58);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.38);
-  transform: translate(-50%, -62%);
-  transition: transform 180ms ease, background 180ms ease;
-}
-
-.video-board figure:hover .video-play {
-  background: rgba(213, 71, 53, 0.82);
-  transform: translate(-50%, -62%) scale(1.08);
-}
 
 .video-lightbox {
   position: fixed;

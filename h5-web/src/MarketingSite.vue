@@ -197,25 +197,30 @@
         <p>照片看场地，视频看节奏。公开视频保留出处，现场照片按时间和场地留档。</p>
       </div>
 
-      <div class="video-board" aria-label="活动视频片段">
-        <figure
-          v-for="clip in videoClips"
-          :key="clip.title"
-          role="button"
-          tabindex="0"
-          :aria-label="`播放视频：${clip.title}`"
-          @click="openVideo(clip)"
-          @keydown.enter.prevent="openVideo(clip)"
-          @keydown.space.prevent="openVideo(clip)"
-        >
-          <img :src="clip.poster" :alt="clip.title" />
-          <span class="video-play" aria-hidden="true">▶</span>
-          <figcaption>
-            <small>{{ clip.tag }}</small>
-            <strong>{{ clip.title }}</strong>
-            <span>{{ clip.text }}</span>
-          </figcaption>
-        </figure>
+      <div class="video-carousel" aria-label="活动视频片段">
+        <div class="video-board">
+          <div class="video-track" :style="videoLoopStyle">
+            <div v-for="copy in 2" :key="copy" class="video-loop-group" :aria-hidden="copy === 2">
+              <figure
+                v-for="clip in videoClips"
+                :key="`${copy}-${clip.title}`"
+                role="button"
+                :tabindex="copy === 1 ? 0 : -1"
+                :aria-label="`播放视频：${clip.title}`"
+                @click="openVideo(clip)"
+                @keydown.enter.prevent="openVideo(clip)"
+                @keydown.space.prevent="openVideo(clip)"
+              >
+                <img :src="clip.poster" :alt="clip.title" />
+                <figcaption>
+                  <small>FIELD VIDEO</small>
+                  <strong>{{ clip.title }}</strong>
+                  <span>点击封面完整播放视频</span>
+                </figcaption>
+              </figure>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="media-feature">
@@ -294,9 +299,9 @@
           <button type="button" class="video-lightbox-close" aria-label="关闭视频" @click="closeVideo">×</button>
           <video :key="activeVideo.src" :src="activeVideo.src" :poster="activeVideo.poster" controls autoplay playsinline preload="auto"></video>
           <div class="video-lightbox-copy">
-            <small>{{ activeVideo.tag }}</small>
+            <small>FIELD VIDEO</small>
             <strong>{{ activeVideo.title }}</strong>
-            <span>{{ activeVideo.text }}</span>
+            <span>现场视频完整播放</span>
           </div>
         </div>
       </div>
@@ -332,9 +337,29 @@ import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_
 import xhsFieldTeam from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_team.jpg'
 import xhsWargameCover from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-cover.jpg'
 import xhsWargameFrame from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-frame01.jpg'
-import yongshiActionClip from './assets/site/yongshi-action-clip.mp4'
-import yongshiFieldClip from './assets/site/yongshi-field-clip.mp4'
-import jujieFinalVideo from './assets/site/jujie-final-2024-haiyingcheng.mp4'
+
+const videoAssets = import.meta.glob('./assets/site/videos/*.{jpg,mp4}', { eager: true, query: '?url', import: 'default' })
+const videoTitleOverrides = {
+  '10月15日巨蟹行动': '象山影视城-巨蟹行动',
+  '11月13日天宫庄园': '天宫庄园周常',
+  '先导片 提亮版本': '森屿湖',
+  '3月3日 天宫': '天宫庄园周常',
+  '双子行动 预告 final': '天宫庄园-双子行动',
+  '4月28日': '奉化梅里达广场周常',
+  '9月11日 (1)': '应梦里周常'
+}
+const videoClips = Object.entries(videoAssets)
+  .filter(([path]) => path.endsWith('.mp4'))
+  .map(([path, src]) => {
+    const fileStem = path.split('/').pop().replace(/\.mp4$/i, '')
+    return {
+      title: videoTitleOverrides[fileStem] || fileStem,
+      src,
+      poster: videoAssets[`./assets/site/videos/${fileStem}.jpg`]
+    }
+  })
+  .filter(clip => clip.poster)
+  .sort((a, b) => a.title.localeCompare(b.title, 'zh-CN', { numeric: true }))
 
 const defaultHomepageCarousels = {
   top: [haiyingcheng04, haiyingcheng03, xhsWargameCover, xhsFieldTeam],
@@ -356,6 +381,7 @@ export default {
       logo,
       homepageCarousels: {},
       activeVideo: null,
+      videoCarouselVisible: window.innerWidth <= 680 ? 1 : window.innerWidth <= 1080 ? 2 : 3,
       heroImage: haiyingcheng04,
       esaRoom,
       esaDoorTraining,
@@ -523,29 +549,7 @@ export default {
           text: '室内 Briefing、队形移动、口令和复盘。平时练过，现场才不容易散。'
         }
       ],
-      videoClips: [
-        {
-          tag: 'XIANGSHAN / 2024',
-          title: '巨蟹行动现场',
-          text: '象山海影城的夜间场地，灯光和建筑边缘会改变判断。',
-          src: jujieFinalVideo,
-          poster: haiyingcheng04
-        },
-        {
-          tag: 'LOCAL CLIP / FIELD',
-          title: '下场片段',
-          text: '移动、观察和队友距离，比静态照片更容易看出来。',
-          src: yongshiFieldClip,
-          poster: xhsWargameFrame
-        },
-        {
-          tag: 'LOCAL CLIP / ACTION',
-          title: '行动片段',
-          text: '短片段保留现场节奏。队伍集合、移动和停顿都在里面。',
-          src: yongshiActionClip,
-          poster: xhsWargameCover
-        }
-      ],
+      videoClips,
       assetStories: [
         { tag: 'HENGDIAN / 2026', title: '横店远征交流', text: '影视城街区前的队伍合影。', image: xhsHengdianTeam, size: 'wide' },
         { tag: 'YINGMENGLI / 2023', title: '建筑窗口路线', text: '窗口、栏杆和队友位置都在画面里。', image: siteModern02, size: '' },
@@ -600,12 +604,26 @@ export default {
   mounted() {
     this.loadHomepageCarousels()
     window.addEventListener('keydown', this.handleVideoKeydown)
+    window.addEventListener('resize', this.updateVideoCarouselVisible)
   },
   beforeUnmount() {
     window.removeEventListener('keydown', this.handleVideoKeydown)
+    window.removeEventListener('resize', this.updateVideoCarouselVisible)
     document.body.style.overflow = ''
   },
+  computed: {
+    videoLoopStyle() {
+      return {
+        width: `${this.videoClips.length * 200 / this.videoCarouselVisible}%`,
+        '--video-count': this.videoClips.length,
+        '--video-loop-duration': `${Math.max(24, this.videoClips.length * 3.5)}s`
+      }
+    }
+  },
   methods: {
+    updateVideoCarouselVisible() {
+      this.videoCarouselVisible = window.innerWidth <= 680 ? 1 : window.innerWidth <= 1080 ? 2 : 3
+    },
     openVideo(clip) {
       this.activeVideo = clip
       document.body.style.overflow = 'hidden'
