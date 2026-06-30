@@ -8,12 +8,18 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 @RestController
 public class AdminSystemController {
+    private static final List<String> HOMEPAGE_SECTIONS = Arrays.asList(
+            "top", "about", "records", "fields", "activities", "safe", "media", "cooperate");
+    private static final Set<String> HOMEPAGE_SECTION_SET = new HashSet<String>(HOMEPAGE_SECTIONS);
     private final JdbcTemplate jdbc;
     private final AuthService auth;
 
@@ -38,6 +44,71 @@ public class AdminSystemController {
         auth.require(req, "systemImage:update");
         saveSetting("h5_login_background_url", text(body.get("login_background_url")));
         saveSetting("h5_login_logo_url", text(body.get("login_logo_url")));
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/api/public/system-settings/homepage-carousels")
+    public ApiResponse<Map<String, Object>> publicHomepageCarousels() {
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        for (String section : HOMEPAGE_SECTIONS) {
+            result.put(section, Rows.list(jdbc,
+                    "select id,image_url,sort_order from homepage_carousel_images where section_key=? and active=1 order by sort_order,id",
+                    section));
+        }
+        return ApiResponse.ok(result);
+    }
+
+    @GetMapping("/api/admin/system/homepage-carousels")
+    public ApiResponse<List<Map<String, Object>>> adminHomepageCarousels(HttpServletRequest req) {
+        auth.require(req, "systemImage:view");
+        return ApiResponse.ok(Rows.list(jdbc,
+                "select id,section_key,image_url,sort_order,active,created_at,updated_at from homepage_carousel_images order by section_key,sort_order,id"));
+    }
+
+    @PostMapping("/api/admin/system/homepage-carousels")
+    @Transactional
+    public ApiResponse<Void> createHomepageCarousel(@RequestBody Map<String, Object> body, HttpServletRequest req) {
+        auth.require(req, "systemImage:update");
+        String section = homepageSection(body.get("section_key"));
+        String imageUrl = requiredImageUrl(body.get("image_url"));
+        Integer maxOrder = jdbc.queryForObject(
+                "select coalesce(max(sort_order),0) from homepage_carousel_images where section_key=?", Integer.class, section);
+        int sortOrder = body.get("sort_order") == null ? (maxOrder == null ? 10 : maxOrder + 10) : intValue(body.get("sort_order"));
+        jdbc.update("insert into homepage_carousel_images(section_key,image_url,sort_order,active,created_at,updated_at) values(?,?,?,?,now(),now())",
+                section, imageUrl, sortOrder, bool(body.get("active")) ? 1 : 0);
+        ensureActiveImage(section);
+        return ApiResponse.ok(null);
+    }
+
+    @PutMapping("/api/admin/system/homepage-carousels/{id}")
+    @Transactional
+    public ApiResponse<Void> updateHomepageCarousel(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        auth.require(req, "systemImage:update");
+        Map<String, Object> current = carouselImage(id);
+        if (current == null) throw new IllegalArgumentException("轮播图片不存在");
+        String section = homepageSection(body.get("section_key") == null ? current.get("section_key") : body.get("section_key"));
+        String imageUrl = body.get("image_url") == null ? text(current.get("image_url")) : requiredImageUrl(body.get("image_url"));
+        int sortOrder = body.get("sort_order") == null ? intValue(current.get("sort_order")) : intValue(body.get("sort_order"));
+        boolean active = body.get("active") == null ? bool(current.get("active")) : bool(body.get("active"));
+        String oldSection = text(current.get("section_key"));
+        jdbc.update("update homepage_carousel_images set section_key=?,image_url=?,sort_order=?,active=?,updated_at=now() where id=?",
+                section, imageUrl, sortOrder, active ? 1 : 0, id);
+        ensureActiveImage(oldSection);
+        if (!oldSection.equals(section)) ensureActiveImage(section);
+        return ApiResponse.ok(null);
+    }
+
+    @DeleteMapping("/api/admin/system/homepage-carousels/{id}")
+    @Transactional
+    public ApiResponse<Void> deleteHomepageCarousel(@PathVariable int id, HttpServletRequest req) {
+        auth.require(req, "systemImage:update");
+        Map<String, Object> current = carouselImage(id);
+        if (current == null) throw new IllegalArgumentException("轮播图片不存在");
+        String section = text(current.get("section_key"));
+        if (bool(current.get("active")) && activeImageCount(section) <= 1) {
+            throw new IllegalArgumentException("每个板块至少保留一张启用图片");
+        }
+        jdbc.update("delete from homepage_carousel_images where id=?", id);
         return ApiResponse.ok(null);
     }
 
@@ -95,6 +166,42 @@ public class AdminSystemController {
     private void saveSetting(String key, String value) {
         jdbc.update("insert into system_settings(setting_key,setting_value,updated_at) values(?,?,now()) " +
                 "on duplicate key update setting_value=values(setting_value),updated_at=now()", key, value);
+    }
+
+    private Map<String, Object> carouselImage(int id) {
+        return Rows.one(jdbc, "select * from homepage_carousel_images where id=?", id);
+    }
+
+    private String homepageSection(Object value) {
+        String section = text(value);
+        if (!HOMEPAGE_SECTION_SET.contains(section)) throw new IllegalArgumentException("首页板块无效");
+        return section;
+    }
+
+    private String requiredImageUrl(Object value) {
+        String imageUrl = text(value);
+        if (imageUrl.isEmpty()) throw new IllegalArgumentException("请上传轮播图片");
+        if (imageUrl.length() > 500) throw new IllegalArgumentException("图片地址过长");
+        return imageUrl;
+    }
+
+    private int activeImageCount(String section) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from homepage_carousel_images where section_key=? and active=1", Integer.class, section);
+        return count == null ? 0 : count;
+    }
+
+    private void ensureActiveImage(String section) {
+        if (activeImageCount(section) == 0) throw new IllegalArgumentException("每个板块至少保留一张启用图片");
+    }
+
+    private int intValue(Object value) {
+        if (value instanceof Number) return ((Number) value).intValue();
+        try {
+            return Integer.parseInt(text(value));
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     private boolean bool(Object value) {

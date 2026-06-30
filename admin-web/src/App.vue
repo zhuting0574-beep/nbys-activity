@@ -396,6 +396,51 @@
           </div>
         </div>
         <el-button type="primary" v-if="can('systemImage:update')" @click="saveSystemImages">保存设置</el-button>
+
+        <div class="homepage-carousel-admin">
+          <div class="homepage-carousel-heading">
+            <div>
+              <h2>官网首页轮播图</h2>
+              <p class="muted">每个板块至少保留一张启用图片；官网每 5 秒切换一次。</p>
+            </div>
+          </div>
+          <div class="homepage-carousel-sections">
+            <section v-for="section in homepageSections" :key="section.key" class="homepage-carousel-section">
+              <div class="homepage-carousel-section-head">
+                <div>
+                  <h3>{{ section.name }}</h3>
+                  <span>{{ section.description }}</span>
+                </div>
+                <el-upload
+                  v-if="can('systemImage:update')"
+                  action="/api/admin/files/upload"
+                  accept="image/*"
+                  :headers="uploadHeaders"
+                  :show-file-list="false"
+                  :on-success="response => uploadHomepageCarousel(section.key, response)"
+                >
+                  <el-button type="primary" size="small">上传图片</el-button>
+                </el-upload>
+              </div>
+              <div v-if="homepageImagesFor(section.key).length" class="homepage-carousel-list">
+                <article v-for="(image, index) in homepageImagesFor(section.key)" :key="image.id" class="homepage-carousel-item">
+                  <img :src="image.image_url" :alt="`${section.name}轮播图${index + 1}`" />
+                  <div class="homepage-carousel-meta">
+                    <strong>顺序 {{ index + 1 }}</strong>
+                    <el-tag size="small" :type="image.active ? 'success' : 'info'">{{ image.active ? '启用' : '停用' }}</el-tag>
+                  </div>
+                  <div v-if="can('systemImage:update')" class="homepage-carousel-actions">
+                    <el-button size="small" :disabled="index === 0" @click="moveHomepageCarousel(section.key, index, -1)">上移</el-button>
+                    <el-button size="small" :disabled="index === homepageImagesFor(section.key).length - 1" @click="moveHomepageCarousel(section.key, index, 1)">下移</el-button>
+                    <el-switch :model-value="image.active" active-text="启用" inactive-text="停用" @change="active => setHomepageCarouselActive(image, active)" />
+                    <el-button size="small" type="danger" @click="deleteHomepageCarousel(image)">删除</el-button>
+                  </div>
+                </article>
+              </div>
+              <div v-else class="settings-empty homepage-carousel-empty">尚未配置，官网将使用内置图片</div>
+            </section>
+          </div>
+        </div>
       </section>
     </main>
   </div>
@@ -560,6 +605,16 @@ import { api, setToken, token } from './api'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动开始', '活动结束', '活动取消', '投票中', '已生成活动']
+const homepageSections = [
+  { key: 'top', name: '首屏 Top', description: '包含首页主视觉和指标横条' },
+  { key: 'about', name: '关于 About', description: '活动介绍与新玩家说明' },
+  { key: 'records', name: '记录 Record', description: '历史活动与公开记录' },
+  { key: 'fields', name: '场地 Fields', description: '场地类型与任务区域' },
+  { key: 'activities', name: '活动 Ops', description: '周常、剧本与远征' },
+  { key: 'safe', name: '保障 Safe', description: '安全规则与训练流程' },
+  { key: 'media', name: '影像 Media', description: '照片、视频与公开来源' },
+  { key: 'cooperate', name: '合作 Join', description: '合作方式与报名入口' }
+]
 
 const ActivityForm = {
   props: ['modelValue', 'modes', 'uploadHeaders'],
@@ -630,6 +685,7 @@ export default {
 	      loginForm: {},
 	      jobs,
 	      activityStatuses,
+      homepageSections,
 	      active: 'dashboard',
       systemActive: 'systemImages',
 	      filters: {},
@@ -652,6 +708,7 @@ export default {
       launcherManageFilters: {},
       editLauncher: null,
       systemImages: {},
+      homepageCarouselImages: [],
 	      convertPickerVisible: false,
 	      convertPickerTitle: '',
 	      convertPickerOptions: [],
@@ -861,8 +918,57 @@ export default {
       })
       return api(`/api/admin/launchers?${params.toString()}`).then(d => { this.launchers = d })
     },
-    loadSystemImages() {
-      return api('/api/admin/system/images').then(d => { this.systemImages = d || {} })
+    async loadSystemImages() {
+      const [images, carousels] = await Promise.all([
+        api('/api/admin/system/images'),
+        api('/api/admin/system/homepage-carousels')
+      ])
+      this.systemImages = images || {}
+      this.homepageCarouselImages = (carousels || []).map(item => ({ ...item, active: !!item.active }))
+    },
+    homepageImagesFor(sectionKey) {
+      return this.homepageCarouselImages
+        .filter(item => item.section_key === sectionKey)
+        .sort((a, b) => Number(a.sort_order) - Number(b.sort_order) || Number(a.id) - Number(b.id))
+    },
+    uploadHomepageCarousel(sectionKey, response) {
+      const imageUrl = response?.data?.url
+      if (!imageUrl) return ElMessage.error('图片上传失败')
+      return api('/api/admin/system/homepage-carousels', {
+        method: 'POST',
+        body: { section_key: sectionKey, image_url: imageUrl, active: true }
+      }).then(() => {
+        ElMessage.success('轮播图片已添加')
+        return this.loadSystemImages()
+      })
+    },
+    async moveHomepageCarousel(sectionKey, index, direction) {
+      const images = this.homepageImagesFor(sectionKey)
+      const targetIndex = index + direction
+      if (!images[index] || !images[targetIndex]) return
+      const current = images[index]
+      const target = images[targetIndex]
+      const currentOrder = Number(current.sort_order) || (index + 1) * 10
+      const targetOrder = Number(target.sort_order) || (targetIndex + 1) * 10
+      await Promise.all([
+        api(`/api/admin/system/homepage-carousels/${current.id}`, { method: 'PUT', body: { sort_order: targetOrder } }),
+        api(`/api/admin/system/homepage-carousels/${target.id}`, { method: 'PUT', body: { sort_order: currentOrder } })
+      ])
+      await this.loadSystemImages()
+    },
+    setHomepageCarouselActive(image, active) {
+      return api(`/api/admin/system/homepage-carousels/${image.id}`, {
+        method: 'PUT',
+        body: { active }
+      }).then(() => this.loadSystemImages()).catch(() => this.loadSystemImages())
+    },
+    deleteHomepageCarousel(image) {
+      return ElMessageBox.confirm('确认删除这张首页轮播图？').then(() =>
+        api(`/api/admin/system/homepage-carousels/${image.id}`, { method: 'DELETE' }).then(() => {
+          ElMessage.success('已删除')
+          return this.loadSystemImages()
+        })
+      )
     },
     userRoleLabel(row) {
       if (row.role === 'superadmin') return '超级管理员'

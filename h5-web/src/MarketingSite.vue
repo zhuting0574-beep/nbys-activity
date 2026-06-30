@@ -18,6 +18,8 @@
       <button class="action-btn" type="button" @click="$emit('enter-app')">一起行动</button>
     </header>
 
+    <div class="top-carousel-region carousel-region">
+      <BackgroundCarousel :images="carouselImages('top')" label="首屏背景" />
     <section id="top" class="hero section-shell">
       <div class="hero-copy">
         <p class="plain-label">NINGBO YONGSHI / FIELD WARGAME</p>
@@ -45,13 +47,6 @@
         </div>
       </div>
 
-      <figure class="hero-media">
-        <img :src="heroImage" alt="象山海影城夜间任务现场" width="1400" height="900" fetchpriority="high" decoding="async" />
-        <figcaption>
-          <span>2024 / 象山海影城</span>
-          <strong>夜间任务现场</strong>
-        </figcaption>
-      </figure>
     </section>
 
     <section class="proof-strip section-shell" aria-label="甬士活动概况">
@@ -60,8 +55,10 @@
         <span>{{ item.label }}</span>
       </article>
     </section>
+    </div>
 
-    <section id="about" class="section-shell intro-section">
+    <section id="about" class="section-shell intro-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('about')" label="关于板块背景" />
       <div class="section-kicker">About</div>
       <div class="about-board">
         <div class="about-copy">
@@ -78,16 +75,11 @@
           </div>
         </div>
 
-        <div class="about-photos" aria-label="甬士活动照片">
-          <figure v-for="photo in aboutPhotos" :key="photo.caption">
-            <img :src="photo.image" :alt="photo.caption" width="900" height="1100" loading="lazy" decoding="async" />
-            <figcaption>{{ photo.caption }}</figcaption>
-          </figure>
-        </div>
       </div>
     </section>
 
-    <section id="records" class="section-shell records-section">
+    <section id="records" class="section-shell records-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('records')" label="历史记录板块背景" />
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
         <h2>这些年去过哪里。</h2>
@@ -105,7 +97,6 @@
       </div>
 
       <article class="record-feature">
-        <img :src="featuredRecord.image" :alt="featuredRecord.title" width="1400" height="900" loading="lazy" decoding="async" />
         <div>
           <span>{{ featuredRecord.date }}</span>
           <h3>{{ featuredRecord.title }}</h3>
@@ -115,7 +106,6 @@
 
       <div class="record-grid">
         <article v-for="item in activityLog" :key="item.title">
-          <img :src="item.image" :alt="item.title" width="900" height="675" loading="lazy" decoding="async" />
           <div>
             <span>{{ item.date }}</span>
             <h3>{{ item.title }}</h3>
@@ -125,7 +115,8 @@
       </div>
     </section>
 
-    <section id="fields" class="section-shell fields-section">
+    <section id="fields" class="section-shell fields-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('fields')" label="场地板块背景" />
       <div class="section-kicker">Fields</div>
       <div class="section-heading">
         <h2>场地不同，玩法不同。</h2>
@@ -134,7 +125,6 @@
 
       <div class="field-grid">
         <article v-for="venue in venues" :key="venue.name" :class="{ featured: venue.featured }">
-          <img :src="venue.image" :alt="venue.name" width="1200" height="750" loading="lazy" decoding="async" />
           <div class="field-card-copy">
             <span>{{ venue.type }}</span>
             <h3>{{ venue.name }}</h3>
@@ -147,7 +137,8 @@
       </div>
     </section>
 
-    <section id="activities" class="section-shell activities-section">
+    <section id="activities" class="section-shell activities-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('activities')" label="活动板块背景" />
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
         <h2>周常、剧本、远征。</h2>
@@ -155,14 +146,6 @@
       </div>
 
       <div class="activity-board">
-        <figure class="activity-photo">
-          <img :src="activityFeatureImage" alt="象山海影城任务简报现场" width="1200" height="900" loading="lazy" decoding="async" />
-          <figcaption>
-            <span>XIANGSHAN / SCRIPT</span>
-            <strong>影视城剧本从地图、角色和任务条件开始。</strong>
-          </figcaption>
-        </figure>
-
         <div class="activity-list">
           <article v-for="item in activityTypes" :key="item.title">
             <span>{{ item.code }}</span>
@@ -185,11 +168,8 @@
       </div>
 
       <div class="expedition-strip" aria-label="远征交流记录">
-        <article v-for="item in expeditions" :key="item.title" :class="{ 'text-only': !item.image }">
-          <img v-if="item.image" :src="item.image" :alt="item.title" width="900" height="600" loading="lazy" decoding="async" />
-          <div v-else class="expedition-mark">
-            <span>{{ item.mark }}</span>
-          </div>
+        <article v-for="item in expeditions" :key="item.title" class="text-only">
+          <div class="expedition-mark"><span>{{ item.mark || 'FIELD LOG' }}</span></div>
           <div>
             <span>{{ item.date }}</span>
             <h3>{{ item.title }}</h3>
@@ -199,7 +179,8 @@
       </div>
     </section>
 
-    <section id="safe" class="section-shell safe-section">
+    <section id="safe" class="section-shell safe-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('safe')" label="安全保障板块背景" />
       <div class="section-kicker">Safe ops</div>
       <div class="safe-layout">
         <div>
@@ -215,20 +196,11 @@
             </article>
           </div>
         </div>
-        <div class="safe-photos" aria-label="训练和简报照片">
-          <figure>
-            <img :src="esaRoom" alt="室内 Briefing 现场" width="900" height="675" loading="lazy" decoding="async" />
-            <figcaption>进场前讲规则、任务和停止口令。</figcaption>
-          </figure>
-          <figure>
-            <img :src="esaDoorTraining" alt="门口队形训练" width="900" height="506" loading="lazy" decoding="async" />
-            <figcaption>门口、墙边和队友位置，平时先练过。</figcaption>
-          </figure>
-        </div>
       </div>
     </section>
 
-    <section id="media" class="section-shell media-section">
+    <section id="media" class="section-shell media-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('media')" label="现场影像板块背景" />
       <div class="section-kicker">Media</div>
       <div class="section-heading">
         <h2>现场影像。</h2>
@@ -247,14 +219,11 @@
       </div>
 
       <div class="media-feature">
-        <figure class="media-lead">
-          <img :src="mediaLead.image" :alt="mediaLead.title" width="1400" height="960" loading="lazy" decoding="async" />
-          <figcaption>
+        <article class="media-lead-copy">
             <small>{{ mediaLead.tag }}</small>
             <strong>{{ mediaLead.title }}</strong>
             <span>{{ mediaLead.text }}</span>
-          </figcaption>
-        </figure>
+        </article>
 
         <div class="media-notes" aria-label="影像记录说明">
           <article v-for="item in mediaNotes" :key="item.title">
@@ -263,17 +232,6 @@
             <p>{{ item.text }}</p>
           </article>
         </div>
-      </div>
-
-      <div class="media-wall">
-        <figure v-for="asset in assetStories" :key="asset.title" :class="asset.size">
-          <img :src="asset.image" :alt="asset.title" width="900" height="900" loading="lazy" decoding="async" />
-          <figcaption>
-            <small>{{ asset.tag }}</small>
-            <strong>{{ asset.title }}</strong>
-            <span>{{ asset.text }}</span>
-          </figcaption>
-        </figure>
       </div>
 
       <div class="public-links">
@@ -285,7 +243,8 @@
       </div>
     </section>
 
-    <section id="cooperate" class="section-shell cooperate-section">
+    <section id="cooperate" class="section-shell cooperate-section carousel-section">
+      <BackgroundCarousel :images="carouselImages('cooperate')" label="合作板块背景" />
       <div class="section-kicker">Work with us</div>
       <div class="cooperate-layout">
         <div>
@@ -317,14 +276,6 @@
       </div>
 
       <div class="partner-board">
-        <figure class="partner-photo">
-          <img :src="cooperateImage" alt="横店影视城交流现场" width="1200" height="900" loading="eager" decoding="async" />
-          <figcaption>
-            <span>TRIAL RUN / FIELD CHECK</span>
-            <strong>入口、禁入区、任务点、撤离线，现场一项项走。</strong>
-          </figcaption>
-        </figure>
-
         <div class="partner-lanes">
           <article v-for="group in partnerNotes" :key="group.title">
             <span>{{ group.code }}</span>
@@ -340,6 +291,8 @@
 </template>
 
 <script>
+import { api } from './api'
+import BackgroundCarousel from './BackgroundCarousel.vue'
 import logo from './assets/nbys-logo.png'
 import haiyingcheng01 from './assets/site/haiyingcheng-jujie-01.jpg'
 import haiyingcheng02 from './assets/site/haiyingcheng-jujie-02.jpg'
@@ -369,12 +322,25 @@ import yongshiActionClip from './assets/site/yongshi-action-clip.mp4'
 import yongshiFieldClip from './assets/site/yongshi-field-clip.mp4'
 import jujieFinalVideo from './assets/site/jujie-final-2024-haiyingcheng.mp4'
 
+const defaultHomepageCarousels = {
+  top: [haiyingcheng04, haiyingcheng03, xhsWargameCover, xhsFieldTeam],
+  about: [haiyingcheng02, xhsHengdianTeam, xhsFieldGrass],
+  records: [haiyingcheng05, xiaojiuzhaiEscape01, xhsHengdianStreet, yingmengliDate01],
+  fields: [siteModern02, xiaojiuzhaiTraining02, yingmengli02, moto01],
+  activities: [haiyingcheng02, xhsWargameFrame, xhsFieldTeam, xhsHengdianStreet],
+  safe: [esaRoom, esaDoorTraining, esaUrban01, esaUrban02],
+  media: [haiyingcheng04, yingmengliDate02, xhsWargameCover, patchBoard],
+  cooperate: [hengdianStreetWide, xhsHengdianTeam, xhsFieldGrass]
+}
+
 export default {
   name: 'MarketingSite',
+  components: { BackgroundCarousel },
   emits: ['enter-app'],
   data() {
     return {
       logo,
+      homepageCarousels: {},
       heroImage: haiyingcheng04,
       esaRoom,
       esaDoorTraining,
@@ -630,7 +596,21 @@ export default {
       ]
     }
   },
+  mounted() {
+    this.loadHomepageCarousels()
+  },
   methods: {
+    async loadHomepageCarousels() {
+      try {
+        this.homepageCarousels = await api('/api/public/system-settings/homepage-carousels') || {}
+      } catch {
+        this.homepageCarousels = {}
+      }
+    },
+    carouselImages(sectionKey) {
+      const configured = this.homepageCarousels[sectionKey] || []
+      return configured.length ? configured : (defaultHomepageCarousels[sectionKey] || [])
+    },
     scrollToSection(id) {
       const target = id === 'top' ? document.getElementById('top') : document.getElementById(id)
       target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
