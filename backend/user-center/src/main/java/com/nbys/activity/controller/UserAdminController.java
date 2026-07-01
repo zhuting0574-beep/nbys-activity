@@ -15,6 +15,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/admin")
 public class UserAdminController {
+    private static final String RESET_PASSWORD = "nb123456";
+
     private final JdbcTemplate jdbc;
     private final AuthService auth;
     private final PasswordService passwords;
@@ -61,11 +63,10 @@ public class UserAdminController {
     public ApiResponse<Map<String, Object>> resetPassword(@PathVariable int id, HttpServletRequest req) {
         auth.require(req, "user:resetPassword");
         if (Rows.one(jdbc, "select id from users where id=? and disabled=0", id) == null) throw new IllegalArgumentException("用户不存在或已禁用");
-        String temporaryPassword = passwords.generateTemporaryPassword();
         jdbc.update("update users set password_hash=?, must_change_password=1, temp_password_expires_at=date_add(now(), interval 24 hour) where id=?",
-                passwords.encode(temporaryPassword), id);
+                passwords.encode(RESET_PASSWORD), id);
         Map<String, Object> result = new HashMap<String, Object>();
-        result.put("temporary_password", temporaryPassword);
+        result.put("temporary_password", RESET_PASSWORD);
         result.put("expires_in_hours", 24);
         return ApiResponse.ok(result);
     }

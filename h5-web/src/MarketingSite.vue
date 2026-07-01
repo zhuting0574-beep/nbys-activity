@@ -293,6 +293,45 @@
       </div>
     </section>
 
+    <aside
+      class="contact-drawer"
+      :class="{ open: contactOpen }"
+      aria-label="联系我们"
+      @mouseleave="contactOpen = false"
+    >
+      <button
+        class="contact-drawer-tab"
+        type="button"
+        aria-controls="contact-drawer-panel"
+        :aria-expanded="contactOpen"
+        @click="contactOpen = !contactOpen"
+      >
+        <span>联系我们</span>
+      </button>
+      <div id="contact-drawer-panel" class="contact-drawer-panel">
+        <div class="contact-drawer-heading">
+          <span>CONTACT</span>
+          <strong>扫码联系我们</strong>
+        </div>
+        <div class="contact-qrcodes">
+          <button
+            v-for="item in contactQrcodes"
+            :key="item.hint"
+            class="contact-qrcode-card"
+            type="button"
+            :aria-label="`查看${item.label}完整二维码`"
+            @click="openContactPreview(item)"
+          >
+            <img :src="item.image" :alt="item.label" />
+            <span class="contact-qrcode-caption">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.hint }}</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </aside>
+
     <Teleport to="body">
       <div v-if="activeVideo" class="video-lightbox" role="dialog" aria-modal="true" :aria-label="activeVideo.title" @click.self="closeVideo">
         <div class="video-lightbox-panel">
@@ -305,6 +344,25 @@
           </div>
         </div>
       </div>
+      <Transition name="contact-preview">
+        <div
+          v-if="contactPreview"
+          class="contact-preview-lightbox"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`${contactPreview.label}完整二维码`"
+          @click.self="closeContactPreview"
+        >
+          <div class="contact-preview-panel">
+            <button type="button" class="contact-preview-close" aria-label="关闭二维码预览" @click="closeContactPreview">×</button>
+            <img :src="contactPreview.image" :alt="`${contactPreview.label}完整二维码`" />
+            <div>
+              <strong>{{ contactPreview.label }}</strong>
+              <span>{{ contactPreview.hint }}</span>
+            </div>
+          </div>
+        </div>
+      </Transition>
     </Teleport>
   </main>
 </template>
@@ -337,6 +395,9 @@ import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_
 import xhsFieldTeam from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_team.jpg'
 import xhsWargameCover from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-cover.jpg'
 import xhsWargameFrame from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-frame01.jpg'
+import contactDouyin from './assets/site/contact-douyin.jpg'
+import contactWechatYouzi from './assets/site/contact-wechat-youzi.jpg'
+import contactWechatWeijing from './assets/site/contact-wechat-weijing.jpg'
 
 const videoAssets = import.meta.glob('./assets/site/videos/*.{jpg,mp4}', { eager: true, query: '?url', import: 'default' })
 const videoTitleOverrides = {
@@ -381,6 +442,13 @@ export default {
       logo,
       homepageCarousels: {},
       activeVideo: null,
+      contactPreview: null,
+      contactOpen: false,
+      contactQrcodes: [
+        { label: '抖音官方账号', hint: '@Milsim_NB', image: contactDouyin },
+        { label: '微信联系', hint: '柚子粑粑', image: contactWechatYouzi },
+        { label: '微信联系', hint: '未竟', image: contactWechatWeijing }
+      ],
       videoCarouselVisible: window.innerWidth <= 680 ? 1 : window.innerWidth <= 1080 ? 2 : 3,
       heroImage: haiyingcheng04,
       esaRoom,
@@ -567,8 +635,8 @@ export default {
         { platform: 'BILIBILI / 2021', title: '2021.03.27 扬州 MILSIM 镭射', href: 'https://www.bilibili.com/video/BV1SZ4y1c74a' },
         { platform: 'BILIBILI / 2024', title: '2024 巨蟹行动最终章', href: 'https://www.bilibili.com/video/BV1tr42177Yo' },
         { platform: 'BILIBILI / PREVIEW', title: '巨蟹行动活动预告', href: 'https://www.bilibili.com/video/BV11a411W7ci' },
-        { platform: 'XIAOHONGSHU / 2026', title: '甬士横店征途', href: 'https://www.xiaohongshu.com/search_result/69b587e1000000001e00cc1b' },
-        { platform: 'XIAOHONGSHU / 2026', title: '甬士横店远征', href: 'https://www.xiaohongshu.com/search_result/69b956af000000002202686f' }
+        { platform: 'XIAOHONGSHU / 2026', title: '甬士横店征途', href: 'https://www.xiaohongshu.com/search_result?keyword=%E7%94%AC%E5%A3%AB%E6%A8%AA%E5%BA%97%E5%BE%81%E9%80%94&source=web_explore_feed' },
+        { platform: 'XIAOHONGSHU / 2026', title: '甬士横店远征', href: 'https://www.xiaohongshu.com/search_result?keyword=%E7%94%AC%E5%A3%AB%E6%A8%AA%E5%BA%97%E8%BF%9C%E5%BE%81&source=web_explore_feed' }
       ],
       trialSteps: [
         { code: '01', title: '看场地', text: '地点、时间、可进入区、禁入区和预计人数，先对齐。' },
@@ -632,8 +700,17 @@ export default {
       this.activeVideo = null
       document.body.style.overflow = ''
     },
+    openContactPreview(item) {
+      this.contactPreview = item
+      document.body.style.overflow = 'hidden'
+    },
+    closeContactPreview() {
+      this.contactPreview = null
+      document.body.style.overflow = ''
+    },
     handleVideoKeydown(event) {
       if (event.key === 'Escape' && this.activeVideo) this.closeVideo()
+      if (event.key === 'Escape' && this.contactPreview) this.closeContactPreview()
     },
     async loadHomepageCarousels() {
       try {

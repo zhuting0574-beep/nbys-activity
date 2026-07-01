@@ -30,6 +30,63 @@ body {
   overflow-x: hidden;
 }
 
+.activity-loading-mask {
+  position: fixed;
+  z-index: 3000;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: rgba(2, 6, 23, 0.8);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.activity-loading-mask img {
+  width: clamp(150px, 24vw, 220px);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.56), 0 0 0 8px rgba(255, 255, 255, 0.035);
+  animation: activity-logo-breathe 1.35s ease-in-out infinite;
+}
+
+.activity-loading-mask span {
+  color: #e5e7eb;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.activity-loader-enter-active,
+.activity-loader-leave-active {
+  transition: opacity 260ms ease;
+}
+
+.activity-loader-enter-from,
+.activity-loader-leave-to {
+  opacity: 0;
+}
+
+@keyframes activity-logo-breathe {
+  0%, 100% {
+    opacity: 0.78;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-loading-mask img {
+    animation: none;
+  }
+}
+
 a {
   color: inherit;
   cursor: pointer;

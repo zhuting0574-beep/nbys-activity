@@ -1264,7 +1264,7 @@ export default {
       })
     },
     resetUserPassword(row) {
-      return ElMessageBox.confirm(`确认重置 ${row.callsign || row.username} 的密码？临时密码将在24小时后过期。`, '重置密码').then(() => api(`/api/admin/users/${row.id}/reset-password`, { method: 'PUT', body: {} })).then(data => {
+      return ElMessageBox.confirm(`确认重置 ${row.callsign || row.username} 的密码为 nb123456？临时密码将在24小时后过期。`, '重置密码').then(() => api(`/api/admin/users/${row.id}/reset-password`, { method: 'PUT', body: {} })).then(data => {
         return ElMessageBox.alert(`临时密码：${data.temporary_password}\n\n请立即安全地告知用户。关闭后将无法再次查看。`, '密码重置成功', {
           confirmButtonText: '我已保存',
           dangerouslyUseHTMLString: false

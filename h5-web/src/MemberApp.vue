@@ -454,6 +454,7 @@ import logoUrl from './assets/nbys-logo.png'
 import QRCode from 'qrcode'
 
 export default {
+  emits: ['loading-start', 'ready'],
   data() {
     return {
       view: token() ? 'app' : new URLSearchParams(location.search).get('invite') ? 'register' : 'login',
@@ -530,8 +531,13 @@ export default {
   },
   async mounted() {
     setErrorHandler(this.showToast)
-    await this.loadSystemImages()
-    if (token()) await this.init()
+    try {
+      await this.loadSystemImages()
+      if (token()) await this.init()
+      else await this.preloadImages([this.displayLogoUrl, this.systemImages.login_background_url])
+    } finally {
+      this.$emit('ready')
+    }
   },
   methods: {
     async loadSystemImages() {
@@ -560,6 +566,7 @@ export default {
       if (resolve) resolve(value)
     },
     async login() {
+      let activityLoadingStarted = false
       try {
         const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
         setToken(data.token)
@@ -570,9 +577,13 @@ export default {
           this.showToast('请先修改临时密码')
           return
         }
+        this.$emit('loading-start')
+        activityLoadingStarted = true
         await this.init()
       } catch (error) {
         this.showToast(error.message || '登录失败')
+      } finally {
+        if (activityLoadingStarted) this.$emit('ready')
       }
     },
     async register() {
@@ -595,6 +606,29 @@ export default {
       await this.loadActivities()
       await this.loadAttendanceSummary()
       await this.loadMine()
+      await this.preloadImages([
+        this.displayLogoUrl,
+        this.me.avatar_url,
+        ...this.activities.map(item => item.banner_url)
+      ])
+    },
+    preloadImages(urls) {
+      const uniqueUrls = [...new Set(urls.filter(Boolean))]
+      return Promise.all(uniqueUrls.map(url => new Promise(resolve => {
+        const image = new Image()
+        let completed = false
+        const finish = () => {
+          if (completed) return
+          completed = true
+          window.clearTimeout(timeout)
+          resolve()
+        }
+        const timeout = window.setTimeout(finish, 6000)
+        image.onload = finish
+        image.onerror = finish
+        image.src = url
+        if (image.complete) finish()
+      })))
     },
     loadActivities() {
       return Promise.all([api('/api/h5/activities'), api('/api/h5/activity-plans')]).then(([activities, plans]) => {
