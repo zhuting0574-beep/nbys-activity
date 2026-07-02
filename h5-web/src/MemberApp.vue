@@ -185,7 +185,7 @@
 
       <section v-if="(detail.my_enrollment || detail.is_activity_creator) && detail.activity_type !== '周常'" class="squad-panel">
         <h3>阵营 / 小队 / 人员列表</h3>
-        <p class="muted">点击某个小队即可自动加入对应阵营和小队。职业会自动保存。</p>
+        <p class="muted">发起人管理全部小队；队长管理本队；普通成员只能在未锁定时修改自己或更换小队。</p>
         <div v-for="camp in camps" :key="camp" class="camp-block">
           <div class="camp-head">
             <span>阵营 {{ camp }}</span>
@@ -195,34 +195,52 @@
             <div v-for="squad in squadsByCamp(camp)" :key="squad.id" class="detail-squad">
               <div class="squad-head">
                 <strong>{{ squad.name }}</strong>
-                <span>{{ squad.member_count }}人</span>
+                <span>{{ squad.member_count }}人 · 队长：{{ squadLeaderName(squad) }}</span>
               </div>
               <label class="radio-field">
                 <span>对讲频率</span>
-                <input :value="squad.radio_channel || defaultRadioChannel(squad)" readonly />
+                <div class="squad-setting-line">
+                  <input v-model="squadEdits[squad.id].radio_channel" :readonly="!canManageSquad(squad)" />
+                  <button v-if="canManageSquad(squad)" class="btn secondary compact-action" @click="saveSquadSettings(squad)">保存频率</button>
+                </div>
               </label>
               <div class="squad-lock-row">
-                <span class="lock-state" :class="{ locked: isSquadLocked(squad) }">{{ isSquadLocked(squad) ? '已锁定' : '未锁定' }}</span>
-                <button class="btn secondary lock-btn" @click="toggleSquadLock(squad)">
+                <span class="lock-state" :class="{ locked: isSquadLocked(squad) }">{{ isSquadLocked(squad) ? '已锁定：成员不可改职业、退出或换队' : '未锁定' }}</span>
+                <button v-if="canManageSquad(squad)" class="btn secondary lock-btn" @click="toggleSquadLock(squad)">
                   {{ isSquadLocked(squad) ? '解除锁定' : '锁定小队' }}
                 </button>
               </div>
-              <select
-                :value="joinJobs[squad.id] || ''"
-                :class="{ 'select-placeholder': !joinJobs[squad.id] }"
-                aria-label="选择职业"
-                @change="joinJobs[squad.id] = $event.target.value"
-              >
-                <option value="">请选择职业</option>
-                <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
-              </select>
-              <button class="btn detail-sub-action" :class="{ secondary: isSquadLocked(squad) && !isMySquad(squad) }" @click="joinSquad(squad, joinJobs[squad.id])">
-                {{ isSquadLocked(squad) && !isMySquad(squad) ? '小队已锁定' : '加入小队' }}
-              </button>
-              <button v-if="Number(squad.leader_user_id) === Number(me.id)" class="btn secondary detail-sub-action" @click="openLeaderDialog(squad)">转让队长</button>
+              <div v-if="detail.is_activity_creator && membersBySquad(camp, squad.squad_no).length" class="leader-setting">
+                <select v-model="squadEdits[squad.id].leaderUserId" class="compact-select">
+                  <option v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.user_id" :value="String(member.user_id)">{{ member.callsign || member.username }} / {{ member.job || '未选职业' }}</option>
+                </select>
+                <button class="btn secondary compact-action" @click="saveSquadLeader(squad)">设置队长</button>
+              </div>
+              <div v-if="detail.my_enrollment && !detail.is_activity_creator && !isMySquad(squad)" class="join-squad-row">
+                <select v-model="joinJobs[squad.id]" class="compact-select" :disabled="cannotSelfJoin(squad)">
+                  <option value="">请选择职业</option>
+                  <option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option>
+                </select>
+                <button class="btn compact-action" :disabled="cannotSelfJoin(squad)" @click="joinSquad(squad, joinJobs[squad.id])">{{ selfJoinLabel(squad) }}</button>
+              </div>
               <div class="member-list">
-                <div v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.id" class="member">
-                  {{ member.callsign }} / {{ member.job || '未选职业' }} <span v-if="Number(squad.leader_user_id) === Number(member.user_id)">队长</span>
+                <div v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.id" class="squad-member-row">
+                  <div class="member-identity"><strong>{{ member.callsign || member.username }}</strong><span v-if="isMemberLeader(squad, member)" class="leader-badge">队长</span></div>
+                  <template v-if="detail.is_activity_creator">
+                    <select v-model="memberAssignments[member.user_id].squadKey" class="compact-select">
+                      <option v-for="target in detail.squads" :key="target.id" :value="`${target.camp_no}:${target.squad_no}`">阵营{{ target.camp_no }} / {{ target.name }}</option>
+                    </select>
+                    <select v-model="memberAssignments[member.user_id].job" class="compact-select"><option value="" disabled>请选择职业</option><option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option></select>
+                    <button class="btn secondary compact-action" @click="saveMemberAssignment(member)">保存</button>
+                    <button class="btn danger compact-action" :disabled="isMemberLeader(squad, member)" @click="removeMember(squad, member)">踢出</button>
+                  </template>
+                  <template v-else-if="canEditMemberJob(squad, member)">
+                    <select v-model="memberAssignments[member.user_id].job" class="compact-select" :disabled="selfMemberLocked(squad, member)"><option value="" disabled>请选择职业</option><option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option></select>
+                    <button class="btn secondary compact-action" :disabled="selfMemberLocked(squad, member)" @click="saveMemberJob(member)">保存职业</button>
+                    <button v-if="isSquadLeader(squad) && !isSelf(member)" class="btn danger compact-action" @click="removeMember(squad, member)">踢出</button>
+                    <button v-if="isSelf(member) && !isSquadLeader(squad)" class="btn danger compact-action" :disabled="isSquadLocked(squad)" @click="removeMember(squad, member, true)">退出小队</button>
+                  </template>
+                  <span v-else class="member-job-text">{{ member.job || '未选职业' }}</span>
                 </div>
                 <div v-if="membersBySquad(camp, squad.squad_no).length === 0" class="muted">暂无队员</div>
               </div>
@@ -231,7 +249,7 @@
         </div>
       </section>
 
-      <section v-if="detail.activity_type !== '周常' && detail.my_enrollment && unassignedMembers.length" class="squad-panel">
+      <section v-if="detail.activity_type !== '周常' && (detail.my_enrollment || detail.is_activity_creator) && unassignedMembers.length" class="squad-panel">
         <h3>未分配阵营 / 小队</h3>
         <p class="muted">这些人员已报名，但还没有进入阵营和小队。</p>
         <div class="unassigned-list">
@@ -243,13 +261,13 @@
             <template v-if="detail.is_activity_creator">
               <select v-model="memberAssignments[member.user_id].squadKey" class="compact-select">
                 <option value="">未分配小队</option>
-                <option v-for="squad in detail.squads" :key="squad.id" :value="`${squad.camp_no}:${squad.squad_no}`" :disabled="isSquadLocked(squad)">
+                <option v-for="squad in detail.squads" :key="squad.id" :value="`${squad.camp_no}:${squad.squad_no}`">
                   阵营{{ squad.camp_no }} / {{ squad.name }}{{ isSquadLocked(squad) ? '（已锁定）' : '' }}
                 </option>
               </select>
               <select v-model="memberAssignments[member.user_id].job" class="compact-select">
                 <option value="">未选择职业</option>
-                <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
+                <option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option>
               </select>
               <button class="btn assign-btn" @click="assignMember(member)">分配</button>
             </template>
@@ -350,6 +368,47 @@
         <section class="mine-panel">
           <div class="panel-head">
             <div>
+              <h3>{{ attendanceMatrix.year || currentYear }} 年出勤</h3>
+              <p class="muted">向左滑动查看本年度每一次活动</p>
+            </div>
+          </div>
+          <div v-if="attendanceMatrixLoading" class="attendance-state">出勤记录加载中…</div>
+          <div v-else-if="attendanceMatrixError" class="attendance-state error">
+            <span>{{ attendanceMatrixError }}</span>
+            <button class="btn secondary" @click="loadAttendanceMatrix">重新加载</button>
+          </div>
+          <div v-else-if="!attendanceMatrix.events.length" class="attendance-state">本年度暂无活动</div>
+          <div v-else class="attendance-table-scroll">
+            <table class="attendance-table">
+              <thead>
+                <tr>
+                  <th class="attendance-person sticky-person">人员</th>
+                  <th class="attendance-count sticky-count">出勤次数</th>
+                  <th v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-event-head">
+                    <strong>{{ event.name }}</strong>
+                    <span>{{ formatAttendanceDate(event.event_date) }}</span>
+                    <span>{{ event.location || '地点待定' }}</span>
+                    <span>{{ event.organizer || '组织者待定' }}</span>
+                    <em v-if="event.activity_region">{{ event.activity_region }}</em>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="attendance-person sticky-person">{{ attendanceMatrix.username || me.username }}</td>
+                  <td class="attendance-count sticky-count">{{ attendanceMatrix.present_count }}</td>
+                  <td v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-mark-cell">
+                    <span v-if="Number(event.attended) === 1" class="attendance-dot" :aria-label="`${event.name} 已出勤`"></span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="mine-panel">
+          <div class="panel-head">
+            <div>
               <h3>账号设置</h3>
               <p class="muted">管理个人资料和登录密码</p>
             </div>
@@ -391,7 +450,7 @@
       <div class="tab" :class="{ active: tab === 'notifications' }" @click="openNotifications">
         通知<span v-if="unreadCount" class="tab-dot"></span>
       </div>
-      <div class="tab" :class="{ active: tab === 'mine' }" @click="tab = 'mine'; loadMine()">我的</div>
+      <div class="tab" :class="{ active: tab === 'mine' }" @click="openMine">我的</div>
     </div>
 
     <div v-if="showRentalDialog" class="modal">
@@ -443,22 +502,6 @@
       </div>
     </div>
 
-    <div v-if="leaderDialog.show" class="modal">
-      <div class="modal-backdrop" @click="leaderDialog.show = false"></div>
-      <div class="modal-panel">
-        <div class="modal-head">
-          <h2>转让队长</h2>
-          <button class="btn secondary" @click="leaderDialog.show = false">取消</button>
-        </div>
-        <select v-model="leaderDialog.selectedUserId" class="leader-select">
-          <option v-for="member in transferLeaderCandidates(leaderDialog.squad)" :key="member.user_id" :value="String(member.user_id)">
-            {{ member.callsign || member.username }} / {{ member.job || '未选职业' }}
-          </option>
-        </select>
-        <button class="btn" style="width: 100%" @click="confirmTransferLeader">确认转让</button>
-      </div>
-    </div>
-
     <div v-if="confirmDialog.show" class="modal">
       <div class="modal-backdrop" @click="resolveConfirm(false)"></div>
       <div class="modal-panel confirm-panel">
@@ -495,12 +538,16 @@ export default {
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
       attendanceSummary: { present_count: 0, activity_total: 0 },
+      attendanceMatrix: { year: new Date().getFullYear(), username: '', present_count: 0, events: [] },
+      attendanceMatrixLoading: false,
+      attendanceMatrixError: '',
       selectedActivity: null,
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
+      squadEdits: {},
       memberAssignments: {},
       rentalItems: [],
       activityRentalItems: [],
@@ -515,8 +562,7 @@ export default {
       notifications: [],
       toastTimer: null,
       toast: { show: false, message: '' },
-      confirmDialog: { show: false, title: '确认操作', message: '', resolve: null },
-      leaderDialog: { show: false, squad: null, selectedUserId: '' }
+      confirmDialog: { show: false, title: '确认操作', message: '', resolve: null }
     }
   },
   computed: {
@@ -525,6 +571,10 @@ export default {
     },
     unassignedMembers() {
       return (this.detail.members || []).filter(member => member.camp_no == null || member.squad_no == null)
+    },
+    availableJobs() {
+      const configured = String(this.detail.allowed_jobs || '').split(',').map(item => item.trim()).filter(Boolean)
+      return configured.length ? configured : this.jobs
     },
     jobStats() {
       const stats = this.jobs.map(name => ({ name, count: 0 }))
@@ -545,6 +595,9 @@ export default {
     },
     unreadCount() {
       return this.notifications.filter(notice => !notice.read_at).length
+    },
+    currentYear() {
+      return new Date().getFullYear()
     },
     showHeaderBack() {
       if (this.view !== 'app') return false
@@ -749,11 +802,16 @@ export default {
       if (!value) return ''
       return String(value).replace('T', ' ').slice(0, 16)
     },
+    formatAttendanceDate(value) {
+      if (!value) return '时间待定'
+      return String(value).replace('T', ' ').slice(0, 10)
+    },
     async openActivity(id) {
       this.selectedPlan = null
       this.selectedActivity = id
       this.detail = await api(`/api/h5/activities/${id}`)
       this.prepareJoinJobs()
+      this.prepareSquadEdits()
       this.prepareMemberAssignments()
     },
     async submitPlanVote() {
@@ -792,6 +850,25 @@ export default {
     isSquadLeader(squad) {
       return Number(squad?.leader_user_id) === Number(this.me.id)
     },
+    canManageSquad(squad) {
+      return !!this.detail.is_activity_creator || this.isSquadLeader(squad)
+    },
+    isSelf(member) {
+      return Number(member?.user_id) === Number(this.me.id)
+    },
+    isMemberLeader(squad, member) {
+      return Number(squad?.leader_user_id) === Number(member?.user_id)
+    },
+    canEditMemberJob(squad, member) {
+      return this.isSquadLeader(squad) || this.isSelf(member)
+    },
+    selfMemberLocked(squad, member) {
+      return this.isSelf(member) && !this.isSquadLeader(squad) && this.isSquadLocked(squad)
+    },
+    squadLeaderName(squad) {
+      const leader = (this.detail.members || []).find(member => Number(member.user_id) === Number(squad?.leader_user_id))
+      return leader ? (leader.callsign || leader.username) : '未设置'
+    },
     isMySquad(squad) {
       const mine = this.detail.my_enrollment || {}
       return Number(mine.camp_no) === Number(squad?.camp_no) && Number(mine.squad_no) === Number(squad?.squad_no)
@@ -817,59 +894,90 @@ export default {
         (this.detail.squads || []).map(squad => [squad.id, previous[squad.id] || ''])
       )
     },
+    prepareSquadEdits() {
+      this.squadEdits = Object.fromEntries((this.detail.squads || []).map(squad => [squad.id, {
+        radio_channel: squad.radio_channel || this.defaultRadioChannel(squad),
+        leaderUserId: squad.leader_user_id == null ? '' : String(squad.leader_user_id)
+      }]))
+    },
     async assignMember(member) {
+      return this.saveMemberAssignment(member)
+    },
+    async saveMemberAssignment(member) {
       const assignment = this.memberAssignments[member.user_id] || {}
       if (!assignment.squadKey) return this.showToast('请先选择小队')
       if (!assignment.job) return this.showToast('请先选择职业')
       const [campNo, squadNo] = assignment.squadKey.split(':').map(value => Number(value))
-      await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/squad`, {
+      const changedSquad = Number(member.camp_no) !== campNo || Number(member.squad_no) !== squadNo
+      if (changedSquad && !(await this.askConfirm(`确认将 ${member.callsign || member.username} 调整到阵营${campNo}的目标小队吗？`))) return
+      await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/assignment`, {
         method: 'PUT',
         body: { camp_no: campNo, squad_no: squadNo, job: assignment.job }
       })
       await this.openActivity(this.selectedActivity)
-      this.showToast('已分配')
+      this.showToast('成员信息已保存')
     },
-    joinSquad(squad, job) {
+    async saveMemberJob(member) {
+      const job = this.memberAssignments[member.user_id]?.job
+      if (!job) return this.showToast('请选择职业')
+      await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/job`, { method: 'PUT', body: { job } })
+      await this.openActivity(this.selectedActivity)
+      this.showToast('职业已保存')
+    },
+    async removeMember(squad, member, self = false) {
+      if (this.isMemberLeader(squad, member)) return this.showToast('请先设置新的队长')
+      const action = self ? '退出小队' : `将 ${member.callsign || member.username} 踢出小队`
+      if (!(await this.askConfirm(`确认${action}吗？职业和所属阵营将一并清空。`))) return
+      await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/squad`, { method: 'DELETE' })
+      await this.openActivity(this.selectedActivity)
+      this.showToast(self ? '已退出小队' : '成员已移至未分配')
+    },
+    cannotSelfJoin(squad) {
+      const mine = this.detail.my_enrollment || {}
+      const source = (this.detail.squads || []).find(item => Number(item.camp_no) === Number(mine.camp_no) && Number(item.squad_no) === Number(mine.squad_no))
+      return this.isSquadLocked(squad) || !!(source && this.isSquadLocked(source)) || !!(source && this.isSquadLeader(source))
+    },
+    selfJoinLabel(squad) {
+      if (this.isSquadLocked(squad)) return '目标小队已锁定'
+      const mine = this.detail.my_enrollment || {}
+      const source = (this.detail.squads || []).find(item => Number(item.camp_no) === Number(mine.camp_no) && Number(item.squad_no) === Number(mine.squad_no))
+      if (source && this.isSquadLeader(source)) return '请先转让队长'
+      if (source && this.isSquadLocked(source)) return '原小队已锁定'
+      return '加入小队'
+    },
+    async joinSquad(squad, job) {
       if (!job || job === '请选择职业') {
         this.showToast('请选择职业')
         return
       }
-      if (this.isSquadLocked(squad) && !this.isMySquad(squad)) {
-        this.showToast('小队已锁定，无法加入')
-        return
-      }
-      return api(`/api/h5/activities/${this.selectedActivity}/squad`, { method: 'PUT', body: { camp_no: squad.camp_no, squad_no: squad.squad_no, job } }).then(() => this.openActivity(this.selectedActivity))
+      if (this.cannotSelfJoin(squad)) return this.showToast(this.selfJoinLabel(squad))
+      if (!(await this.askConfirm(`确认加入阵营${squad.camp_no} / ${squad.name}吗？原小队信息将被替换。`))) return
+      await api(`/api/h5/activities/${this.selectedActivity}/squad`, { method: 'PUT', body: { camp_no: squad.camp_no, squad_no: squad.squad_no, job } })
+      await this.openActivity(this.selectedActivity)
+      this.showToast('已加入小队')
+    },
+    async saveSquadSettings(squad, locked = this.isSquadLocked(squad)) {
+      const edit = this.squadEdits[squad.id] || {}
+      await api(`/api/h5/activities/${this.selectedActivity}/squads/${squad.id}/settings`, { method: 'PUT', body: { radio_channel: edit.radio_channel, locked } })
+      await this.openActivity(this.selectedActivity)
+      this.showToast('小队设置已保存')
     },
     async toggleSquadLock(squad) {
-      if (!this.isSquadLeader(squad)) {
-        this.showToast('只有队长可以锁定小队')
-        return
-      }
+      if (!this.canManageSquad(squad)) return this.showToast('没有权限修改小队设置')
       const locked = !this.isSquadLocked(squad)
-      await api(`/api/h5/activities/${this.selectedActivity}/squads/${squad.id}/lock`, { method: 'PUT', body: { locked } })
-      await this.openActivity(this.selectedActivity)
+      if (!(await this.askConfirm(locked ? '锁定后普通成员将不能改职业、退出或换队，确认锁定吗？' : '确认解除小队锁定吗？'))) return
+      await this.saveSquadSettings(squad, locked)
       this.showToast(locked ? '小队已锁定' : '小队已解除锁定')
     },
-    openLeaderDialog(squad) {
-      const candidates = this.transferLeaderCandidates(squad)
-      if (!candidates.length) {
-        this.showToast('暂无可转让队员')
-        return
-      }
-      this.leaderDialog = { show: true, squad, selectedUserId: String(candidates[0].user_id) }
-    },
-    transferLeaderCandidates(squad) {
-      if (!squad) return []
-      return this.membersBySquad(squad.camp_no, squad.squad_no)
-        .filter(member => Number(member.user_id) !== Number(this.me.id))
-    },
-    async confirmTransferLeader() {
-      const userId = this.leaderDialog.selectedUserId
-      if (!userId) return this.showToast('请选择转让对象')
-      await api(`/api/h5/activities/${this.selectedActivity}/squad/leader`, { method: 'PUT', body: { user_id: userId } })
-      this.leaderDialog = { show: false, squad: null, selectedUserId: '' }
+    async saveSquadLeader(squad) {
+      const userId = this.squadEdits[squad.id]?.leaderUserId
+      if (!userId) return this.showToast('请选择队长')
+      if (Number(userId) === Number(squad.leader_user_id)) return this.showToast('当前成员已经是队长')
+      const member = (this.detail.members || []).find(item => Number(item.user_id) === Number(userId))
+      if (!(await this.askConfirm(`确认将 ${member?.callsign || member?.username || '该成员'} 设置为 ${squad.name} 队长吗？`))) return
+      await api(`/api/h5/activities/${this.selectedActivity}/squads/${squad.id}/leader`, { method: 'PUT', body: { user_id: userId } })
       await this.openActivity(this.selectedActivity)
-      this.showToast('已转让队长')
+      this.showToast('队长已更新')
     },
     openActivityRentals() {
       this.tab = 'activityRentals'
@@ -975,21 +1083,37 @@ export default {
       if (!(await this.askConfirm('确认删除该发射器出租信息？'))) return
       return api(`/api/h5/launcher-rentals/my-items/${id}`, { method: 'DELETE' }).then(() => this.loadRentals())
     },
-    loadMine() {
+    loadNotifications() {
       return api('/api/h5/notifications').then(data => { this.notifications = data })
+    },
+    async loadAttendanceMatrix() {
+      this.attendanceMatrixLoading = true
+      this.attendanceMatrixError = ''
+      try {
+        const data = await api(`/api/h5/attendance/my-matrix?year=${this.currentYear}`)
+        this.attendanceMatrix = data || { year: this.currentYear, username: this.me.username || '', present_count: 0, events: [] }
+      } catch (error) {
+        this.attendanceMatrixError = error.message || '出勤记录加载失败'
+      } finally {
+        this.attendanceMatrixLoading = false
+      }
+    },
+    openMine() {
+      this.tab = 'mine'
+      return this.loadAttendanceMatrix()
     },
     async openNotifications() {
       this.tab = 'notifications'
-      await this.loadMine()
+      await this.loadNotifications()
       if (this.unreadCount) {
         await api('/api/h5/notifications/read-all', { method: 'PUT' })
-        await this.loadMine()
+        await this.loadNotifications()
       }
     },
     confirmRentalNotice(notice) {
       return api(`/api/h5/launcher-rentals/${notice.rental_action_id || notice.related_id}/confirm`, { method: 'PUT' }).then(async () => {
         this.showToast('已确认租借')
-        await this.loadMine()
+        await this.loadNotifications()
       })
     },
     openProfileDialog() {

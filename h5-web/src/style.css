@@ -416,6 +416,140 @@ select {
   padding-inline: 10px;
 }
 
+.attendance-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, .34);
+  -webkit-overflow-scrolling: touch;
+}
+
+.attendance-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #e5e7eb;
+  font-size: 13px;
+}
+
+.attendance-table th,
+.attendance-table td {
+  min-width: 156px;
+  padding: 12px;
+  border-right: 1px solid rgba(148, 163, 184, .16);
+  border-bottom: 1px solid rgba(148, 163, 184, .16);
+  text-align: left;
+  vertical-align: top;
+}
+
+.attendance-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.attendance-table th:last-child,
+.attendance-table td:last-child {
+  border-right: 0;
+}
+
+.attendance-person {
+  width: 104px;
+  min-width: 104px !important;
+  max-width: 104px;
+}
+
+.attendance-count {
+  width: 82px;
+  min-width: 82px !important;
+  max-width: 82px;
+  text-align: center !important;
+}
+
+.sticky-person,
+.sticky-count {
+  position: sticky;
+  z-index: 2;
+  background: #111827;
+}
+
+.sticky-person {
+  left: 0;
+}
+
+.sticky-count {
+  left: 104px;
+  box-shadow: 8px 0 14px rgba(0, 0, 0, .18);
+}
+
+.attendance-table thead .sticky-person,
+.attendance-table thead .sticky-count {
+  z-index: 3;
+}
+
+.attendance-event-head strong,
+.attendance-event-head span,
+.attendance-event-head em {
+  display: block;
+}
+
+.attendance-event-head strong {
+  margin-bottom: 7px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.attendance-event-head span {
+  margin-top: 4px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.attendance-event-head em {
+  width: fit-content;
+  margin-top: 7px;
+  padding: 2px 8px;
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, .12);
+  border: 1px solid rgba(34, 197, 94, .24);
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.attendance-mark-cell {
+  height: 56px;
+  text-align: center !important;
+  vertical-align: middle !important;
+}
+
+.attendance-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background: #16a34a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, .12);
+}
+
+.attendance-state {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  min-height: 92px;
+  padding: 16px;
+  color: var(--muted);
+  background: rgba(2, 6, 23, .28);
+  border: 1px dashed rgba(148, 163, 184, .22);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.attendance-state.error {
+  color: #fecaca;
+}
+
 .rental-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
@@ -952,7 +1086,69 @@ select {
 
 .member-list {
   display: grid;
-  gap: 5px;
+  gap: 8px;
+}
+
+.squad-setting-line,
+.leader-setting,
+.join-squad-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.squad-setting-line input,
+.leader-setting select,
+.join-squad-row select {
+  margin: 0;
+}
+
+.squad-member-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(110px, .8fr) minmax(110px, .8fr) auto auto;
+  gap: 7px;
+  align-items: center;
+  padding: 9px;
+  background: rgba(2, 6, 23, .38);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 10px;
+}
+
+.member-identity {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.member-identity strong {
+  overflow: hidden;
+  color: #f8fafc;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leader-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  color: #fde68a;
+  background: rgba(245, 158, 11, .14);
+  border: 1px solid rgba(245, 158, 11, .32);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.member-job-text {
+  color: #cbd5e1;
+  font-size: 13px;
+}
+
+.compact-action {
+  min-height: 36px;
+  padding: 8px 10px;
+  white-space: nowrap;
 }
 
 .unassigned-list {
@@ -1291,7 +1487,7 @@ select option {
   }
 
   .detail-grid {
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .activity-rental-grid {
@@ -1313,6 +1509,18 @@ select option {
     max-height: none;
     object-fit: cover;
     object-position: center;
+  }
+}
+
+@media (max-width: 699px) {
+  .squad-member-row {
+    grid-template-columns: 1fr;
+  }
+
+  .squad-setting-line,
+  .leader-setting,
+  .join-squad-row {
+    grid-template-columns: 1fr;
   }
 }
 

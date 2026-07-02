@@ -6,11 +6,13 @@ import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -88,31 +90,60 @@ public class H5Controller {
         return ApiResponse.ok(row);
     }
 
-    @PutMapping("/activities/{id}/members/{targetUserId}/squad")
+    @Transactional
+    @PutMapping({"/activities/{id}/members/{targetUserId}/squad", "/activities/{id}/members/{targetUserId}/assignment"})
     public ApiResponse<Void> assignMemberSquad(@PathVariable int id, @PathVariable int targetUserId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
-        Map<String, Object> activity = Rows.one(jdbc, "select created_by_id,squad_limit from activities where id=?", id);
-        if (activity == null) throw new IllegalArgumentException("活动不存在");
-        if (activity.get("created_by_id") == null || !String.valueOf(activity.get("created_by_id")).equals(String.valueOf(userId))) {
-            throw new SecurityException("只有活动发起人可以分配人员");
-        }
-        if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, targetUserId) == null) {
-            throw new IllegalArgumentException("该用户未报名");
-        }
+        Map<String, Object> activity = managedActivity(id);
+        requireCreator(activity, userId);
+        Map<String, Object> member = enrollmentForUpdate(id, targetUserId);
         int campNo = num(body.get("camp_no"), 1);
         int squadNo = num(body.get("squad_no"), 1);
-        String job = String.valueOf(body.get("job"));
+        String job = text(body.get("job"));
+        ensureLeaderCanLeave(id, member, campNo, squadNo);
         validateJob(id, campNo, squadNo, targetUserId, job);
-        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
+        Map<String, Object> squad = squadForUpdate(id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
-        ensureSquadJoinAllowed(id, squad, targetUserId);
-        int squadLimit = num(activity.get("squad_limit"), 0);
-        if (squadLimit > 0) {
-            int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?", id, campNo, squadNo, targetUserId).size();
-            if (members >= squadLimit) throw new IllegalArgumentException("小队已满");
-        }
+        ensureCapacity(id, activity, squad, targetUserId);
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, targetUserId);
         if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", targetUserId, squad.get("id"));
+        return ApiResponse.ok(null);
+    }
+
+    @Transactional
+    @PutMapping("/activities/{id}/members/{targetUserId}/job")
+    public ApiResponse<Void> updateMemberJob(@PathVariable int id, @PathVariable int targetUserId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> activity = managedActivity(id);
+        Map<String, Object> member = enrollmentForUpdate(id, targetUserId);
+        Map<String, Object> squad = memberSquadForUpdate(id, member);
+        if (squad == null) throw new IllegalArgumentException("该成员尚未加入小队");
+        boolean creator = isCreator(activity, userId);
+        boolean leader = sameId(squad.get("leader_user_id"), userId);
+        boolean self = targetUserId == userId;
+        if (!creator && !leader && !self) throw new SecurityException("没有权限修改该成员职业");
+        if (self && !creator && !leader && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法修改职业");
+        String job = text(body.get("job"));
+        validateJob(id, num(member.get("camp_no"), 0), num(member.get("squad_no"), 0), targetUserId, job);
+        jdbc.update("update enrollments set job=?,updated_at=now() where activity_id=? and user_id=?", job, id, targetUserId);
+        return ApiResponse.ok(null);
+    }
+
+    @Transactional
+    @DeleteMapping("/activities/{id}/members/{targetUserId}/squad")
+    public ApiResponse<Void> removeMemberFromSquad(@PathVariable int id, @PathVariable int targetUserId, HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> activity = managedActivity(id);
+        Map<String, Object> member = enrollmentForUpdate(id, targetUserId);
+        Map<String, Object> squad = memberSquadForUpdate(id, member);
+        if (squad == null) return ApiResponse.ok(null);
+        boolean creator = isCreator(activity, userId);
+        boolean leader = sameId(squad.get("leader_user_id"), userId);
+        boolean self = targetUserId == userId;
+        if (!creator && !leader && !self) throw new SecurityException("没有权限将该成员移出小队");
+        if (sameId(squad.get("leader_user_id"), targetUserId)) throw new IllegalArgumentException("请先转让队长，再将该成员移出小队");
+        if (self && !creator && !leader && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法退出");
+        jdbc.update("update enrollments set camp_no=null,squad_no=null,job=null,updated_at=now() where activity_id=? and user_id=?", id, targetUserId);
         return ApiResponse.ok(null);
     }
 
@@ -133,6 +164,32 @@ public class H5Controller {
         return out;
     }
 
+    @GetMapping("/attendance/my-matrix")
+    public ApiResponse<Map<String, Object>> myAttendanceMatrix(@RequestParam(name = "year", required = false) Integer year,
+                                                                HttpServletRequest req) {
+        Map<String, Object> me = auth.current(req);
+        int userId = ((Number) me.get("id")).intValue();
+        int targetYear = year == null ? LocalDate.now().getYear() : year;
+        if (targetYear < 2000 || targetYear > 2100) throw new IllegalArgumentException("年份不正确");
+
+        List<Map<String, Object>> events = Rows.list(jdbc,
+                "select ev.id,ev.name,ev.event_date,ev.location,ev.organizer,ev.activity_region," +
+                        "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended " +
+                        "from attendance_events ev where ev.event_date>=? and ev.event_date<? order by ev.event_date asc,ev.id asc",
+                userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
+        int presentCount = 0;
+        for (Map<String, Object> event : events) {
+            if (num(event.get("attended"), 0) == 1) presentCount++;
+        }
+
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("year", targetYear);
+        out.put("username", me.get("username"));
+        out.put("present_count", presentCount);
+        out.put("events", events);
+        return ApiResponse.ok(out);
+    }
+
     @PostMapping("/activities/{id}/enroll")
     public ApiResponse<Void> enroll(@PathVariable int id, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
@@ -146,14 +203,21 @@ public class H5Controller {
         return ApiResponse.ok(null);
     }
 
+    @Transactional
     @DeleteMapping("/activities/{id}/enroll")
     public ApiResponse<Void> cancelEnroll(@PathVariable int id, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         if (Rows.one(jdbc, "select ar.id from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=? and ar.user_id=? and ar.present=1", id, userId) != null) {
             throw new IllegalArgumentException("已签到，不能取消报名");
         }
+        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? for update", id);
+        Map<String, Object> member = Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=? for update", id, userId);
+        if (member != null && activity != null && isManagedActivity(activity)) {
+            Map<String, Object> squad = memberSquadForUpdate(id, member);
+            if (squad != null && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法取消报名");
+            if (squad != null && sameId(squad.get("leader_user_id"), userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
+        }
         jdbc.update("delete from enrollments where activity_id=? and user_id=?", id, userId);
-        jdbc.update("update squad_settings set leader_user_id=null where activity_id=? and leader_user_id=?", id, userId);
         return ApiResponse.ok(null);
     }
 
@@ -174,48 +238,59 @@ public class H5Controller {
         return ApiResponse.ok(null);
     }
 
+    @Transactional
     @PutMapping("/activities/{id}/squad")
     public ApiResponse<Void> joinSquad(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> activity = managedActivity(id);
+        Map<String, Object> member = enrollmentForUpdate(id, userId);
         int campNo = num(body.get("camp_no"), 1);
         int squadNo = num(body.get("squad_no"), 1);
-        String job = String.valueOf(body.get("job"));
+        String job = text(body.get("job"));
         validateJob(id, campNo, squadNo, userId, job);
-        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, campNo, squadNo);
+        Map<String, Object> squad = squadForUpdate(id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
-        ensureSquadJoinAllowed(id, squad, userId);
-        Map<String, Object> activity = Rows.one(jdbc, "select squad_limit from activities where id=?", id);
-        int squadLimit = num(activity.get("squad_limit"), 0);
-        if (squadLimit > 0) {
-            int members = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?", id, campNo, squadNo, userId).size();
-            if (members >= squadLimit) throw new IllegalArgumentException("小队已满");
+        Map<String, Object> source = memberSquadForUpdate(id, member);
+        boolean sameSquad = sameSquad(member, campNo, squadNo);
+        if (sameSquad) {
+            if (bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法修改职业");
+        } else {
+            if (source != null && sameId(source.get("leader_user_id"), userId)) throw new IllegalArgumentException("请先转让队长，再加入其他小队");
+            if (source != null && bool(source.get("locked"))) throw new IllegalArgumentException("原小队已锁定，无法退出");
+            if (bool(squad.get("locked"))) throw new IllegalArgumentException("目标小队已锁定，无法加入");
+            ensureCapacity(id, activity, squad, userId);
         }
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, userId);
-        jdbc.update("update squad_settings set leader_user_id=null where activity_id=? and leader_user_id=? and id<>?", id, userId, squad.get("id"));
         if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", userId, squad.get("id"));
         return ApiResponse.ok(null);
     }
 
-    @PutMapping("/activities/{id}/squads/{squadId}/lock")
-    public ApiResponse<Void> lockSquad(@PathVariable int id, @PathVariable int squadId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+    @Transactional
+    @PutMapping({"/activities/{id}/squads/{squadId}/lock", "/activities/{id}/squads/{squadId}/settings"})
+    public ApiResponse<Void> updateSquadSettings(@PathVariable int id, @PathVariable int squadId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
-        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=?", squadId, id);
+        Map<String, Object> activity = managedActivity(id);
+        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=? for update", squadId, id);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
-        if (!String.valueOf(squad.get("leader_user_id")).equals(String.valueOf(userId))) throw new SecurityException("只有队长可以锁定小队");
-        int locked = bool(body.get("locked")) ? 1 : 0;
-        jdbc.update("update squad_settings set locked=?, updated_at=now() where id=?", locked, squadId);
+        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) throw new SecurityException("只有活动发起人或本队队长可以修改小队设置");
+        int locked = body.containsKey("locked") ? (bool(body.get("locked")) ? 1 : 0) : (bool(squad.get("locked")) ? 1 : 0);
+        String channel = body.containsKey("radio_channel") ? text(body.get("radio_channel")) : text(squad.get("radio_channel"));
+        if (!channel.matches("^[0-9]{3}\\.[0-9]{3}$")) throw new IllegalArgumentException("对讲频率格式应为439.100");
+        jdbc.update("update squad_settings set locked=?,radio_channel=?,updated_at=now() where id=?", locked, channel, squadId);
         return ApiResponse.ok(null);
     }
 
-    @PutMapping("/activities/{id}/squad/leader")
-    public ApiResponse<Void> transferLeader(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+    @Transactional
+    @PutMapping("/activities/{id}/squads/{squadId}/leader")
+    public ApiResponse<Void> setSquadLeader(@PathVariable int id, @PathVariable int squadId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
+        Map<String, Object> activity = managedActivity(id);
+        requireCreator(activity, userId);
+        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=? for update", squadId, id);
+        if (squad == null) throw new IllegalArgumentException("小队不存在");
         int targetId = num(body.get("user_id"), 0);
-        Map<String, Object> mine = Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId);
-        Map<String, Object> target = Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, targetId);
-        if (mine == null || target == null || !String.valueOf(mine.get("camp_no")).equals(String.valueOf(target.get("camp_no"))) || !String.valueOf(mine.get("squad_no")).equals(String.valueOf(target.get("squad_no")))) throw new IllegalArgumentException("只能转让给本小队成员");
-        Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=?", id, mine.get("camp_no"), mine.get("squad_no"));
-        if (squad == null || !String.valueOf(squad.get("leader_user_id")).equals(String.valueOf(userId))) throw new SecurityException("只有队长可以转让");
+        Map<String, Object> target = enrollmentForUpdate(id, targetId);
+        if (!sameSquad(target, num(squad.get("camp_no"), 0), num(squad.get("squad_no"), 0))) throw new IllegalArgumentException("队长必须是本小队成员");
         jdbc.update("update squad_settings set leader_user_id=? where id=?", targetId, squad.get("id"));
         return ApiResponse.ok(null);
     }
@@ -328,13 +403,65 @@ public class H5Controller {
         if (count >= quota) throw new IllegalArgumentException("该小队每5人只允许1个" + job);
     }
 
-    private void ensureSquadJoinAllowed(int activityId, Map<String, Object> squad, int userId) {
-        if (!bool(squad.get("locked"))) return;
-        Map<String, Object> mine = Rows.one(jdbc, "select camp_no,squad_no from enrollments where activity_id=? and user_id=?", activityId, userId);
-        boolean alreadyInSquad = mine != null
-                && String.valueOf(mine.get("camp_no")).equals(String.valueOf(squad.get("camp_no")))
-                && String.valueOf(mine.get("squad_no")).equals(String.valueOf(squad.get("squad_no")));
-        if (!alreadyInSquad) throw new IllegalArgumentException("小队已锁定，无法加入");
+    private Map<String, Object> managedActivity(int activityId) {
+        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? for update", activityId);
+        if (activity == null) throw new IllegalArgumentException("活动不存在");
+        if (!isManagedActivity(activity)) throw new IllegalArgumentException("周常活动不使用阵营和小队管理");
+        return activity;
+    }
+
+    private boolean isManagedActivity(Map<String, Object> activity) {
+        String type = text(activity.get("activity_type"));
+        return "本地活动".equals(type) || "外地活动".equals(type);
+    }
+
+    private boolean isCreator(Map<String, Object> activity, int userId) {
+        return sameId(activity.get("created_by_id"), userId);
+    }
+
+    private void requireCreator(Map<String, Object> activity, int userId) {
+        if (!isCreator(activity, userId)) throw new SecurityException("只有活动发起人可以执行该操作");
+    }
+
+    private Map<String, Object> enrollmentForUpdate(int activityId, int userId) {
+        Map<String, Object> member = Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=? for update", activityId, userId);
+        if (member == null) throw new IllegalArgumentException("该用户未报名");
+        return member;
+    }
+
+    private Map<String, Object> squadForUpdate(int activityId, int campNo, int squadNo) {
+        return Rows.one(jdbc, "select * from squad_settings where activity_id=? and camp_no=? and squad_no=? for update", activityId, campNo, squadNo);
+    }
+
+    private Map<String, Object> memberSquadForUpdate(int activityId, Map<String, Object> member) {
+        if (member == null || member.get("camp_no") == null || member.get("squad_no") == null) return null;
+        return squadForUpdate(activityId, num(member.get("camp_no"), 0), num(member.get("squad_no"), 0));
+    }
+
+    private boolean sameSquad(Map<String, Object> member, int campNo, int squadNo) {
+        return member != null && member.get("camp_no") != null && member.get("squad_no") != null
+                && num(member.get("camp_no"), -1) == campNo && num(member.get("squad_no"), -1) == squadNo;
+    }
+
+    private boolean sameId(Object value, int userId) {
+        return value != null && String.valueOf(value).equals(String.valueOf(userId));
+    }
+
+    private void ensureLeaderCanLeave(int activityId, Map<String, Object> member, int targetCamp, int targetSquad) {
+        if (sameSquad(member, targetCamp, targetSquad)) return;
+        Map<String, Object> source = memberSquadForUpdate(activityId, member);
+        if (source != null && sameId(source.get("leader_user_id"), num(member.get("user_id"), 0))) {
+            throw new IllegalArgumentException("请先转让队长，再调整该成员所属小队");
+        }
+    }
+
+    private void ensureCapacity(int activityId, Map<String, Object> activity, Map<String, Object> squad, int excludedUserId) {
+        int squadLimit = num(activity.get("squad_limit"), 0);
+        if (squadLimit <= 0) return;
+        Integer members = jdbc.queryForObject(
+                "select count(*) from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?",
+                Integer.class, activityId, squad.get("camp_no"), squad.get("squad_no"), excludedUserId);
+        if (members != null && members >= squadLimit) throw new IllegalArgumentException("小队已满");
     }
 
     private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
