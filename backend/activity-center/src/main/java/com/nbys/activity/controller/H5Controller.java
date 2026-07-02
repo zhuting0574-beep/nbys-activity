@@ -30,15 +30,19 @@ public class H5Controller {
     @GetMapping("/activities")
     public ApiResponse<List<Map<String, Object>>> activities(HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
+        return ApiResponse.ok(activityRows(me));
+    }
+
+    private List<Map<String, Object>> activityRows(Map<String, Object> me) {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select a.*, coalesce(nullif(u.callsign,''),u.username) creator_name, " +
                         "(select count(distinct e.user_id) from enrollments e where e.activity_id=a.id) enroll_count " +
                         "from activities a left join users u on u.id=a.created_by_id " +
-                        "where a.record_type='activity' order by a.created_at desc, a.id desc");
+                        "where a.record_type='activity' and a.deleted_at is null and a.end_at>=now() " +
+                        "order by a.created_at desc, a.id desc");
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : rows) {
-            applyDefaultVenueBanner(row);
-            enrichVenueFields(row);
+            enrichVenue(row);
             String status = displayStatus(row);
             if (visible(row, me) && ("报名中".equals(status) || "活动开始".equals(status))) {
                 row.put("display_status", status);
@@ -46,7 +50,7 @@ public class H5Controller {
                 result.add(row);
             }
         }
-        return ApiResponse.ok(result);
+        return result;
     }
 
     @GetMapping("/activities/{id}")
@@ -56,8 +60,7 @@ public class H5Controller {
                 "select a.*, coalesce(nullif(u.callsign,''),u.username) creator_name " +
                         "from activities a left join users u on u.id=a.created_by_id where a.id=?", id);
         if (row == null || !visible(row, me)) throw new IllegalArgumentException("活动不存在或不可见");
-        applyDefaultVenueBanner(row);
-        enrichVenueFields(row);
+        enrichVenue(row);
         int userId = ((Number) me.get("id")).intValue();
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
@@ -110,6 +113,10 @@ public class H5Controller {
     @GetMapping("/attendance/my-summary")
     public ApiResponse<Map<String, Object>> myAttendanceSummary(HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
+        return ApiResponse.ok(attendanceSummary(userId));
+    }
+
+    private Map<String, Object> attendanceSummary(int userId) {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("present_count", Rows.one(jdbc,
                 "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
@@ -117,7 +124,7 @@ public class H5Controller {
                 userId).get("total"));
         out.put("activity_total", Rows.one(jdbc,
                 "select count(*) total from activities where record_type='activity' and deleted_at is null and end_at<=now()").get("total"));
-        return ApiResponse.ok(out);
+        return out;
     }
 
     @PostMapping("/activities/{id}/enroll")
@@ -211,34 +218,79 @@ public class H5Controller {
     public ApiResponse<List<Map<String, Object>>> plans(HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         int userId = ((Number) me.get("id")).intValue();
+        return ApiResponse.ok(planRows(me, userId));
+    }
+
+    private List<Map<String, Object>> planRows(Map<String, Object> me, int userId) {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select p.*, coalesce(nullif(u.callsign,''),u.username) creator_name " +
                         "from activity_plans p left join users u on u.id=p.created_by_id " +
                         "where p.hidden=0 and p.converted_activity_id is null and p.vote_deadline>=now() " +
                         "order by p.created_at desc, p.id desc");
         List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+        if (rows.isEmpty()) return result;
+
+        String activePlans = "select id from activity_plans where hidden=0 and converted_activity_id is null and vote_deadline>=now()";
+        Map<Integer, List<Map<String, Object>>> datesByPlan = groupByPlan(Rows.list(jdbc,
+                "select d.*,count(v.id) vote_count from plan_date_options d " +
+                        "left join plan_votes v on v.plan_id=d.plan_id and v.option_type='date' and v.option_id=d.id " +
+                        "where d.plan_id in (" + activePlans + ") group by d.id order by d.plan_id,d.date"));
+        Map<Integer, List<Map<String, Object>>> venuesByPlan = groupByPlan(Rows.list(jdbc,
+                "select o.plan_id,v.*,count(pv.id) vote_count from plan_venue_options o join venues v on v.id=o.venue_id " +
+                        "left join plan_votes pv on pv.plan_id=o.plan_id and pv.option_type='venue' and pv.option_id=v.id " +
+                        "where o.plan_id in (" + activePlans + ") group by o.plan_id,v.id order by o.plan_id,v.id"));
+        Map<Integer, List<Map<String, Object>>> modesByPlan = groupByPlan(Rows.list(jdbc,
+                "select o.plan_id,g.*,count(pv.id) vote_count from plan_game_mode_options o join game_modes g on g.id=o.game_mode_id " +
+                        "left join plan_votes pv on pv.plan_id=o.plan_id and pv.option_type='game_mode' and pv.option_id=g.id " +
+                        "where o.plan_id in (" + activePlans + ") group by o.plan_id,g.id order by o.plan_id,g.id"));
+        Map<Integer, Map<String, List<Integer>>> votesByPlan = new HashMap<Integer, Map<String, List<Integer>>>();
+        for (Map<String, Object> vote : Rows.list(jdbc,
+                "select plan_id,option_type,option_id from plan_votes where user_id=? and plan_id in (" + activePlans + ") order by id", userId)) {
+            int planId = num(vote.get("plan_id"), 0);
+            String type = text(vote.get("option_type"));
+            Map<String, List<Integer>> byType = votesByPlan.computeIfAbsent(planId, key -> new HashMap<String, List<Integer>>());
+            byType.computeIfAbsent(type, key -> new ArrayList<Integer>()).add(num(vote.get("option_id"), 0));
+        }
         for (Map<String, Object> row : rows) {
             if (visible(row, me)) {
                 applyDefaultPlanBanner(row);
                 int id = ((Number) row.get("id")).intValue();
-                row.put("dates", Rows.list(jdbc,
-                        "select d.*, (select count(*) from plan_votes v where v.plan_id=d.plan_id and v.option_type='date' and v.option_id=d.id) vote_count " +
-                                "from plan_date_options d where d.plan_id=? order by d.date", id));
-                row.put("venues", Rows.list(jdbc,
-                        "select v.*, (select count(*) from plan_votes pv where pv.plan_id=o.plan_id and pv.option_type='venue' and pv.option_id=v.id) vote_count " +
-                                "from plan_venue_options o join venues v on v.id=o.venue_id where o.plan_id=? order by v.id", id));
-                row.put("game_modes", Rows.list(jdbc,
-                        "select g.*, (select count(*) from plan_votes pv where pv.plan_id=o.plan_id and pv.option_type='game_mode' and pv.option_id=g.id) vote_count " +
-                                "from plan_game_mode_options o join game_modes g on g.id=o.game_mode_id where o.plan_id=? order by g.id", id));
+                row.put("dates", datesByPlan.getOrDefault(id, Collections.emptyList()));
+                row.put("venues", venuesByPlan.getOrDefault(id, Collections.emptyList()));
+                row.put("game_modes", modesByPlan.getOrDefault(id, Collections.emptyList()));
                 row.put("display_status", "策划中");
-                row.put("voted", Rows.one(jdbc, "select id from plan_votes where plan_id=? and user_id=? limit 1", id, userId) != null);
-                row.put("my_date_option_ids", voteOptionIds(id, userId, "date"));
-                row.put("my_venue_ids", voteOptionIds(id, userId, "venue"));
-                row.put("my_game_mode_ids", voteOptionIds(id, userId, "game_mode"));
+                Map<String, List<Integer>> myVotes = votesByPlan.getOrDefault(id, Collections.emptyMap());
+                row.put("voted", !myVotes.isEmpty());
+                row.put("my_date_option_ids", myVotes.getOrDefault("date", Collections.emptyList()));
+                row.put("my_venue_ids", myVotes.getOrDefault("venue", Collections.emptyList()));
+                row.put("my_game_mode_ids", myVotes.getOrDefault("game_mode", Collections.emptyList()));
                 result.add(row);
             }
         }
-        return ApiResponse.ok(result);
+        return result;
+    }
+
+    @GetMapping("/activities/bootstrap")
+    public ApiResponse<Map<String, Object>> bootstrap(HttpServletRequest req) {
+        Map<String, Object> me = auth.current(req);
+        int userId = ((Number) me.get("id")).intValue();
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("activities", activityRows(me));
+        out.put("plans", planRows(me, userId));
+        out.put("attendance_summary", attendanceSummary(userId));
+        out.put("notifications", notificationRows(userId));
+        return ApiResponse.ok(out);
+    }
+
+    private List<Map<String, Object>> notificationRows(int userId) {
+        return Rows.list(jdbc,
+                "select n.*, r.id rental_action_id, r.status rental_status, r.user_id rental_user_id, r.launcher_id rental_launcher_id " +
+                        "from user_notifications n " +
+                        "left join activity_launcher_rentals r on r.id=(select r2.id from activity_launcher_rentals r2 " +
+                        "join launcher_rental_items l2 on l2.id=r2.launcher_id " +
+                        "where n.type='launcher_rental' and (r2.id=n.related_id or (r2.launcher_id=n.related_id and l2.created_by_id=n.user_id)) " +
+                        "order by case when r2.id=n.related_id then 0 else 1 end, r2.id desc limit 1) " +
+                        "where n.user_id=? order by n.created_at desc,n.id desc limit 50", userId);
     }
 
     @PostMapping("/activity-plans/{id}/vote")
@@ -315,39 +367,37 @@ public class H5Controller {
         return limit == Integer.MAX_VALUE ? 0 : limit;
     }
 
-    private void applyDefaultVenueBanner(Map<String, Object> row) {
-        if ("custom".equals(text(row.get("banner_source"))) && !text(row.get("banner_url")).isEmpty()) return;
+    private void enrichVenue(Map<String, Object> row) {
+        boolean customBanner = "custom".equals(text(row.get("banner_source"))) && !text(row.get("banner_url")).isEmpty();
         Map<String, Object> venue = null;
         if (row.get("venue_id") != null) {
-            venue = Rows.one(jdbc, "select image_url from venues where id=?", row.get("venue_id"));
+            venue = Rows.one(jdbc, "select name,address,image_url from venues where id=?", row.get("venue_id"));
         }
         if (venue == null) {
             String location = text(row.get("location"));
-            if (!location.isEmpty()) venue = Rows.one(jdbc, "select image_url from venues where name=? or address=? limit 1", location, location);
-        }
-        if (venue != null && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
-    }
-
-    private void applyDefaultPlanBanner(Map<String, Object> row) {
-        if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
-    }
-
-    private void enrichVenueFields(Map<String, Object> row) {
-        Map<String, Object> venue = null;
-        if (row.get("venue_id") != null) {
-            venue = Rows.one(jdbc, "select name,address from venues where id=?", row.get("venue_id"));
-        }
-        if (venue == null) {
-            String location = text(row.get("location"));
-            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address from venues where name=? or address=? limit 1", location, location);
+            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address,image_url from venues where name=? or address=? limit 1", location, location);
         }
         if (venue != null) {
+            if (!customBanner && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
             row.put("venue_name", venue.get("name"));
             row.put("venue_address", venue.get("address"));
         } else {
             row.put("venue_name", row.get("location"));
             row.put("venue_address", row.get("location"));
         }
+    }
+
+    private void applyDefaultPlanBanner(Map<String, Object> row) {
+        if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
+    }
+
+    private Map<Integer, List<Map<String, Object>>> groupByPlan(List<Map<String, Object>> rows) {
+        Map<Integer, List<Map<String, Object>>> grouped = new HashMap<Integer, List<Map<String, Object>>>();
+        for (Map<String, Object> row : rows) {
+            int planId = num(row.get("plan_id"), 0);
+            grouped.computeIfAbsent(planId, key -> new ArrayList<Map<String, Object>>()).add(row);
+        }
+        return grouped;
     }
 
     private List<?> list(Object value) {

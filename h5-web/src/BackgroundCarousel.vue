@@ -11,10 +11,11 @@
         <img
           v-for="(image, index) in normalizedImages"
           :key="`${image}-${index}`"
-          :src="image"
+          :src="loadedIndexes.includes(index) ? image : undefined"
           alt=""
           :class="{ active: index === activeIndex }"
-          :loading="index === 0 ? 'eager' : 'lazy'"
+          :loading="eager && index === 0 ? 'eager' : 'lazy'"
+          :fetchpriority="eager && index === 0 ? 'high' : 'low'"
           decoding="async"
         />
       </div>
@@ -44,11 +45,13 @@ export default {
   props: {
     images: { type: Array, default: () => [] },
     label: { type: String, default: '板块背景轮播' },
-    interval: { type: Number, default: 5000 }
+    interval: { type: Number, default: 5000 },
+    eager: { type: Boolean, default: false }
   },
   data() {
     return {
       activeIndex: 0,
+      loadedIndexes: this.eager ? [0] : [],
       timer: null,
       hovered: false,
       visible: false,
@@ -71,7 +74,12 @@ export default {
   watch: {
     normalizedImages() {
       this.activeIndex = 0
+      this.loadedIndexes = this.eager ? [0] : []
+      if (this.visible) this.loadAround(0)
       this.restart()
+    },
+    activeIndex(index) {
+      if (this.visible || this.eager) this.loadAround(index)
     },
     shouldPlay() {
       this.restart()
@@ -84,7 +92,8 @@ export default {
     document.addEventListener('visibilitychange', this.handleVisibilityChange)
     this.observer = new IntersectionObserver(entries => {
       this.visible = entries.some(entry => entry.isIntersecting)
-    }, { threshold: 0.08 })
+      if (this.visible) this.loadAround(this.activeIndex)
+    }, { threshold: 0.01, rootMargin: '400px 0px' })
     this.observer.observe(this.$refs.root)
   },
   beforeUnmount() {
@@ -94,6 +103,12 @@ export default {
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)
   },
   methods: {
+    loadAround(index) {
+      const count = this.normalizedImages.length
+      if (!count) return
+      const indexes = [index, (index + 1) % count]
+      this.loadedIndexes = [...new Set([...this.loadedIndexes, ...indexes])]
+    },
     restart() {
       this.stop()
       if (this.shouldPlay) this.timer = window.setInterval(this.advance, this.interval)

@@ -1148,6 +1148,15 @@ select:focus {
   border-color: rgba(34, 197, 94, .62);
 }
 
+select.select-placeholder {
+  color: #94a3b8;
+}
+
+select option {
+  color: var(--text);
+  background: #0f172a;
+}
+
 .icp-footer {
   padding: 18px 16px 24px;
   color: var(--muted);

@@ -54,7 +54,7 @@
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
-            <img v-if="activity.banner_url" class="banner" :src="activity.banner_url" />
+            <img v-if="activity.banner_url" class="banner" :src="activity.banner_url" loading="lazy" decoding="async" />
             <div v-else class="banner banner-placeholder">{{ activity.record_kind === 'plan' ? '活动策划' : '正式活动' }}</div>
             <h3>{{ activity.name }}</h3>
             <div v-if="activity.record_kind === 'activity'" class="card-meta">
@@ -80,7 +80,7 @@
     </div>
 
     <div v-if="tab === 'activities' && selectedPlan" class="page plan-detail">
-      <img v-if="selectedPlan.banner_url" class="banner" :src="selectedPlan.banner_url" />
+      <img v-if="selectedPlan.banner_url" class="banner" :src="selectedPlan.banner_url" loading="lazy" decoding="async" />
       <div v-else class="banner banner-placeholder">活动策划</div>
       <div class="plan-head">
         <div>
@@ -137,7 +137,7 @@
 
     <div v-if="tab === 'activities' && selectedActivity" class="page detail-page">
       <section class="detail-card">
-        <img v-if="detail.banner_url" class="detail-banner" :src="detail.banner_url" />
+        <img v-if="detail.banner_url" class="detail-banner" :src="detail.banner_url" loading="lazy" decoding="async" />
         <div v-else class="detail-banner banner-placeholder">正式活动</div>
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
@@ -189,7 +189,12 @@
                   {{ isSquadLocked(squad) ? '解除锁定' : '锁定小队' }}
                 </button>
               </div>
-              <select v-model="joinJobs[squad.id]">
+              <select
+                :value="joinJobs[squad.id] || ''"
+                :class="{ 'select-placeholder': !joinJobs[squad.id] }"
+                aria-label="选择职业"
+                @change="joinJobs[squad.id] = $event.target.value"
+              >
                 <option value="">请选择职业</option>
                 <option v-for="job in jobs" :key="job" :value="job">{{ job }}</option>
               </select>
@@ -532,9 +537,12 @@ export default {
   async mounted() {
     setErrorHandler(this.showToast)
     try {
-      await this.loadSystemImages()
-      if (token()) await this.init()
-      else await this.preloadImages([this.displayLogoUrl, this.systemImages.login_background_url])
+      if (token()) {
+        await Promise.all([this.loadSystemImages(), this.init()])
+      } else {
+        await this.loadSystemImages()
+        await this.preloadImages([this.displayLogoUrl, this.systemImages.login_background_url])
+      }
     } finally {
       this.$emit('ready')
     }
@@ -600,17 +608,25 @@ export default {
       }
     },
     async init() {
-      this.me = await api('/api/h5/me')
+      const [me, dashboard] = await Promise.all([
+        api('/api/h5/me'),
+        api('/api/h5/activities/bootstrap')
+      ])
+      this.me = me
       this.profileForm = { username: this.me.username, callsign: this.me.callsign, avatar_url: this.me.avatar_url || '' }
       this.view = 'app'
-      await this.loadActivities()
-      await this.loadAttendanceSummary()
-      await this.loadMine()
-      await this.preloadImages([
-        this.displayLogoUrl,
-        this.me.avatar_url,
-        ...this.activities.map(item => item.banner_url)
-      ])
+      this.applyDashboard(dashboard)
+      this.preloadImages([this.displayLogoUrl, this.me.avatar_url])
+    },
+    applyDashboard(dashboard = {}) {
+      const activeActivities = (dashboard.activities || [])
+        .filter(activity => ['报名中', '活动开始', '进行中'].includes(activity.display_status))
+        .map(activity => ({ ...activity, record_kind: 'activity' }))
+      const planning = (dashboard.plans || [])
+        .map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
+      this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
+      this.attendanceSummary = dashboard.attendance_summary || { present_count: 0, activity_total: 0 }
+      this.notifications = dashboard.notifications || []
     },
     preloadImages(urls) {
       const uniqueUrls = [...new Set(urls.filter(Boolean))]
@@ -707,6 +723,7 @@ export default {
       this.selectedPlan = null
       this.selectedActivity = id
       this.detail = await api(`/api/h5/activities/${id}`)
+      this.prepareJoinJobs()
       this.prepareMemberAssignments()
     },
     async submitPlanVote() {
@@ -763,6 +780,12 @@ export default {
         }
       }
       this.memberAssignments = assignments
+    },
+    prepareJoinJobs() {
+      const previous = this.joinJobs
+      this.joinJobs = Object.fromEntries(
+        (this.detail.squads || []).map(squad => [squad.id, previous[squad.id] || ''])
+      )
     },
     async assignMember(member) {
       const assignment = this.memberAssignments[member.user_id] || {}

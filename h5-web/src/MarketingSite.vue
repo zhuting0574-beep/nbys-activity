@@ -19,7 +19,7 @@
     </header>
 
     <div class="top-carousel-region carousel-region">
-      <BackgroundCarousel :images="carouselImages('top')" label="首屏背景" />
+      <BackgroundCarousel :images="carouselImages('top')" label="首屏背景" eager />
     <section id="top" class="hero section-shell">
       <div class="hero-copy">
         <p class="plain-label">NINGBO YONGSHI / FIELD WARGAME</p>
@@ -202,7 +202,7 @@
           <div class="video-track" :style="videoLoopStyle">
             <div v-for="copy in 2" :key="copy" class="video-loop-group" :aria-hidden="copy === 2">
               <figure
-                v-for="clip in videoClips"
+                v-for="(clip, clipIndex) in videoClips"
                 :key="`${copy}-${clip.title}`"
                 role="button"
                 :tabindex="copy === 1 ? 0 : -1"
@@ -211,7 +211,13 @@
                 @keydown.enter.prevent="openVideo(clip)"
                 @keydown.space.prevent="openVideo(clip)"
               >
-                <img :src="clip.poster" :alt="clip.title" />
+                <img
+                  :src="clip.poster"
+                  :alt="clip.title"
+                  :loading="copy === 1 && clipIndex < videoCarouselVisible ? 'eager' : 'lazy'"
+                  :fetchpriority="copy === 1 && clipIndex < videoCarouselVisible ? 'auto' : 'low'"
+                  decoding="async"
+                />
                 <figcaption>
                   <small>FIELD VIDEO</small>
                   <strong>{{ clip.title }}</strong>
@@ -322,7 +328,7 @@
             :aria-label="`查看${item.label}完整二维码`"
             @click="openContactPreview(item)"
           >
-            <img :src="item.image" :alt="item.label" />
+            <img :src="item.image" :alt="item.label" loading="lazy" fetchpriority="low" decoding="async" />
             <span class="contact-qrcode-caption">
               <strong>{{ item.label }}</strong>
               <span>{{ item.hint }}</span>
@@ -336,7 +342,7 @@
       <div v-if="activeVideo" class="video-lightbox" role="dialog" aria-modal="true" :aria-label="activeVideo.title" @click.self="closeVideo">
         <div class="video-lightbox-panel">
           <button type="button" class="video-lightbox-close" aria-label="关闭视频" @click="closeVideo">×</button>
-          <video :key="activeVideo.src" :src="activeVideo.src" :poster="activeVideo.poster" controls autoplay playsinline preload="auto"></video>
+          <video :key="activeVideo.src" :src="activeVideo.src" :poster="activeVideo.poster" controls autoplay playsinline preload="metadata"></video>
           <div class="video-lightbox-copy">
             <small>FIELD VIDEO</small>
             <strong>{{ activeVideo.title }}</strong>
