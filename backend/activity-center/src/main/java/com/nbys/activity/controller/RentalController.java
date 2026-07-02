@@ -34,8 +34,18 @@ public class RentalController {
     @PostMapping("/api/h5/launcher-rentals/my-items")
     public ApiResponse<Void> createItem(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
-        jdbc.update("insert into launcher_rental_items(owner_type,name,description,photo_filename,rent_fee,active,created_by_id,created_at,updated_at) values('user',?,?,?,?,1,?,now(),now())",
-                body.get("name"), body.get("description"), body.get("photo_filename"), body.get("rent_fee"), userId);
+        jdbc.update("insert into launcher_rental_items(owner_type,name,description,photo_filename,rent_fee,active,created_by_id,created_at,updated_at) values('user',?,?,?,?,?,?,now(),now())",
+                body.get("name"), body.get("description"), body.get("photo_filename"), body.get("rent_fee"), activeValue(body.get("active")), userId);
+        return ApiResponse.ok(null);
+    }
+
+    @PutMapping("/api/h5/launcher-rentals/my-items/{id}")
+    public ApiResponse<Void> updateItem(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
+        int userId = ((Number) auth.current(req).get("id")).intValue();
+        int updated = jdbc.update(
+                "update launcher_rental_items set name=?,description=?,photo_filename=?,rent_fee=?,active=?,updated_at=now() where id=? and created_by_id=?",
+                body.get("name"), body.get("description"), body.get("photo_filename"), body.get("rent_fee"), activeValue(body.get("active")), id, userId);
+        if (updated == 0) throw new IllegalArgumentException("发射器不存在或无权编辑");
         return ApiResponse.ok(null);
     }
 
@@ -69,34 +79,37 @@ public class RentalController {
     public ApiResponse<List<Map<String, Object>>> activityItems(@PathVariable int activityId) {
         return ApiResponse.ok(Rows.list(jdbc,
                 "select l.*, u.username owner_name, u.callsign owner_callsign, " +
-                        "case when r.id is null then null else 'confirmed' end rental_status, r.user_id renter_id " +
-                        "from ( " +
-                        "  select launcher_id,min(sort_order) sort_order from ( " +
-                        "    select o.launcher_id,0 sort_order from activity_launcher_options o where o.activity_id=? " +
-                        "    union all " +
-                        "    select l2.id launcher_id,1 sort_order from launcher_rental_items l2 join enrollments e on e.user_id=l2.created_by_id and e.activity_id=? where l2.active=1 " +
-                        "  ) x group by launcher_id " +
-                        ") src join launcher_rental_items l on l.id=src.launcher_id " +
+                        "case when r.id is null then null else 'confirmed' end rental_status, r.id rental_id, r.user_id renter_id, " +
+                        "ru.username renter_name, ru.callsign renter_callsign " +
+                        "from activity_launcher_options o join launcher_rental_items l on l.id=o.launcher_id " +
+                        "join activities current_a on current_a.id=o.activity_id " +
                         "join users u on u.id=l.created_by_id " +
-                        "left join activity_launcher_rentals r on r.activity_id=? and r.launcher_id=l.id and r.cancelled_at is null and r.status<>'cancelled' " +
-                        "where l.active=1 order by src.sort_order,l.id desc", activityId, activityId, activityId));
+                        "left join activity_launcher_rentals r on r.id=(" +
+                        "select r2.id from activity_launcher_rentals r2 join activities rented_a on rented_a.id=r2.activity_id " +
+                        "where r2.launcher_id=l.id and r2.cancelled_at is null and r2.status<>'cancelled' " +
+                        "and date(rented_a.start_at)=date(current_a.start_at) order by r2.id desc limit 1) " +
+                        "left join users ru on ru.id=r.user_id " +
+                        "where o.activity_id=? and l.active=1 order by o.id,l.id desc", activityId));
     }
 
     @PostMapping("/api/h5/activities/{activityId}/launcher-rentals/{launcherId}")
+    @Transactional
     public ApiResponse<Void> rent(@PathVariable int activityId, @PathVariable int launcherId, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         int userId = ((Number) me.get("id")).intValue();
-        Map<String, Object> launcher = Rows.one(jdbc, "select * from launcher_rental_items where id=? and active=1", launcherId);
+        if (Rows.one(jdbc, "select launcher_id from activity_launcher_options where activity_id=? and launcher_id=?", activityId, launcherId) == null) {
+            throw new IllegalArgumentException("该发射器不在当前活动可租赁列表");
+        }
+        Map<String, Object> launcher = Rows.one(jdbc, "select * from launcher_rental_items where id=? and active=1 for update", launcherId);
         if (launcher == null) throw new IllegalArgumentException("发射器不存在或未上架");
         if (((Number) launcher.get("created_by_id")).intValue() == userId) throw new IllegalArgumentException("不可租借自己的发射器");
         if (Rows.one(jdbc,
-                "select t.launcher_id from (" +
-                        "select o.launcher_id from activity_launcher_options o where o.activity_id=? and o.launcher_id=? " +
-                        "union all " +
-                        "select l.id launcher_id from launcher_rental_items l join enrollments e on e.user_id=l.created_by_id and e.activity_id=? where l.id=? and l.active=1 " +
-                        ") t limit 1",
-                activityId, launcherId, activityId, launcherId) == null) throw new IllegalArgumentException("该发射器不在当前活动可租赁列表");
-        if (Rows.one(jdbc, "select id from activity_launcher_rentals where activity_id=? and launcher_id=? and cancelled_at is null and status<>'cancelled'", activityId, launcherId) != null) throw new IllegalArgumentException("已被租借");
+                "select r.id from activity_launcher_rentals r " +
+                        "join activities rented_a on rented_a.id=r.activity_id " +
+                        "join activities current_a on current_a.id=? " +
+                        "where r.launcher_id=? and r.cancelled_at is null and r.status<>'cancelled' " +
+                        "and date(rented_a.start_at)=date(current_a.start_at) limit 1",
+                activityId, launcherId) != null) throw new IllegalArgumentException("该发射器在当天活动中已被租借");
         jdbc.update(connection -> {
             PreparedStatement ps = connection.prepareStatement(
                     "insert into activity_launcher_rentals(activity_id,launcher_id,user_id,status,rented_at,confirmed_at) values(?,?,?,'confirmed',now(),now())");
@@ -119,7 +132,8 @@ public class RentalController {
     @PutMapping("/api/h5/launcher-rentals/{rentalId}/cancel")
     public ApiResponse<Void> cancel(@PathVariable int rentalId, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
-        jdbc.update("update activity_launcher_rentals set status='cancelled', cancelled_at=now() where id=? and user_id=?", rentalId, userId);
+        int updated = jdbc.update("update activity_launcher_rentals set status='cancelled', cancelled_at=now() where id=? and user_id=? and cancelled_at is null and status<>'cancelled'", rentalId, userId);
+        if (updated == 0) throw new IllegalArgumentException("租赁记录不存在、已取消或无权操作");
         return ApiResponse.ok(null);
     }
 
@@ -141,5 +155,12 @@ public class RentalController {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         jdbc.update("update user_notifications set read_at=now() where user_id=? and read_at is null", userId);
         return ApiResponse.ok(null);
+    }
+
+    private int activeValue(Object value) {
+        if (value == null) return 1;
+        if (value instanceof Boolean) return (Boolean) value ? 1 : 0;
+        String text = String.valueOf(value);
+        return "1".equals(text) || "true".equalsIgnoreCase(text) ? 1 : 0;
     }
 }

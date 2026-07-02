@@ -456,7 +456,7 @@ public class AdminActivityController {
     }
 
     private String radioChannel(int campNo, int squadNo) {
-        return (434 + campNo) + "." + String.format("%03d", squadNo * 100);
+        return (438 + campNo) + "." + String.format("%03d", squadNo * 100);
     }
 
     private String displayStatus(Map<String, Object> row) {

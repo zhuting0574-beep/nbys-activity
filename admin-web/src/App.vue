@@ -506,7 +506,7 @@
           <el-button @click="openLauncherPicker">发射器租赁设置</el-button>
           <div class="invitee-tags">
             <el-tag v-for="id in normalizedLauncherIds(activityForm)" :key="id" closable @close="removeLauncher(id)">{{ launcherLabel(id) }}</el-tag>
-            <span v-if="!normalizedLauncherIds(activityForm).length" class="muted">暂未指定发射器，将展示报名人员上架发射器</span>
+            <span v-if="!normalizedLauncherIds(activityForm).length" class="muted">暂未指定发射器，H5 将不展示可租赁发射器</span>
           </div>
         </div>
       </el-form-item>

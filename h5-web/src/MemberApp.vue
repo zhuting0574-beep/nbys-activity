@@ -6,6 +6,7 @@
         <span>宁波甬士活动管理系统</span>
       </a>
       <button v-if="showHeaderBack" class="header-back" @click="goHome">返回首页</button>
+      <button v-else-if="showSiteHome" class="header-back" @click="goSiteHome">返回主页</button>
     </header>
 
     <div v-if="view === 'login'" class="page auth-page" :style="authPageStyle">
@@ -165,7 +166,24 @@
         </div>
       </section>
 
-      <section v-if="detail.my_enrollment || detail.is_activity_creator" class="squad-panel">
+      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && detail.activity_type === '周常'" class="squad-panel">
+        <h3>已报名人员</h3>
+        <p class="muted">共 {{ detail.members?.length || 0 }} 人报名</p>
+        <div class="weekly-member-list">
+          <div v-for="member in detail.members" :key="member.id" class="weekly-member">
+            <div>
+              <strong>{{ member.callsign || member.username }}</strong>
+              <span>{{ member.job || '未选择职业' }}</span>
+            </div>
+            <span class="weekly-member-status" :class="{ checked: member.checked_in }">
+              {{ member.checked_in ? '已签到' : '已报名' }}
+            </span>
+          </div>
+          <div v-if="!detail.members?.length" class="muted">暂无报名人员</div>
+        </div>
+      </section>
+
+      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && detail.activity_type !== '周常'" class="squad-panel">
         <h3>阵营 / 小队 / 人员列表</h3>
         <p class="muted">点击某个小队即可自动加入对应阵营和小队。职业会自动保存。</p>
         <div v-for="camp in camps" :key="camp" class="camp-block">
@@ -213,7 +231,7 @@
         </div>
       </section>
 
-      <section v-if="detail.my_enrollment && unassignedMembers.length" class="squad-panel">
+      <section v-if="detail.activity_type !== '周常' && detail.my_enrollment && unassignedMembers.length" class="squad-panel">
         <h3>未分配阵营 / 小队</h3>
         <p class="muted">这些人员已报名，但还没有进入阵营和小队。</p>
         <div class="unassigned-list">
@@ -267,7 +285,11 @@
           <div class="rental-body">
             <h3>{{ item.name }}</h3>
             <p class="rental-meta">所有人：{{ item.owner_callsign || item.owner_name }} · 租金：{{ item.rent_fee }}</p>
-            <button class="btn activity-rental-btn" :disabled="rentalButtonDisabled(item)" @click="rentLauncher(item)">
+            <p v-if="item.rental_status" class="rental-renter">租赁者：{{ item.renter_callsign || item.renter_name }}</p>
+            <button v-if="isMyLauncherRental(item)" class="btn danger activity-rental-btn" @click="cancelLauncherRental(item)">
+              取消租赁
+            </button>
+            <button v-else class="btn activity-rental-btn" :disabled="rentalButtonDisabled(item)" @click="rentLauncher(item)">
               {{ rentalButtonText(item) }}
             </button>
           </div>
@@ -289,12 +311,10 @@
           </div>
           <div class="rental-body">
             <h3>{{ item.name }}</h3>
-            <p class="rental-meta">所有人：{{ me.callsign || me.username }} · 租金：{{ item.rent_fee }}</p>
+            <p class="rental-meta">所有人：{{ me.callsign || me.username }} · 租金：{{ item.rent_fee }} · {{ item.active ? '已上架' : '已下架' }}</p>
             <p v-if="item.description" class="rental-desc">{{ item.description }}</p>
             <div class="rental-actions">
-              <button class="rental-status" :class="{ off: !item.active }" @click="toggleRentalActive(item)">
-                {{ item.active ? '下架' : '上架' }}
-              </button>
+              <button class="rental-edit" @click="openRentalDialog(item)">编辑</button>
               <button class="rental-delete" @click="deleteRental(item.id)">删除</button>
             </div>
           </div>
@@ -378,15 +398,19 @@
       <div class="modal-backdrop" @click="showRentalDialog = false"></div>
       <div class="modal-panel">
         <div class="modal-head">
-          <h2>新增发射器</h2>
+          <h2>{{ rentalForm.id ? '编辑发射器' : '新增发射器' }}</h2>
           <button class="btn secondary" @click="showRentalDialog = false">关闭</button>
         </div>
         <input v-model="rentalForm.name" placeholder="名称" />
         <textarea v-model="rentalForm.description" maxlength="50" placeholder="发射器说明，50字以内" />
-        <input v-model="rentalForm.rent_fee" placeholder="租金" />
+        <input v-model="rentalForm.rent_fee" type="number" min="0" step="0.01" placeholder="租金" />
         <input type="file" accept="image/*" @change="uploadRentalPhoto" />
         <img v-if="rentalForm.photo_filename" class="avatar-preview wide" :src="rentalForm.photo_filename" alt="发射器图片预览" />
-        <button class="btn" style="width: 100%" @click="createRental">确认新增</button>
+        <label class="rental-active-field">
+          <input v-model="rentalForm.active" type="checkbox" />
+          <span>上架展示</span>
+        </label>
+        <button class="btn" style="width: 100%" @click="saveRental">{{ rentalForm.id ? '保存修改' : '确认新增' }}</button>
       </div>
     </div>
 
@@ -525,6 +549,9 @@ export default {
     showHeaderBack() {
       if (this.view !== 'app') return false
       return this.tab !== 'activities' || !!this.selectedActivity || !!this.selectedPlan
+    },
+    showSiteHome() {
+      return this.view === 'app' && this.tab === 'activities' && !this.selectedActivity && !this.selectedPlan
     },
     displayLogoUrl() {
       return this.systemImages.login_logo_url || this.logoUrl
@@ -669,6 +696,9 @@ export default {
         this.loadActivities()
       }
     },
+    goSiteHome() {
+      window.location.hash = '#/'
+    },
     statusLabel(status) {
       return status === '活动开始' ? '进行中' : status
     },
@@ -769,7 +799,7 @@ export default {
     defaultRadioChannel(squad) {
       const campNo = Number(squad?.camp_no || 1)
       const squadNo = Number(squad?.squad_no || 1)
-      return `${434 + campNo}.${String(squadNo * 100).padStart(3, '0')}`
+      return `${438 + campNo}.${String(squadNo * 100).padStart(3, '0')}`
     },
     prepareMemberAssignments() {
       const assignments = {}
@@ -800,12 +830,12 @@ export default {
       this.showToast('已分配')
     },
     joinSquad(squad, job) {
-      if (this.isSquadLocked(squad) && !this.isMySquad(squad)) {
-        this.showToast('小队已锁定，无法加入')
+      if (!job || job === '请选择职业') {
+        this.showToast('请选择职业')
         return
       }
-      if (!job) {
-        this.showToast('请先选择职业')
+      if (this.isSquadLocked(squad) && !this.isMySquad(squad)) {
+        this.showToast('小队已锁定，无法加入')
         return
       }
       return api(`/api/h5/activities/${this.selectedActivity}/squad`, { method: 'PUT', body: { camp_no: squad.camp_no, squad_no: squad.squad_no, job } }).then(() => this.openActivity(this.selectedActivity))
@@ -848,6 +878,9 @@ export default {
     rentalButtonDisabled(item) {
       return Number(item.created_by_id) === Number(this.me.id) || !!item.rental_status
     },
+    isMyLauncherRental(item) {
+      return !!item.rental_status && Number(item.renter_id) === Number(this.me.id)
+    },
     rentalButtonText(item) {
       if (Number(item.created_by_id) === Number(this.me.id)) return '不可租借自己'
       if (item.rental_status) return '已租赁'
@@ -857,11 +890,20 @@ export default {
       if (Number(item.created_by_id) === Number(this.me.id)) return this.showToast('不可租借自己的发射器')
       return api(`/api/h5/activities/${this.selectedActivity}/launcher-rentals/${item.id}`, { method: 'POST' }).then(() => this.openActivityRentals())
     },
+    async cancelLauncherRental(item) {
+      if (!this.isMyLauncherRental(item) || !item.rental_id) return
+      if (!(await this.askConfirm('确认取消租赁该发射器？'))) return
+      await api(`/api/h5/launcher-rentals/${item.rental_id}/cancel`, { method: 'PUT' })
+      await this.openActivityRentals()
+      this.showToast('已取消租赁')
+    },
     loadRentals() {
       return api('/api/h5/launcher-rentals/my-items').then(data => { this.rentalItems = data })
     },
-    openRentalDialog() {
-      this.rentalForm = {}
+    openRentalDialog(item = null) {
+      this.rentalForm = item
+        ? { id: item.id, name: item.name, description: item.description || '', photo_filename: item.photo_filename || '', rent_fee: item.rent_fee, active: !!item.active }
+        : { name: '', description: '', photo_filename: '', rent_fee: '', active: true }
       this.showRentalDialog = true
     },
     async uploadRegisterAvatar(event) {
@@ -918,23 +960,16 @@ export default {
         image.src = URL.createObjectURL(file)
       })
     },
-    createRental() {
-      return api('/api/h5/launcher-rentals/my-items', { method: 'POST', body: this.rentalForm }).then(() => {
+    saveRental() {
+      if (!String(this.rentalForm.name || '').trim()) return this.showToast('请填写发射器名称')
+      const editing = !!this.rentalForm.id
+      const url = editing ? `/api/h5/launcher-rentals/my-items/${this.rentalForm.id}` : '/api/h5/launcher-rentals/my-items'
+      return api(url, { method: editing ? 'PUT' : 'POST', body: this.rentalForm }).then(() => {
         this.rentalForm = {}
         this.showRentalDialog = false
         this.loadRentals()
+        this.showToast(editing ? '发射器已修改' : '发射器已新增')
       })
-    },
-    offRental(id) {
-      return api(`/api/h5/launcher-rentals/my-items/${id}/off`, { method: 'PUT' }).then(() => this.loadRentals())
-    },
-    onRental(id) {
-      return api(`/api/h5/launcher-rentals/my-items/${id}/on`, { method: 'PUT' }).then(() => this.loadRentals())
-    },
-    async toggleRentalActive(item) {
-      const message = item.active ? '确认下架该发射器？' : '确认上架该发射器？'
-      if (!(await this.askConfirm(message))) return
-      return item.active ? this.offRental(item.id) : this.onRental(item.id)
     },
     async deleteRental(id) {
       if (!(await this.askConfirm('确认删除该发射器出租信息？'))) return

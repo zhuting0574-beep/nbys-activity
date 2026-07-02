@@ -74,10 +74,16 @@ public class H5Controller {
             int campNo = num(squad.get("camp_no"), 1);
             int squadNo = num(squad.get("squad_no"), 1);
             String channel = text(squad.get("radio_channel"));
-            if (channel.isEmpty() || channel.equals(legacyRadioChannel(campNo, squadNo))) squad.put("radio_channel", radioChannel(campNo, squadNo));
+            if (channel.isEmpty() || channel.equals(legacyRadioChannel(campNo, squadNo)) || channel.equals(oldRadioChannel(campNo, squadNo))) {
+                squad.put("radio_channel", radioChannel(campNo, squadNo));
+            }
         }
         row.put("squads", squads);
-        row.put("members", Rows.list(jdbc, "select e.*, u.username, u.callsign from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.camp_no,e.squad_no,e.id", id));
+        row.put("members", Rows.list(jdbc,
+                "select e.*, u.username, u.callsign, " +
+                        "case when exists(select 1 from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                        "where ev.source_activity_id=e.activity_id and ar.user_id=e.user_id and ar.present=1) then 1 else 0 end checked_in " +
+                        "from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.camp_no,e.squad_no,e.id", id));
         row.put("checkin", Rows.one(jdbc, "select ar.* from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=? and ar.user_id=?", id, userId));
         return ApiResponse.ok(row);
     }
@@ -313,10 +319,11 @@ public class H5Controller {
     }
 
     private void validateJob(int activityId, int campNo, int squadNo, int userId, String job) {
+        Map<String, Object> activity = Rows.one(jdbc, "select squad_limit,allowed_jobs from activities where id=?", activityId);
+        if (job == null || job.trim().isEmpty() || "请选择职业".equals(job)) throw new IllegalArgumentException("请选择职业");
+        if (!Rows.csv(String.valueOf(activity.get("allowed_jobs"))).contains(job)) throw new IllegalArgumentException("该活动未开放" + job);
         if (!Arrays.asList("狙击手", "医疗兵", "弹药兵").contains(job)) return;
         int count = Rows.list(jdbc, "select id from enrollments where activity_id=? and camp_no=? and squad_no=? and job=? and user_id<>?", activityId, campNo, squadNo, job, userId).size();
-        Map<String, Object> activity = Rows.one(jdbc, "select squad_limit,allowed_jobs from activities where id=?", activityId);
-        if (!Rows.csv(String.valueOf(activity.get("allowed_jobs"))).contains(job)) throw new IllegalArgumentException("该活动未开放" + job);
         int quota = Math.max(1, num(activity.get("squad_limit"), 5) / 5);
         if (count >= quota) throw new IllegalArgumentException("该小队每5人只允许1个" + job);
     }
@@ -429,11 +436,15 @@ public class H5Controller {
     }
 
     private String radioChannel(int campNo, int squadNo) {
-        return (434 + campNo) + "." + String.format("%03d", squadNo * 100);
+        return (438 + campNo) + "." + String.format("%03d", squadNo * 100);
     }
 
     private String legacyRadioChannel(int campNo, int squadNo) {
-        return (campNo == 1 ? "435" : "436") + "." + String.format("%03d", (squadNo - 1) * 100);
+        return (434 + campNo) + "." + String.format("%03d", (squadNo - 1) * 100);
+    }
+
+    private String oldRadioChannel(int campNo, int squadNo) {
+        return (434 + campNo) + "." + String.format("%03d", squadNo * 100);
     }
 
     private int num(Object v, int fallback) {

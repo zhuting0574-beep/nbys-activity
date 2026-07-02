@@ -501,7 +501,7 @@ select {
   flex-wrap: wrap;
 }
 
-.rental-status,
+.rental-edit,
 .rental-delete {
   min-height: 30px;
   padding: 6px 10px;
@@ -512,14 +512,8 @@ select {
   font-weight: 700;
 }
 
-.rental-status {
+.rental-edit {
   background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-}
-
-.rental-status.off {
-  color: #cbd5e1;
-  background: rgba(148, 163, 184, .18);
-  border: 1px solid var(--line);
 }
 
 .rental-delete {
@@ -777,6 +771,77 @@ select {
   margin: 0 0 8px;
   color: #f8fafc;
   font-size: 18px;
+}
+
+.weekly-member-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.weekly-member {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, .34);
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 10px;
+}
+
+.weekly-member > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.weekly-member strong {
+  overflow: hidden;
+  color: #f8fafc;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekly-member > div span {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.weekly-member-status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, .16);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.weekly-member-status.checked {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, .16);
+}
+
+.rental-renter {
+  margin: 0 0 10px;
+  color: #bbf7d0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rental-active-field {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 14px;
+  color: #e2e8f0;
+}
+
+.rental-active-field input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
 }
 
 .camp-block {
