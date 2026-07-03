@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="841mm" height="1189mm" viewBox="0 0 841 1189">
+  <style>
+    .outline { fill:none; stroke:#101820; stroke-width:0.7; }
+    .cut { fill:none; stroke:#c0392b; stroke-width:0.45; stroke-dasharray:3 2; }
+    .fine { fill:none; stroke:#34495e; stroke-width:0.28; }
+    .center { fill:none; stroke:#2874a6; stroke-width:0.3; stroke-dasharray:7 3 1 3; }
+    .dim { fill:none; stroke:#555; stroke-width:0.25; marker-start:url(#arr); marker-end:url(#arr); }
+    .txt { font-family:Arial,Helvetica,sans-serif; font-size:5px; fill:#17202a; }
+    .small { font-family:Arial,Helvetica,sans-serif; font-size:3.5px; fill:#263238; }
+    .title { font-family:Arial,Helvetica,sans-serif; font-size:10px; font-weight:bold; fill:#101820; }
+    .warn { font-family:Arial,Helvetica,sans-serif; font-size:4.2px; fill:#922b21; }
+  </style>
+  <defs>
+    <marker id="arr" markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="auto">
+      <path d="M5,0 L0,2.5 L5,5" fill="none" stroke="#555" stroke-width="0.7"/>
+    </marker>
+  </defs>
+  <rect x="12" y="12" width="817" height="1165" class="fine"/>
+  <text x="28" y="38" class="title">LES PAUL SPECIAL SINGLE CUT - 1950s STYLE REFERENCE PLAN</text>
+  <text x="28" y="49" class="txt">A0 / 1:1 / millimetres / construction-reference drawing</text>
+  <text x="28" y="59" class="warn">NOT A GIBSON FACTORY DRAWING. Verify all hardware and make test templates before cutting.</text>
+
+  <line x1="420.5" y1="78" x2="420.5" y2="1080" class="center"/>
+  <path d="M 390.5 608.0 C 365.5 608, 340.5 620, 325.5 642 C 300.5 650, 270.5 675, 263.5 715 C 255.5 760, 280.5 790, 270.5 830 C 255.5 890, 275.5 965, 330.5 1015 C 375.5 1055, 465.5 1060, 520.5 1020 C 575.5 980, 592.5 900, 575.5 835 C 565.5 795, 585.5 760, 575.5 710 C 565.5 670, 535.5 650, 505.5 655 C 480.5 657, 465.5 675, 458.0 695 C 450.5 716, 435.5 725, 424.0 718 C 410.5 708, 420.5 688, 445.5 670 C 455.5 660, 450.5 625, 450.5 608.0 Z" class="outline"/>
+
+  <!-- Neck, fingerboard and headstock -->
+  <path d="M 391.5 607.24 L 396.0 155.0 L 445.0 155.0 L 449.5 607.24 Z" class="outline"/>
+  <path d="M 396.0 155.0 L 384.5 91 L 395.5 73 L 445.5 73 L 456.5 91 L 445.0 155.0 Z" class="outline"/>
+  <line x1="396.0" y1="155.0" x2="445.0" y2="155.0" class="outline"/>
+  <line x1="395.65" y1="190.28" x2="445.35" y2="190.28" class="fine"/><line x1="395.32" y1="223.59" x2="445.68" y2="223.59" class="fine"/><line x1="395.00" y1="255.02" x2="446.00" y2="255.02" class="fine"/><line x1="394.71" y1="284.69" x2="446.29" y2="284.69" class="fine"/><line x1="394.43" y1="312.69" x2="446.57" y2="312.69" class="fine"/><line x1="394.17" y1="339.13" x2="446.83" y2="339.13" class="fine"/><line x1="393.92" y1="364.08" x2="447.08" y2="364.08" class="fine"/><line x1="393.69" y1="387.63" x2="447.31" y2="387.63" class="fine"/><line x1="393.46" y1="409.85" x2="447.54" y2="409.85" class="fine"/><line x1="393.26" y1="430.83" x2="447.74" y2="430.83" class="fine"/><line x1="393.06" y1="450.63" x2="447.94" y2="450.63" class="fine"/><line x1="392.87" y1="469.32" x2="448.13" y2="469.32" class="fine"/><line x1="392.70" y1="486.97" x2="448.30" y2="486.97" class="fine"/><line x1="392.53" y1="503.62" x2="448.47" y2="503.62" class="fine"/><line x1="392.37" y1="519.34" x2="448.63" y2="519.34" class="fine"/><line x1="392.23" y1="534.17" x2="448.77" y2="534.17" class="fine"/><line x1="392.09" y1="548.17" x2="448.91" y2="548.17" class="fine"/><line x1="391.96" y1="561.39" x2="449.04" y2="561.39" class="fine"/><line x1="391.83" y1="573.86" x2="449.17" y2="573.86" class="fine"/><line x1="391.71" y1="585.64" x2="449.29" y2="585.64" class="fine"/><line x1="391.60" y1="596.75" x2="449.40" y2="596.75" class="fine"/><line x1="391.50" y1="607.24" x2="449.50" y2="607.24" class="fine"/>
+  <text x="453.5" y="470.32" class="small">12</text>
+  <text x="455.5" y="608.24" class="small">22</text>
+
+  <!-- Suggested routs: intentionally dashed -->
+  <rect x="377.5" y="646" width="86" height="38" rx="2" class="cut"/>
+  <rect x="377.5" y="727" width="86" height="38" rx="2" class="cut"/>
+  <text x="467.5" y="669" class="small">SOAPBAR P-90 - VERIFY ACTUAL COVER</text>
+  <text x="467.5" y="750" class="small">SOAPBAR P-90 - VERIFY ACTUAL COVER</text>
+  <line x1="381.5" y1="783.65" x2="459.5" y2="783.65" class="outline"/>
+  <circle cx="379.5" cy="783.65" r="3.5" class="outline"/>
+  <circle cx="461.5" cy="783.65" r="3.5" class="outline"/>
+  <text x="470.5" y="785.65" class="small">WRAPAROUND - drill to selected bridge spec</text>
+
+  <!-- Indicative controls -->
+  <g class="cut">
+    <circle cx="492.5" cy="844" r="4"/><circle cx="525.5" cy="857" r="4"/>
+    <circle cx="487.5" cy="889" r="4"/><circle cx="521.5" cy="902" r="4"/>
+    <circle cx="329.5" cy="705" r="5"/>
+    <path d="M 460.5 820 C 542.5 807, 566.5 860, 539.5 930 C 505.5 959, 458.5 934, 460.5 820 Z"/>
+  </g>
+  <text x="536.5" y="850" class="small">2 volume / 2 tone</text>
+  <text x="275.5" y="698" class="small">3-way switch</text>
+
+  <!-- Principal dimensions -->
+  <line x1="210.5" y1="155.0" x2="210.5" y2="783.65" class="dim"/>
+  <line x1="216.5" y1="155.0" x2="396.0" y2="155.0" class="fine"/>
+  <line x1="216.5" y1="783.65" x2="375.5" y2="783.65" class="fine"/>
+  <text x="202.5" y="469.325" class="txt" transform="rotate(-90 202.5 469.325)">SCALE LENGTH 628.65 mm / 24.75 in (verified)</text>
+  <line x1="254.5" y1="1070" x2="586.5" y2="1070" class="dim"/>
+  <text x="381.5" y="1065" class="txt">approx. max width 332 mm</text>
+  <line x1="230.5" y1="608.0" x2="230.5" y2="1046.0" class="dim"/>
+  <text x="222.5" y="840" class="txt" transform="rotate(-90 222.5 840)">reference body length 438 mm</text>
+
+  <!-- Calibration and notes -->
+  <line x1="35" y1="1120" x2="135" y2="1120" stroke="#000" stroke-width="1"/>
+  <line x1="35" y1="1115" x2="35" y2="1125" stroke="#000" stroke-width="1"/>
+  <line x1="135" y1="1115" x2="135" y2="1125" stroke="#000" stroke-width="1"/>
+  <text x="60" y="1132" class="txt">100 mm calibration bar</text>
+  <text x="250" y="1107" class="txt">Verified Gibson values: 628.65 mm scale, 22 frets, 12 in radius, 42.85-43.05 mm nut.</text>
+  <text x="250" y="1117" class="txt">Reference values: slab body approx. 438 x 332 x 44.5 mm; silhouette and rout locations reconstructed.</text>
+  <text x="250" y="1127" class="txt">Red dashed geometry is indicative only: measure your pickups, pots, switch, bridge and covers first.</text>
+  <text x="250" y="1137" class="txt">Print at 100% / Actual size. Confirm the 100 mm bar and nut-to-bridge distance before use.</text>
+  <text x="28" y="1162" class="small">Reference drawing prepared 2026-07-03. Gibson and Les Paul are trademarks of their respective owners.</text>
+</svg>
