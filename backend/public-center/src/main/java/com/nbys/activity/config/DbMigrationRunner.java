@@ -25,14 +25,21 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
             addColumn("users", "avatar_url", "varchar(500) DEFAULT NULL COMMENT '用户头像'", "callsign");
-            addColumn("users", "phone", "varchar(20) DEFAULT NULL COMMENT '手机号'", "avatar_url");
-            addColumn("users", "id_card", "varchar(30) DEFAULT NULL COMMENT '身份证号'", "phone");
+            dropColumn("users", "phone");
+            dropColumn("users", "id_card");
+            addColumn("users", "must_change_password", "tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否必须修改临时密码'", "password_hash");
+            addColumn("users", "temp_password_expires_at", "datetime DEFAULT NULL COMMENT '临时密码过期时间'", "must_change_password");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
             jdbc.execute("create table if not exists activity_launcher_options (id int not null auto_increment, activity_id int not null, launcher_id int not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_activity_launcher_option(activity_id, launcher_id), key idx_launcher_option_activity(activity_id)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists role_permissions (id int not null auto_increment, role varchar(20) not null, permission_code varchar(80) not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_role_permission(role, permission_code)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists user_notifications (id int not null auto_increment, user_id int not null, type varchar(40) not null, title varchar(120) not null, content varchar(500) not null, related_id int default null, read_at datetime default null, created_at datetime not null default current_timestamp, primary key(id), key idx_user_read(user_id, read_at)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists system_settings (setting_key varchar(80) not null, setting_value varchar(1000) default null, updated_at datetime not null default current_timestamp on update current_timestamp, primary key(setting_key)) engine=InnoDB default charset=utf8mb4");
+            jdbc.execute("create table if not exists homepage_carousel_images (id int not null auto_increment, section_key varchar(30) not null, image_url varchar(500) not null, sort_order int not null default 0, active tinyint(1) not null default 1, created_at datetime not null default current_timestamp, updated_at datetime not null default current_timestamp on update current_timestamp, primary key(id), key idx_homepage_carousel_section(section_key,active,sort_order,id)) engine=InnoDB default charset=utf8mb4");
+            addIndex("attendance_events", "idx_attendance_date_region_location", "(event_date, activity_region, location)");
+            addIndex("attendance_records", "idx_attendance_event_present", "(event_id, present)");
+            addIndex("user_notifications", "idx_notification_user_created", "(user_id, created_at, id)");
+            addIndex("activity_launcher_rentals", "idx_rental_launcher_id", "(launcher_id, id)");
         } catch (Exception e) {
             System.err.println("Database migration skipped: " + e.getMessage());
         }
@@ -43,5 +50,17 @@ public class DbMigrationRunner implements ApplicationRunner {
         if (exists != null && exists == 0) {
             jdbc.execute("alter table " + table + " add column " + column + " " + definition + " after " + after);
         }
+    }
+
+    private void dropColumn(String table, String column) {
+        Integer exists = jdbc.queryForObject("select count(*) from information_schema.columns where table_schema=database() and table_name=? and column_name=?", Integer.class, table, column);
+        if (exists != null && exists > 0) {
+            jdbc.execute("alter table " + table + " drop column " + column);
+        }
+    }
+
+    private void addIndex(String table, String index, String columns) {
+        Integer exists = jdbc.queryForObject("select count(*) from information_schema.statistics where table_schema=database() and table_name=? and index_name=?", Integer.class, table, index);
+        if (exists != null && exists == 0) jdbc.execute("alter table " + table + " add index " + index + " " + columns);
     }
 }

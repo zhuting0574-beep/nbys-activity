@@ -56,3 +56,15 @@ CREATE TABLE IF NOT EXISTS user_notifications (
   PRIMARY KEY (id),
   KEY idx_user_read (user_id, read_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS homepage_carousel_images (
+  id int NOT NULL AUTO_INCREMENT,
+  section_key varchar(30) NOT NULL,
+  image_url varchar(500) NOT NULL,
+  sort_order int NOT NULL DEFAULT 0,
+  active tinyint(1) NOT NULL DEFAULT 1,
+  created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_homepage_carousel_section (section_key, active, sort_order, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

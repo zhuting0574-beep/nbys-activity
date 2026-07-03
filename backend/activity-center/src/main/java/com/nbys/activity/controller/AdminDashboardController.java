@@ -18,12 +18,15 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/api/admin/dashboard")
 public class AdminDashboardController {
+    private static final long CACHE_TTL_MS = 10_000L;
     private final JdbcTemplate jdbc;
     private final AuthService auth;
+    private final Map<Integer, CachedDashboard> cache = new ConcurrentHashMap<Integer, CachedDashboard>();
 
     public AdminDashboardController(JdbcTemplate jdbc, AuthService auth) {
         this.jdbc = jdbc;
@@ -35,14 +38,21 @@ public class AdminDashboardController {
                                                      HttpServletRequest req) {
         auth.current(req);
         int y = year == null ? LocalDate.now().getYear() : year;
+        return ApiResponse.ok(cachedOverview(y));
+    }
 
+    private synchronized Map<String, Object> cachedOverview(int year) {
+        CachedDashboard cached = cache.get(year);
+        long now = System.currentTimeMillis();
+        if (cached != null && now - cached.createdAt < CACHE_TTL_MS) return cached.data;
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        out.put("year", y);
-        out.put("cards", cards(y));
-        out.put("monthly", monthly(y));
-        out.put("rankings", rankings(y));
-        out.put("recent_activities", recentActivities(y));
-        return ApiResponse.ok(out);
+        out.put("year", year);
+        out.put("cards", cards(year));
+        out.put("monthly", monthly(year));
+        out.put("rankings", rankings(year));
+        out.put("recent_activities", recentActivities(year));
+        cache.put(year, new CachedDashboard(now, out));
+        return out;
     }
 
     private Map<String, Object> cards(int year) {
@@ -174,5 +184,15 @@ public class AdminDashboardController {
         String text = String.valueOf(start).replace('T', ' ');
         String now = java.time.LocalDateTime.now().toString().replace('T', ' ');
         return text.compareTo(now) >= 0 ? "待开始" : "已结束";
+    }
+
+    private static class CachedDashboard {
+        private final long createdAt;
+        private final Map<String, Object> data;
+
+        private CachedDashboard(long createdAt, Map<String, Object> data) {
+            this.createdAt = createdAt;
+            this.data = data;
+        }
     }
 }

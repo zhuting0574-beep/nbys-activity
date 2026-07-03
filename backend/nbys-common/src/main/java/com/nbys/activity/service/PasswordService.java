@@ -9,14 +9,21 @@ import java.security.SecureRandom;
 
 @Service
 public class PasswordService {
+    private static final char[] TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%".toCharArray();
+    private final SecureRandom random = new SecureRandom();
+
     public boolean matches(String raw, String encoded) {
         if (raw == null || encoded == null) return false;
         if (encoded.startsWith("scrypt:")) return matchesWerkzeugScrypt(raw, encoded);
         return false;
     }
 
-    public String encodeDefaultPassword() {
-        return encode("nb123456");
+    public String generateTemporaryPassword() {
+        StringBuilder password = new StringBuilder(12);
+        for (int i = 0; i < 12; i++) {
+            password.append(TEMP_PASSWORD_CHARS[random.nextInt(TEMP_PASSWORD_CHARS.length)]);
+        }
+        return password.toString();
     }
 
     public String encode(String raw) {
@@ -40,7 +47,7 @@ public class PasswordService {
 
     private String encodeWerkzeugScrypt(String raw) {
         byte[] saltBytes = new byte[16];
-        new SecureRandom().nextBytes(saltBytes);
+        random.nextBytes(saltBytes);
         String salt = toHex(saltBytes).substring(0, 16);
         byte[] hash = SCrypt.generate(raw.getBytes(StandardCharsets.UTF_8), salt.getBytes(StandardCharsets.UTF_8), 32768, 8, 1, 64);
         return "scrypt:32768:8:1$" + salt + "$" + toHex(hash);
