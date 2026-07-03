@@ -17,6 +17,7 @@
           :loading="eager && index === 0 ? 'eager' : 'lazy'"
           :fetchpriority="eager && index === 0 ? 'high' : 'low'"
           decoding="async"
+          @load="handleImageLoad(index)"
         />
       </div>
       <div class="section-background-shade" aria-hidden="true"></div>
@@ -106,8 +107,19 @@ export default {
     loadAround(index) {
       const count = this.normalizedImages.length
       if (!count) return
-      const indexes = [index, (index + 1) % count]
-      this.loadedIndexes = [...new Set([...this.loadedIndexes, ...indexes])]
+      this.loadedIndexes = [...new Set([...this.loadedIndexes, index])]
+    },
+    handleImageLoad(index) {
+      const count = this.normalizedImages.length
+      if (count < 2 || index !== this.activeIndex || !this.visible) return
+      const nextIndex = (index + 1) % count
+      window.requestIdleCallback
+        ? window.requestIdleCallback(() => {
+            this.loadedIndexes = [...new Set([...this.loadedIndexes, nextIndex])]
+          }, { timeout: 1200 })
+        : window.setTimeout(() => {
+            this.loadedIndexes = [...new Set([...this.loadedIndexes, nextIndex])]
+          }, 250)
     },
     restart() {
       this.stop()

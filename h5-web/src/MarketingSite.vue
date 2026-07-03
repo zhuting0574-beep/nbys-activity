@@ -24,16 +24,16 @@
       <div class="hero-copy">
         <p class="plain-label">NINGBO YONGSHI / FIELD WARGAME</p>
         <h1>
-          <span>把场地</span>
-          <span>变成任务。</span>
+          <span>宁波甬士</span>
+          <span>军事模拟推演</span>
         </h1>
         <p class="hero-lead">
-          甬士在宁波组织军事模拟推演活动。我们会先看一处场地的入口、边界、楼体、巷口和撤离线，
-          再把它写成玩家能进入的任务。第一次来的人，先听 Briefing，跟队走完一场。
+          我们是宁波的非盈利军事模拟推演兴趣团体。2016年开始，我们在本地组织周常、剧本、山地、远征和训练活动。
+          第一次来不用懂很多术语，活动前会讲规则、安全边界、停止口令和任务目标。
         </p>
         <div class="hero-brief" aria-label="活动开始前会确认的事项">
           <span>FIRST RUN</span>
-          <p>第一次合作从短流程开始。一段路线，一个任务，十几到几十人，试完再复盘下一场。</p>
+          <p>第一次来，先参加周常。听完 Briefing，跟队走一场，知道规则和安全距离就够了。</p>
         </div>
         <div class="hero-actions">
           <button type="button" class="primary-cta" @click="scrollToSection('cooperate')">从小场开始</button>
@@ -62,10 +62,12 @@
       <div class="section-kicker">About</div>
       <div class="about-board">
         <div class="about-copy">
-          <h2>活动从一张地图开始。</h2>
+          <h2>关于宁波甬士</h2>
           <p>
-            到场后先走一遍路线。入口、楼梯、巷口、死角、集合点、休息区，能不能用，现场决定。
-            场地只适合短流程，就不硬做大任务。
+            我们从2016年开始在宁波组织军事模拟推演活动。大家因为装备、剧本、场地、山地路线和团队协作聚在一起。
+          </p>
+          <p>
+            活动前会讲安全规则、击中判定、停止口令、装备限制和任务目标。第一次参加，听规则、跟队走，就能进入状态。
           </p>
           <div class="plain-list">
             <article v-for="item in aboutNotes" :key="item.title">
@@ -82,8 +84,8 @@
       <BackgroundCarousel :images="carouselImages('records')" label="历史记录板块背景" />
       <div class="section-kicker">Public record</div>
       <div class="section-heading">
-        <h2>这些年去过哪里。</h2>
-        <p>早期训练、山地路线、影视城剧本和外地交流，都留下了照片或公开视频。连起来看，是甬士这些年走过的场地。</p>
+        <h2>这些年去过的地方</h2>
+        <p>活动按时间排。能公开查看的记录，可以直接点开来源。</p>
       </div>
 
       <div class="timeline-list">
@@ -96,35 +98,26 @@
         </article>
       </div>
 
-      <article class="record-feature">
-        <div>
-          <span>{{ featuredRecord.date }}</span>
-          <h3>{{ featuredRecord.title }}</h3>
-          <p>{{ featuredRecord.text }}</p>
-        </div>
-      </article>
-
-      <div class="record-grid">
-        <article v-for="item in activityLog" :key="item.title">
-          <div>
-            <span>{{ item.date }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.text }}</p>
-          </div>
-        </article>
-      </div>
     </section>
 
     <section id="fields" class="section-shell fields-section carousel-section">
       <BackgroundCarousel :images="carouselImages('fields')" label="场地板块背景" />
       <div class="section-kicker">Fields</div>
       <div class="section-heading">
-        <h2>场地不同，玩法不同。</h2>
-        <p>影视城看街区和楼体，山地看路线和通讯，夜间街区要留出旁观位置。场地先走明白，人数、任务和安全区才好定。</p>
+        <h2>不同场地，不同体验</h2>
+        <p>影视城、夜间街区、山地、校园和园区，各有自己的节奏。</p>
       </div>
 
       <div class="field-grid">
-        <article v-for="venue in venues" :key="venue.name" :class="{ featured: venue.featured }">
+        <article v-for="venue in venues" :key="venue.name">
+          <button
+            class="field-photo"
+            type="button"
+            :aria-label="`查看完整图片：${venue.name}`"
+            @click="openImage(venue)"
+          >
+            <img :src="venue.image" :alt="venue.name" loading="lazy" fetchpriority="low" decoding="async" />
+          </button>
           <div class="field-card-copy">
             <span>{{ venue.type }}</span>
             <h3>{{ venue.name }}</h3>
@@ -141,8 +134,8 @@
       <BackgroundCarousel :images="carouselImages('activities')" label="活动板块背景" />
       <div class="section-kicker">Activities</div>
       <div class="section-heading">
-        <h2>周常、剧本、远征。</h2>
-        <p>周常让新玩家熟悉规则和队伍节奏。剧本场会写阵营、任务点和撤离条件。外地交流按对方规则进场，回来再复盘差异。</p>
+        <h2>常见活动类型</h2>
+        <p>周常、主题剧本、山地徒步、外地交流、基础训练。</p>
       </div>
 
       <div class="activity-board">
@@ -174,10 +167,9 @@
       <div class="section-kicker">Safe ops</div>
       <div class="safe-layout">
         <div>
-          <h2>边界、频道、停止口令。</h2>
+          <h2>安全规则先讲清楚</h2>
           <p>
-            人一多，现场靠喊不够。进场前讲禁入区、停止口令、频道和撤离线；
-            结束后复盘路线、节奏和卡住的位置。通讯、队形和口令平时练过，现场就少出岔子。
+            进场前讲安全边界、停止口令、频道和撤离线。训练内容围绕规则、通讯、队形、掩体、CQB 入门和复盘展开。
           </p>
           <div class="safe-grid">
             <article v-for="item in trainingLoop" :key="item.title">
@@ -193,8 +185,8 @@
       <BackgroundCarousel :images="carouselImages('media')" label="现场影像板块背景" />
       <div class="section-kicker">Media</div>
       <div class="section-heading">
-        <h2>现场影像。</h2>
-        <p>照片看场地，视频看节奏。公开视频保留出处，现场照片按时间和场地留档。</p>
+        <h2>现场影像</h2>
+        <p>照片、视频和公开记录放在这里。能点开的保留来源，普通照片只标时间和场地。</p>
       </div>
 
       <div class="video-carousel" aria-label="活动视频片段">
@@ -230,11 +222,14 @@
       </div>
 
       <div class="media-feature">
-        <article class="media-lead-copy">
+        <figure class="media-lead">
+          <img :src="mediaLead.image" :alt="mediaLead.title" loading="lazy" fetchpriority="low" decoding="async" />
+          <figcaption>
             <small>{{ mediaLead.tag }}</small>
             <strong>{{ mediaLead.title }}</strong>
             <span>{{ mediaLead.text }}</span>
-        </article>
+          </figcaption>
+        </figure>
 
         <div class="media-notes" aria-label="影像记录说明">
           <article v-for="item in mediaNotes" :key="item.title">
@@ -249,7 +244,7 @@
         <a v-for="source in publicSources" :key="source.title" :href="source.href" target="_blank" rel="noreferrer">
           <span>{{ source.platform }}</span>
           <strong>{{ source.title }}</strong>
-          <em>查看来源</em>
+          <em>点击查看来源 ↗</em>
         </a>
       </div>
     </section>
@@ -259,10 +254,10 @@
       <div class="section-kicker">Work with us</div>
       <div class="cooperate-layout">
         <div>
-          <h2>从一个小场开始。</h2>
+          <h2>从一场小活动开始</h2>
           <p>
-            场地、园区、学校或活动方第一次接触，不必一上来做大场。
-            先选一段路线和一个任务，十几到几十人试跑。入口、禁入区、旁观位置和影像发布范围，进场前确认清楚；试完再定下一场。
+            如果场地、学校、园区想先试一次，可以先做短流程：一段路线，一个任务，十几到几十人。
+            入口、禁入区、旁观位置和影像范围，进场前说清楚。
           </p>
           <div class="partner-fit" aria-label="适合合作的场景">
             <article v-for="item in partnerFit" :key="item.title">
@@ -369,6 +364,26 @@
           </div>
         </div>
       </Transition>
+      <Transition name="image-preview">
+        <div
+          v-if="activeImage"
+          class="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`完整图片：${activeImage.title}`"
+          @click.self="closeImage"
+        >
+          <figure class="image-lightbox-panel">
+            <button type="button" class="image-lightbox-close" aria-label="关闭图片预览" @click="closeImage">×</button>
+            <img :src="activeImage.image" :alt="activeImage.title" />
+            <figcaption>
+              <small>{{ activeImage.tag }}</small>
+              <strong>{{ activeImage.title }}</strong>
+              <span>{{ activeImage.text }}</span>
+            </figcaption>
+          </figure>
+        </div>
+      </Transition>
     </Teleport>
   </main>
 </template>
@@ -377,24 +392,55 @@
 import { api } from './api'
 import BackgroundCarousel from './BackgroundCarousel.vue'
 import logo from './assets/nbys-logo.png'
+import archive20180701 from './assets/site/2018-07-01 171536.jpg'
+import archive20180702 from './assets/site/2018-07-02 165748.jpg'
+import archive20180703 from './assets/site/2018-07-03 192210.jpg'
 import haiyingcheng01 from './assets/site/haiyingcheng-jujie-01.jpg'
 import haiyingcheng02 from './assets/site/haiyingcheng-jujie-02.jpg'
 import haiyingcheng03 from './assets/site/haiyingcheng-jujie-03.jpg'
 import haiyingcheng04 from './assets/site/haiyingcheng-jujie-04.jpg'
 import haiyingcheng05 from './assets/site/haiyingcheng-jujie-05.jpg'
+import yingmengli01 from './assets/site/yingmengli-01.jpg'
 import yingmengli02 from './assets/site/yingmengli-02.jpg'
 import yingmengliDate01 from './assets/site/yingmengli-20231022-01.jpg'
 import yingmengliDate02 from './assets/site/yingmengli-20231022-02.jpg'
+import yingmengliDate03 from './assets/site/yingmengli-20231022-03.jpg'
+import siteField from './assets/site/site-field.jpg'
+import siteEsaSquad from './assets/site/site-esa-squad.jpg'
+import siteEsaUrban from './assets/site/site-esa-urban.jpg'
+import siteModern01 from './assets/site/site-modern-1.jpg'
 import siteModern02 from './assets/site/site-modern-2.jpg'
+import siteModern03 from './assets/site/site-modern-3.jpg'
+import xiaojiuzhaiTraining01 from './assets/site/xiaojiuzhai-training-01.jpg'
 import xiaojiuzhaiTraining02 from './assets/site/xiaojiuzhai-training-02.jpg'
+import xiaojiuzhaiTraining03 from './assets/site/xiaojiuzhai-training-03.jpg'
 import xiaojiuzhaiEscape01 from './assets/site/xiaojiuzhai-escape-20211031-01.jpg'
+import xiaojiuzhaiEscape02 from './assets/site/xiaojiuzhai-escape-20211031-02.jpg'
+import xiaojiuzhaiEscape03 from './assets/site/xiaojiuzhai-escape-20211031-03.jpg'
+import esaTraining01 from './assets/site/esa-urban-training-01.jpg'
 import esaRoom from './assets/site/esa-urban-training-07.jpg'
 import esaUrban01 from './assets/site/esa-urban-training-02.jpg'
+import esaTraining03 from './assets/site/esa-urban-training-03.jpg'
 import esaDoorTraining from './assets/site/esa-urban-training-04.jpg'
 import esaUrban02 from './assets/site/esa-urban-training-05.jpg'
+import esaTraining06 from './assets/site/esa-urban-training-06.jpg'
 import patchBoard from './assets/site/patch-board.jpg'
 import moto01 from './assets/site/moto-01.jpg'
+import moto02 from './assets/site/moto-02.jpg'
+import mountainMoto01 from './assets/site/mountain-moto-01.jpg'
+import mountainMoto02 from './assets/site/mountain-moto-02.jpg'
+import nightTeam2022 from './assets/site/night-team-2022.jpg'
+import hengdian01 from './assets/site/hengdian-01.jpg'
+import hengdian02 from './assets/site/hengdian-02.jpg'
+import hengdian03 from './assets/site/hengdian-03.jpg'
+import hengdian04 from './assets/site/hengdian-04.jpg'
 import hengdianStreetWide from './assets/site/hengdian-05.jpg'
+import biliJujieFinalPoster from './assets/site/bili-jujie-final-2024.jpg'
+import biliJujiePreviewPoster from './assets/site/bili-jujie-preview.jpg'
+import biliXunshanPoster from './assets/site/bili-xunshan-2019.jpg'
+import biliYangzhouPoster from './assets/site/bili-yangzhou-20210327.png'
+import biliJujieFieldFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-field_frame01.jpg'
+import biliJujieFinalFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-final_frame01.jpg'
 import xhsHengdianTeam from './assets/site/external/2026-03-15_xhs_hengdian-expedition_team.jpg'
 import xhsHengdianStreet from './assets/site/external/2026-03-15_xhs_hengdian-expedition_street.jpg'
 import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_grass.jpg'
@@ -429,14 +475,14 @@ const videoClips = Object.entries(videoAssets)
   .sort((a, b) => a.title.localeCompare(b.title, 'zh-CN', { numeric: true }))
 
 const defaultHomepageCarousels = {
-  top: [haiyingcheng04, haiyingcheng03, xhsWargameCover, xhsFieldTeam],
-  about: [haiyingcheng02, xhsHengdianTeam, xhsFieldGrass],
-  records: [haiyingcheng05, xiaojiuzhaiEscape01, xhsHengdianStreet, yingmengliDate01],
-  fields: [siteModern02, xiaojiuzhaiTraining02, yingmengli02, moto01],
-  activities: [haiyingcheng02, xhsWargameFrame, xhsFieldTeam, xhsHengdianStreet],
-  safe: [esaRoom, esaDoorTraining, esaUrban01, esaUrban02],
-  media: [haiyingcheng04, yingmengliDate02, xhsWargameCover, patchBoard],
-  cooperate: [hengdianStreetWide, xhsHengdianTeam, xhsFieldGrass]
+  top: [nightTeam2022, siteModern03, mountainMoto02, siteEsaSquad],
+  about: [siteField, siteModern01, hengdian01],
+  records: [patchBoard, moto02, esaTraining03, yingmengliDate02],
+  fields: [xiaojiuzhaiTraining01, yingmengli01, hengdian02, mountainMoto01],
+  activities: [haiyingcheng02, xhsWargameCover, xhsFieldGrass, hengdian04],
+  safe: [esaTraining01, esaDoorTraining, esaUrban02, esaTraining06],
+  media: [biliJujieFinalPoster, biliJujiePreviewPoster, biliXunshanPoster, biliYangzhouPoster],
+  cooperate: [hengdianStreetWide, xhsHengdianTeam, siteEsaUrban]
 }
 
 export default {
@@ -448,6 +494,7 @@ export default {
       logo,
       homepageCarousels: {},
       activeVideo: null,
+      activeImage: null,
       contactPreview: null,
       contactOpen: false,
       contactQrcodes: [
@@ -461,12 +508,6 @@ export default {
       esaDoorTraining,
       activityFeatureImage: haiyingcheng02,
       cooperateImage: hengdianStreetWide,
-      featuredRecord: {
-        date: '2024.06 / 象山海影城',
-        title: '巨蟹行动最终章',
-        text: '队伍从海影城街区进入，沿建筑和巷口推进。任务点、撤离条件和阵营关系，在进场前已经讲过一轮。',
-        image: haiyingcheng05
-      },
       navItems: [
         { id: 'about', label: '关于 About' },
         { id: 'records', label: '记录 Record' },
@@ -477,9 +518,9 @@ export default {
         { id: 'cooperate', label: '合作 Join' }
       ],
       visitorRoutes: [
-        { title: '玩家', text: '报名后参加周常，听简报，跟队下场。' },
-        { title: '场地', text: '先看入口、禁入区、旁观位置和撤离线。' },
-        { title: '学校 / 园区', text: '可以从规则课、队形演示或低强度试场开始。' }
+        { title: '玩家', text: '想参加，先看报名入口；第一次可以从周常开始。' },
+        { title: '场地', text: '看入口、禁入区、旁观位置和撤离线。' },
+        { title: '学校 / 园区', text: '规则课、队形演示、低强度体验。' }
       ],
       metrics: [
         { value: '2018', label: '早期训练记录' },
@@ -490,53 +531,47 @@ export default {
       aboutNotes: [
         {
           title: '新玩家',
-          text: '从周常开始。第一次不用急着表现，听规则、跟队走，记住停止口令和安全距离。'
+          text: '第一次来先听 Briefing，跟队走一场。'
         },
         {
           title: '下场流程',
-          text: '集合后讲边界和任务，再分组进场。结束后复盘路线、通讯和卡住的位置。'
+          text: '集合、Briefing、进场、任务、AAR。'
         },
         {
-          title: '试场合作',
-          text: '从短流程开始。人数、区域、旁观位置和影像发布范围，当天定清楚。'
+          title: '试场',
+          text: '一段路线，一个任务，十几到几十人。'
         }
       ],
       aboutPhotos: [
         {
           caption: '象山海影城 / 巨蟹行动',
-          image: haiyingcheng02
+          image: biliJujieFieldFrame
         },
         {
           caption: '横店影视城 / 远征交流',
-          image: xhsHengdianTeam
+          image: hengdian03
         },
         {
           caption: '宁波周常 / 队员记录',
-          image: xhsFieldGrass
+          image: xiaojiuzhaiTraining03
         }
       ],
       history: [
-        { year: '2018', title: 'ESA 城市作战训练', text: '室内简报、贴墙移动、门口队形。早期照片里能看到当时的训练方式。' },
-        { year: '2019', title: '“巡山”户外训练', text: '山路、林线、队伍行进。当时的视频还留在 B 站。' },
-        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '去扬州同场交流，按对方规则进场。' },
-        { year: '2021.10.31', title: '浙东小九寨“逃离荒野”', text: '山地路线，体力、通讯和队伍间距都很吃紧。' },
-        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区活动。灯光够，街面完整，短流程能跑起来。' },
-        { year: '2024.06', title: '象山海影城·巨蟹行动最终章', text: '在影视城街区跑任务，沿建筑、巷口和任务点推进。' },
-        { year: '2026.03', title: '横店远征交流', text: '横店影视城交流。街区尺度、建筑距离和宁波常用场地不一样。' }
-      ],
-      activityLog: [
-        { date: '2026.06.22 / 小红书', title: '宁波甬士下场视频', text: '队员视角，能看到移动、掩护和接触距离。', image: xhsWargameFrame },
-        { date: '2026.05.30 / 小红书', title: '5.30 下场日记', text: '草地场景、队伍合影，还有当天照片。', image: xhsFieldTeam },
-        { date: '2026.03.15 / 横店', title: '横店影视城交流', text: '外地影视城的街区尺度，和宁波常用场地不一样。', image: xhsHengdianStreet },
-        { date: '2021.10.31 / 山地', title: '浙东小九寨路线', text: '山路和林线里，队伍间距很容易被拉开。', image: xiaojiuzhaiEscape01 }
+        { year: '2018', title: 'ESA 城市作战训练', text: '室内简报、贴墙移动、门口队形。' },
+        { year: '2019', title: '巡山户外训练', text: '山路、林线、队伍行进。公开视频见 B 站。' },
+        { year: '2021.03.27', title: '扬州 MILSIM 镭射交流', text: '扬州同场交流，按对方规则进场。' },
+        { year: '2021.10.31', title: '浙东小九寨逃离荒野', text: '山地路线、通讯、队伍间距。' },
+        { year: '2023.10.22', title: '应梦里活动', text: '夜间街区、灯光、街面。' },
+        { year: '2024.06', title: '象山海影城巨蟹行动最终章', text: '象山海影城街区任务。' },
+        { year: '2026.03', title: '横店远征交流', text: '横店影视城街区交流。' }
       ],
       venues: [
         {
           name: '象山海影城',
           type: '影视城街区',
-          image: haiyingcheng05,
+          image: haiyingcheng03,
           featured: true,
-          text: '街道、楼体、巷口都能用。搜索、据点、撤离和夜间任务都跑过。',
+          text: '街道、楼体、巷口、开阔区。',
           points: ['巨蟹行动', '街区推进', '夜间任务']
         },
         {
@@ -544,15 +579,15 @@ export default {
           type: '夜间街区',
           image: yingmengliDate01,
           featured: false,
-          text: '夜间灯光足，街道完整。短流程能跑，旁边也能看清队伍移动。',
+          text: '夜间街区，灯光足，适合短流程。',
           points: ['夜间街区', '短流程']
         },
         {
           name: '四明山野猫湾 / 浙东小九寨',
           type: '山地路线',
-          image: xiaojiuzhaiEscape01,
+          image: xiaojiuzhaiEscape02,
           featured: false,
-          text: '山地看路线和通讯。体力、天气、队伍间距都会影响安排。',
+          text: '山路、林线、坡度、天气。',
           points: ['路线规划', '通讯纪律']
         },
         {
@@ -560,15 +595,15 @@ export default {
           type: '街区空间',
           image: moto01,
           featured: false,
-          text: '街区尺度小，动线短。短任务好控制，也能留出观看位置。',
+          text: '街区尺度小，动线短。',
           points: ['短流程', '器材摆放']
         },
         {
           name: '天宫庄园',
           type: '边界清楚',
-          image: patchBoard,
+          image: siteModern02,
           featured: false,
-          text: '这类场地先看边界和动线。人数不多时，可以从低强度任务开始试。',
+          text: '边界清楚，适合低强度试场。',
           points: ['试场', '低强度']
         },
         {
@@ -576,16 +611,16 @@ export default {
           type: '校园训练',
           image: esaRoom,
           featured: false,
-          text: '可以讲规则、演示队形、练口令和安全边界。强度不高，基础能讲清。',
+          text: '校园空间，适合规则讲解和队形演示。',
           points: ['规则讲解', '基础队形']
         }
       ],
       activityTypes: [
-        { code: '周常', title: '周常活动', text: '新人跟队走一场，先把规则和安全距离跑熟。老队员继续磨通讯、队形和复盘习惯。' },
-        { code: '剧本', title: '影视城剧本', text: '有阵营、任务点、行动区域和撤离条件。巨蟹行动是在海影城街区里跑出来的。' },
-        { code: '山地', title: '户外任务', text: '路线、体力、通讯和天气，都会改变当天安排。' },
-        { code: '远征', title: '外地交流', text: '到外地场地，按对方规则来，再适应新的空间。' },
-        { code: '试场', title: '合作试场', text: '跑一段短流程。边界、动线和安全区，现场看最清楚。' }
+        { code: '周常', title: '周常活动', text: '固定下场，熟悉规则和安全距离。' },
+        { code: '剧本', title: '主题剧本', text: '阵营、任务点、行动区域和撤离条件。' },
+        { code: '山地', title: '山地徒步', text: '路线、体力、通讯和天气。' },
+        { code: '远征', title: '外地交流', text: '去外地场地，按对方规则进场。' },
+        { code: '试场', title: '试场体验', text: '短流程、低强度、小规模。' }
       ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
@@ -595,46 +630,46 @@ export default {
         { title: 'AAR', text: '结束后复盘安全、通讯、路线和分工。' }
       ],
       trainingLoop: [
-        { title: 'ROE', text: '哪些地方能进，哪些地方不能进；什么情况下立刻停。' },
-        { title: '通讯', text: '呼号、位置、异常情况，尽量短句。对讲机里不要抢话。' },
-        { title: '队形', text: '移动时不要挤成一团。前后左右是谁，心里要有数。' },
-        { title: 'AAR', text: '结束后把问题说出来。路线、节奏、风险点，下次改。' }
+        { title: 'ROE', text: '安全边界、停止口令、装备限制。' },
+        { title: '通讯', text: '呼号、位置、异常情况。' },
+        { title: '队形', text: '队伍间距、移动顺序、掩护位置。' },
+        { title: 'AAR', text: '活动后复盘路线、沟通和任务节奏。' }
       ],
       mediaLead: {
         tag: 'XIANGSHAN / 2024',
         title: '象山海影城夜间任务',
-        text: '灯一暗，街道、树影和建筑边缘会混在一起。队伍靠口令、手势和事先讲好的任务点往前推。',
+        text: '灯光、街道、建筑边缘。',
         image: haiyingcheng04
       },
       mediaNotes: [
         {
           tag: 'URBAN',
           title: '影视城和夜间街区',
-          text: '建筑、巷口和灯光会影响路线。象山海影城、应梦里这类场地，可以做搜索、占点和撤离。'
+          text: '象山海影城、应梦里。'
         },
         {
           tag: 'MOUNTAIN',
           title: '山地和户外路线',
-          text: '山路里队伍容易拉开，通讯和体力比动作更重要。天气和路线会直接改变当天安排。'
+          text: '四明山、浙东小九寨。'
         },
         {
           tag: 'TRAINING',
           title: '平时训练',
-          text: '室内 Briefing、队形移动、口令和复盘。平时练过，现场才不容易散。'
+          text: 'Briefing、队形、口令、AAR。'
         }
       ],
       videoClips,
       assetStories: [
-        { tag: 'HENGDIAN / 2026', title: '横店远征交流', text: '影视城街区前的队伍合影。', image: xhsHengdianTeam, size: 'wide' },
-        { tag: 'YINGMENGLI / 2023', title: '建筑窗口路线', text: '窗口、栏杆和队友位置都在画面里。', image: siteModern02, size: '' },
-        { tag: 'YINGMENGLI / 2023', title: '应梦里夜间活动', text: '楼上视角能看清街道和移动路线。', image: yingmengli02, size: '' },
-        { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨训练', text: '山地路线里，队伍间距很容易被拉开。', image: xiaojiuzhaiTraining02, size: '' },
-        { tag: 'ESA / URBAN', title: 'ESA 城市作战训练', text: '门口、墙边和队形处理。', image: esaUrban01, size: '' },
-        { tag: 'XHS / 2026', title: '5.30 下场日记', text: '草地场景，队员距离能看得比较清楚。', image: xhsFieldGrass, size: '' },
-        { tag: 'URBAN / CQB', title: '室内街区训练', text: '门口处理、墙边移动和互相掩护。', image: esaUrban02, size: '' },
-        { tag: 'YINGMENGLI / 2023', title: '应梦里活动', text: '2023 年 10 月 22 日夜间场地。', image: yingmengliDate02, size: '' },
-        { tag: 'XHS / 2026', title: '6.22 队员视频', text: '小红书公开视频封面。', image: xhsWargameCover, size: '' },
-        { tag: 'CANCER', title: '巨蟹行动道具', text: '地图、文件和现场道具。', image: haiyingcheng01, size: '' }
+        { tag: 'XIANGSHAN / 2024', title: '巨蟹行动现场', text: '建筑入口。', image: haiyingcheng01, size: 'wide' },
+        { tag: 'YINGMENGLI / 2023', title: '建筑窗口路线', text: '窗口、栏杆。', image: yingmengli02, size: '' },
+        { tag: 'YINGMENGLI / 2023', title: '应梦里夜间活动', text: '街道、移动路线。', image: yingmengliDate03, size: '' },
+        { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨训练', text: '山地路线。', image: xiaojiuzhaiTraining02, size: '' },
+        { tag: 'ESA / URBAN', title: 'ESA 城市作战训练', text: '门口、墙边、队形。', image: esaUrban01, size: '' },
+        { tag: 'MOUNTAIN / FIELD', title: '浙东小九寨路线', text: '山路、林线。', image: xiaojiuzhaiEscape03, size: '' },
+        { tag: 'ESA / 2018', title: '早期训练记录', text: '室内训练。', image: archive20180701, size: '' },
+        { tag: 'ESA / 2018', title: '队形训练', text: '移动、门口、队形。', image: archive20180702, size: '' },
+        { tag: 'BILIBILI / 2024', title: '巨蟹行动切片', text: '公开视频画面。', image: biliJujieFinalFrame, size: '' },
+        { tag: 'ESA / 2018', title: '动作训练', text: '贴墙、移动。', image: archive20180703, size: '' }
       ],
       publicSources: [
         { platform: 'BILIBILI / 2019', title: '“巡山”行动——户外训练', href: 'https://www.bilibili.com/video/BV1hb411s7zL' },
@@ -645,16 +680,16 @@ export default {
         { platform: 'XIAOHONGSHU / 2026', title: '甬士横店远征', href: 'https://www.xiaohongshu.com/search_result?keyword=%E7%94%AC%E5%A3%AB%E6%A8%AA%E5%BA%97%E8%BF%9C%E5%BE%81&source=web_explore_feed' }
       ],
       trialSteps: [
-        { code: '01', title: '看场地', text: '地点、时间、可进入区、禁入区和预计人数，先对齐。' },
-        { code: '02', title: '划出边界', text: '集合点、休息区、旁观位置、撤离路线和负责人，当场定下来。' },
-        { code: '03', title: '跑短任务', text: '30-90 分钟，跑一个清楚的任务，不急着把流程做大。' },
-        { code: '04', title: '当天复盘', text: '人数、路线、任务、照片和视频发布范围，试完再调整。' }
+        { code: '01', title: '看场地', text: '地点、时间、可进入区、禁入区。' },
+        { code: '02', title: '划出边界', text: '集合点、休息区、旁观位置、撤离路线。' },
+        { code: '03', title: '跑短任务', text: '30-90 分钟，一段路线，一个任务。' },
+        { code: '04', title: '当天复盘', text: '人数、路线、任务、照片和视频范围。' }
       ],
       partnerFit: [
-        { tag: 'FIELD', title: '影视城、街区、园区试场' },
-        { tag: 'CAMPUS', title: '校园规则课和低强度体验' },
-        { tag: 'EVENT', title: '小型主题活动和路线任务' },
-        { tag: 'MEDIA', title: '活动照片、短片和公开记录' }
+        { tag: 'FIELD', title: '影视城、街区、园区' },
+        { tag: 'CAMPUS', title: '校园规则课' },
+        { tag: 'EVENT', title: '小型主题活动' },
+        { tag: 'MEDIA', title: '照片、短片、公开记录' }
       ],
       partnerNotes: [
         {
@@ -706,6 +741,18 @@ export default {
       this.activeVideo = null
       document.body.style.overflow = ''
     },
+    openImage(item) {
+      this.activeImage = {
+        ...item,
+        title: item.title || item.name,
+        tag: item.tag || item.type
+      }
+      document.body.style.overflow = 'hidden'
+    },
+    closeImage() {
+      this.activeImage = null
+      document.body.style.overflow = ''
+    },
     openContactPreview(item) {
       this.contactPreview = item
       document.body.style.overflow = 'hidden'
@@ -716,6 +763,7 @@ export default {
     },
     handleVideoKeydown(event) {
       if (event.key === 'Escape' && this.activeVideo) this.closeVideo()
+      if (event.key === 'Escape' && this.activeImage) this.closeImage()
       if (event.key === 'Escape' && this.contactPreview) this.closeContactPreview()
     },
     async loadHomepageCarousels() {
