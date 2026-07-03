@@ -1160,15 +1160,16 @@ video {
 }
 
 .field-grid article.featured {
-  grid-column: span 2;
+  grid-column: auto;
 }
 
 .field-grid article {
-  min-height: 390px;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
 }
 
 .field-grid article.featured {
-  min-height: 470px;
+  min-height: 0;
 }
 
 .field-grid article::after {
@@ -1183,7 +1184,36 @@ video {
 
 .field-grid img {
   display: block;
-  min-height: 390px;
+  min-height: 0;
+}
+
+.field-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: #050504;
+  cursor: zoom-in;
+}
+
+.field-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 360ms ease, filter 360ms ease;
+}
+
+.field-photo:hover img,
+.field-photo:focus-visible img {
+  transform: scale(1.045);
+  filter: saturate(1.08) contrast(1.05);
+}
+
+.field-photo:focus-visible {
+  outline: 2px solid var(--ys-red);
+  outline-offset: -3px;
 }
 
 .field-card-copy {
@@ -1191,6 +1221,7 @@ video {
   top: 14px;
   bottom: auto;
   padding: 16px;
+  pointer-events: none;
 }
 
 .field-card-copy h3 {
@@ -1579,30 +1610,138 @@ video {
 
 .media-wall {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 22px;
 }
 
-.media-wall figure {
-  min-height: 0;
-  margin: 0;
-  aspect-ratio: 4 / 3;
-  background:
-    linear-gradient(135deg, rgba(213, 71, 53, 0.08), transparent 42%),
-    #11130d;
+.media-photo {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--ys-line);
+  color: inherit;
+  background: #090a08;
+  cursor: zoom-in;
 }
 
-.media-wall figure.wide {
-  grid-column: span 2;
-}
-
-.media-wall figure.tall {
-  grid-row: auto;
-  min-height: 0;
-}
-
-.media-wall strong {
+.media-photo img {
   display: block;
-  margin: 4px 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 360ms ease, filter 360ms ease;
+}
+
+.media-photo:hover img,
+.media-photo:focus-visible img {
+  transform: scale(1.045);
+  filter: saturate(1.08) contrast(1.03);
+}
+
+.media-photo:focus-visible {
+  outline: 2px solid var(--ys-red);
+  outline-offset: 3px;
+}
+
+.media-photo-caption {
+  position: absolute;
+  inset: auto 0 0;
+  display: grid;
+  gap: 4px;
+  padding: 34px 16px 14px;
+  text-align: left;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.86));
+}
+
+.media-photo-caption small {
+  color: var(--ys-sand);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.media-photo-caption strong {
+  display: block;
+  margin: 0;
   color: var(--ys-text);
+  font-size: 18px;
+}
+
+.image-lightbox {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(14px, 4vw, 52px);
+  background: rgba(3, 4, 3, 0.9);
+  backdrop-filter: blur(14px);
+}
+
+.image-lightbox-panel {
+  position: relative;
+  width: min(1180px, 100%);
+  max-height: calc(100vh - 28px);
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--ys-line-strong);
+  background: #090a08;
+  box-shadow: 0 32px 120px rgba(0, 0, 0, 0.72);
+}
+
+.image-lightbox-panel img {
+  display: block;
+  width: 100%;
+  max-height: 78vh;
+  object-fit: contain;
+  background: #000;
+}
+
+.image-lightbox-panel figcaption {
+  display: grid;
+  gap: 6px;
+  padding: 16px 20px 20px;
+}
+
+.image-lightbox-panel small { color: var(--ys-sand); }
+.image-lightbox-panel strong { color: var(--ys-text); font-size: 22px; }
+.image-lightbox-panel span { color: #c2b79f; }
+
+.image-lightbox-close {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.image-preview-enter-active,
+.image-preview-leave-active {
+  transition: opacity 220ms ease;
+}
+
+.image-preview-enter-active .image-lightbox-panel,
+.image-preview-leave-active .image-lightbox-panel {
+  transition: transform 260ms cubic-bezier(.2, .8, .2, 1), opacity 220ms ease;
+}
+
+.image-preview-enter-from,
+.image-preview-leave-to {
+  opacity: 0;
+}
+
+.image-preview-enter-from .image-lightbox-panel,
+.image-preview-leave-to .image-lightbox-panel {
+  opacity: 0;
+  transform: translateY(18px) scale(0.96);
 }
 
 .public-links {
@@ -2164,11 +2303,6 @@ video {
 
   .media-wall figure {
     min-height: 0;
-  }
-
-  .media-wall figure.wide {
-    grid-column: 1 / -1;
-    width: 100%;
   }
 
   .partner-photo {

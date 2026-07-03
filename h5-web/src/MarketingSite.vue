@@ -98,35 +98,6 @@
         </article>
       </div>
 
-      <article class="record-feature">
-        <img :src="featuredRecord.image" :alt="featuredRecord.title" loading="lazy" fetchpriority="low" decoding="async" />
-        <div>
-          <span>{{ featuredRecord.date }}</span>
-          <h3>{{ featuredRecord.title }}</h3>
-          <p>{{ featuredRecord.text }}</p>
-        </div>
-      </article>
-
-      <div class="record-grid">
-        <component
-          :is="item.href ? 'a' : 'article'"
-          v-for="item in activityLog"
-          :key="item.title"
-          class="record-card"
-          :href="item.href || undefined"
-          :target="item.href ? '_blank' : undefined"
-          :rel="item.href ? 'noreferrer' : undefined"
-          :aria-label="item.href ? `查看来源：${item.title}` : undefined"
-        >
-          <img :src="item.image" :alt="item.title" loading="lazy" fetchpriority="low" decoding="async" />
-          <div>
-            <span>{{ item.date }}</span>
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.text }}</p>
-            <em v-if="item.href">点击查看来源 ↗</em>
-          </div>
-        </component>
-      </div>
     </section>
 
     <section id="fields" class="section-shell fields-section carousel-section">
@@ -138,8 +109,15 @@
       </div>
 
       <div class="field-grid">
-        <article v-for="venue in venues" :key="venue.name" :class="{ featured: venue.featured }">
-          <img :src="venue.image" :alt="venue.name" loading="lazy" fetchpriority="low" decoding="async" />
+        <article v-for="venue in venues" :key="venue.name">
+          <button
+            class="field-photo"
+            type="button"
+            :aria-label="`查看完整图片：${venue.name}`"
+            @click="openImage(venue)"
+          >
+            <img :src="venue.image" :alt="venue.name" loading="lazy" fetchpriority="low" decoding="async" />
+          </button>
           <div class="field-card-copy">
             <span>{{ venue.type }}</span>
             <h3>{{ venue.name }}</h3>
@@ -386,6 +364,26 @@
           </div>
         </div>
       </Transition>
+      <Transition name="image-preview">
+        <div
+          v-if="activeImage"
+          class="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="`完整图片：${activeImage.title}`"
+          @click.self="closeImage"
+        >
+          <figure class="image-lightbox-panel">
+            <button type="button" class="image-lightbox-close" aria-label="关闭图片预览" @click="closeImage">×</button>
+            <img :src="activeImage.image" :alt="activeImage.title" />
+            <figcaption>
+              <small>{{ activeImage.tag }}</small>
+              <strong>{{ activeImage.title }}</strong>
+              <span>{{ activeImage.text }}</span>
+            </figcaption>
+          </figure>
+        </div>
+      </Transition>
     </Teleport>
   </main>
 </template>
@@ -496,6 +494,7 @@ export default {
       logo,
       homepageCarousels: {},
       activeVideo: null,
+      activeImage: null,
       contactPreview: null,
       contactOpen: false,
       contactQrcodes: [
@@ -509,12 +508,6 @@ export default {
       esaDoorTraining,
       activityFeatureImage: haiyingcheng02,
       cooperateImage: hengdianStreetWide,
-      featuredRecord: {
-        date: '2024.06 / 象山海影城',
-        title: '巨蟹行动最终章',
-        text: '队伍从海影城街区进入，沿建筑和巷口推进。任务点、撤离条件和阵营关系，在进场前已经讲过一轮。',
-        image: haiyingcheng05
-      },
       navItems: [
         { id: 'about', label: '关于 About' },
         { id: 'records', label: '记录 Record' },
@@ -571,30 +564,6 @@ export default {
         { year: '2023.10.22', title: '应梦里活动', text: '夜间街区、灯光、街面。' },
         { year: '2024.06', title: '象山海影城巨蟹行动最终章', text: '象山海影城街区任务。' },
         { year: '2026.03', title: '横店远征交流', text: '横店影视城街区交流。' }
-      ],
-      activityLog: [
-        {
-          date: '2026.06.22 / 小红书',
-          title: '宁波甬士下场视频',
-          text: '小红书公开记录。',
-          image: xhsWargameFrame,
-          href: 'https://www.xiaohongshu.com/search_result?keyword=%E5%AE%81%E6%B3%A2%E7%94%AC%E5%A3%AB%E4%B8%8B%E5%9C%BA&source=web_explore_feed'
-        },
-        {
-          date: '2026.05.30 / 小红书',
-          title: '5.30 下场记录',
-          text: '草地场景和队伍合影。',
-          image: xhsFieldTeam,
-          href: 'https://www.xiaohongshu.com/search_result?keyword=%E5%AE%81%E6%B3%A2%E7%94%AC%E5%A3%AB%205.30&source=web_explore_feed'
-        },
-        {
-          date: '2026.03.15 / 横店',
-          title: '横店影视城交流',
-          text: '横店影视城街区。',
-          image: xhsHengdianStreet,
-          href: 'https://www.xiaohongshu.com/search_result?keyword=%E7%94%AC%E5%A3%AB%E6%A8%AA%E5%BA%97%E8%BF%9C%E5%BE%81&source=web_explore_feed'
-        },
-        { date: '2021.10.31 / 山地', title: '浙东小九寨路线', text: '山路和林线。', image: xiaojiuzhaiEscape01 }
       ],
       venues: [
         {
@@ -772,6 +741,18 @@ export default {
       this.activeVideo = null
       document.body.style.overflow = ''
     },
+    openImage(item) {
+      this.activeImage = {
+        ...item,
+        title: item.title || item.name,
+        tag: item.tag || item.type
+      }
+      document.body.style.overflow = 'hidden'
+    },
+    closeImage() {
+      this.activeImage = null
+      document.body.style.overflow = ''
+    },
     openContactPreview(item) {
       this.contactPreview = item
       document.body.style.overflow = 'hidden'
@@ -782,6 +763,7 @@ export default {
     },
     handleVideoKeydown(event) {
       if (event.key === 'Escape' && this.activeVideo) this.closeVideo()
+      if (event.key === 'Escape' && this.activeImage) this.closeImage()
       if (event.key === 'Escape' && this.contactPreview) this.closeContactPreview()
     },
     async loadHomepageCarousels() {
