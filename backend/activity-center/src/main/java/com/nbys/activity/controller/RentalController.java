@@ -141,12 +141,13 @@ public class RentalController {
     public ApiResponse<List<Map<String, Object>>> notifications(HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         return ApiResponse.ok(Rows.list(jdbc,
-                "select n.*, r.id rental_action_id, r.status rental_status, r.user_id rental_user_id, r.launcher_id rental_launcher_id " +
+                "select n.*, coalesce(rd.id,rl.id) rental_action_id, coalesce(rd.status,rl.status) rental_status, " +
+                        "coalesce(rd.user_id,rl.user_id) rental_user_id, coalesce(rd.launcher_id,rl.launcher_id) rental_launcher_id " +
                         "from user_notifications n " +
-                        "left join activity_launcher_rentals r on r.id=(select r2.id from activity_launcher_rentals r2 " +
-                        "join launcher_rental_items l2 on l2.id=r2.launcher_id " +
-                        "where n.type='launcher_rental' and (r2.id=n.related_id or (r2.launcher_id=n.related_id and l2.created_by_id=n.user_id)) " +
-                        "order by case when r2.id=n.related_id then 0 else 1 end, r2.id desc limit 1) " +
+                        "left join activity_launcher_rentals rd on n.type='launcher_rental' and rd.id=n.related_id " +
+                        "left join activity_launcher_rentals rl on rl.id=(select r2.id from activity_launcher_rentals r2 " +
+                        "join launcher_rental_items l2 on l2.id=r2.launcher_id where rd.id is null and n.type='launcher_rental' " +
+                        "and r2.launcher_id=n.related_id and l2.created_by_id=n.user_id order by r2.id desc limit 1) " +
                         "where n.user_id=? order by n.created_at desc,n.id desc limit 50", userId));
     }
 

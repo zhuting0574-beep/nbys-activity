@@ -154,13 +154,16 @@ public class H5Controller {
     }
 
     private Map<String, Object> attendanceSummary(int userId) {
+        int year = LocalDate.now().getYear();
+        String start = year + "-01-01";
+        String end = (year + 1) + "-01-01";
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("present_count", Rows.one(jdbc,
                 "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
-                        "where ar.user_id=? and ar.present=1",
-                userId).get("total"));
+                        "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
+                userId, start, end).get("total"));
         out.put("activity_total", Rows.one(jdbc,
-                "select count(*) total from activities where record_type='activity' and deleted_at is null and end_at<=now()").get("total"));
+                "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
         return out;
     }
 
@@ -365,12 +368,13 @@ public class H5Controller {
 
     private List<Map<String, Object>> notificationRows(int userId) {
         return Rows.list(jdbc,
-                "select n.*, r.id rental_action_id, r.status rental_status, r.user_id rental_user_id, r.launcher_id rental_launcher_id " +
+                "select n.*, coalesce(rd.id,rl.id) rental_action_id, coalesce(rd.status,rl.status) rental_status, " +
+                        "coalesce(rd.user_id,rl.user_id) rental_user_id, coalesce(rd.launcher_id,rl.launcher_id) rental_launcher_id " +
                         "from user_notifications n " +
-                        "left join activity_launcher_rentals r on r.id=(select r2.id from activity_launcher_rentals r2 " +
-                        "join launcher_rental_items l2 on l2.id=r2.launcher_id " +
-                        "where n.type='launcher_rental' and (r2.id=n.related_id or (r2.launcher_id=n.related_id and l2.created_by_id=n.user_id)) " +
-                        "order by case when r2.id=n.related_id then 0 else 1 end, r2.id desc limit 1) " +
+                        "left join activity_launcher_rentals rd on n.type='launcher_rental' and rd.id=n.related_id " +
+                        "left join activity_launcher_rentals rl on rl.id=(select r2.id from activity_launcher_rentals r2 " +
+                        "join launcher_rental_items l2 on l2.id=r2.launcher_id where rd.id is null and n.type='launcher_rental' " +
+                        "and r2.launcher_id=n.related_id and l2.created_by_id=n.user_id order by r2.id desc limit 1) " +
                         "where n.user_id=? order by n.created_at desc,n.id desc limit 50", userId);
     }
 

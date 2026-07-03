@@ -436,8 +436,8 @@ select {
 
 .attendance-table th,
 .attendance-table td {
-  min-width: 156px;
-  padding: 12px;
+  min-width: 101px;
+  padding: 8px;
   border-right: 1px solid rgba(148, 163, 184, .16);
   border-bottom: 1px solid rgba(148, 163, 184, .16);
   text-align: left;
@@ -453,36 +453,24 @@ select {
   border-right: 0;
 }
 
-.attendance-person {
-  width: 104px;
-  min-width: 104px !important;
-  max-width: 104px;
-}
-
 .attendance-count {
-  width: 82px;
-  min-width: 82px !important;
-  max-width: 82px;
+  width: 53px;
+  min-width: 53px !important;
+  max-width: 53px;
   text-align: center !important;
 }
 
-.sticky-person,
 .sticky-count {
   position: sticky;
   z-index: 2;
   background: #111827;
 }
 
-.sticky-person {
-  left: 0;
-}
-
 .sticky-count {
-  left: 104px;
+  left: 0;
   box-shadow: 8px 0 14px rgba(0, 0, 0, .18);
 }
 
-.attendance-table thead .sticky-person,
 .attendance-table thead .sticky-count {
   z-index: 3;
 }
@@ -924,22 +912,12 @@ select {
   border-radius: 10px;
 }
 
-.weekly-member > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
 .weekly-member strong {
+  min-width: 0;
   overflow: hidden;
   color: #f8fafc;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.weekly-member > div span {
-  color: #94a3b8;
-  font-size: 13px;
 }
 
 .weekly-member-status {

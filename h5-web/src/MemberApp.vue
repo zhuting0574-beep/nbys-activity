@@ -42,9 +42,9 @@
     <div v-if="tab === 'activities' && !selectedActivity && !selectedPlan">
       <div class="top">
         <div class="home-identity mine-identity">
-          <h2>{{ me.username }}</h2>
+          <h2>{{ me.callsign || '未设置呼号' }}</h2>
           <p>
-            <span>{{ me.callsign || '未设置呼号' }}</span>
+            <span>{{ me.username }}</span>
             <b>{{ attendanceSummary.present_count || 0 }}/{{ attendanceSummary.activity_total || 0 }}</b>
           </p>
         </div>
@@ -171,10 +171,7 @@
         <p class="muted">共 {{ detail.members?.length || 0 }} 人报名</p>
         <div class="weekly-member-list">
           <div v-for="member in detail.members" :key="member.id" class="weekly-member">
-            <div>
-              <strong>{{ member.callsign || member.username }}</strong>
-              <span>{{ member.job || '未选择职业' }}</span>
-            </div>
+            <strong>{{ member.callsign || member.username }}</strong>
             <span class="weekly-member-status" :class="{ checked: member.checked_in }">
               {{ member.checked_in ? '已签到' : '已报名' }}
             </span>
@@ -360,8 +357,8 @@
           <img v-if="me.avatar_url" class="profile-avatar" :src="me.avatar_url" alt="用户头像" />
           <div v-else class="profile-avatar fallback">{{ avatarText }}</div>
           <div class="mine-identity">
-            <h2>{{ me.username }}</h2>
-            <p>{{ me.callsign }}</p>
+            <h2>{{ me.callsign || '未设置呼号' }}</h2>
+            <p>{{ me.username }}</p>
           </div>
         </section>
 
@@ -382,7 +379,6 @@
             <table class="attendance-table">
               <thead>
                 <tr>
-                  <th class="attendance-person sticky-person">人员</th>
                   <th class="attendance-count sticky-count">出勤次数</th>
                   <th v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-event-head">
                     <strong>{{ event.name }}</strong>
@@ -395,7 +391,6 @@
               </thead>
               <tbody>
                 <tr>
-                  <td class="attendance-person sticky-person">{{ attendanceMatrix.username || me.username }}</td>
                   <td class="attendance-count sticky-count">{{ attendanceMatrix.present_count }}</td>
                   <td v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-mark-cell">
                     <span v-if="Number(event.attended) === 1" class="attendance-dot" :aria-label="`${event.name} 已出勤`"></span>

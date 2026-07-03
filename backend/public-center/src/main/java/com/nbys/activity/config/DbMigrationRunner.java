@@ -36,6 +36,10 @@ public class DbMigrationRunner implements ApplicationRunner {
             jdbc.execute("create table if not exists user_notifications (id int not null auto_increment, user_id int not null, type varchar(40) not null, title varchar(120) not null, content varchar(500) not null, related_id int default null, read_at datetime default null, created_at datetime not null default current_timestamp, primary key(id), key idx_user_read(user_id, read_at)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists system_settings (setting_key varchar(80) not null, setting_value varchar(1000) default null, updated_at datetime not null default current_timestamp on update current_timestamp, primary key(setting_key)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists homepage_carousel_images (id int not null auto_increment, section_key varchar(30) not null, image_url varchar(500) not null, sort_order int not null default 0, active tinyint(1) not null default 1, created_at datetime not null default current_timestamp, updated_at datetime not null default current_timestamp on update current_timestamp, primary key(id), key idx_homepage_carousel_section(section_key,active,sort_order,id)) engine=InnoDB default charset=utf8mb4");
+            addIndex("attendance_events", "idx_attendance_date_region_location", "(event_date, activity_region, location)");
+            addIndex("attendance_records", "idx_attendance_event_present", "(event_id, present)");
+            addIndex("user_notifications", "idx_notification_user_created", "(user_id, created_at, id)");
+            addIndex("activity_launcher_rentals", "idx_rental_launcher_id", "(launcher_id, id)");
         } catch (Exception e) {
             System.err.println("Database migration skipped: " + e.getMessage());
         }
@@ -53,5 +57,10 @@ public class DbMigrationRunner implements ApplicationRunner {
         if (exists != null && exists > 0) {
             jdbc.execute("alter table " + table + " drop column " + column);
         }
+    }
+
+    private void addIndex(String table, String index, String columns) {
+        Integer exists = jdbc.queryForObject("select count(*) from information_schema.statistics where table_schema=database() and table_name=? and index_name=?", Integer.class, table, index);
+        if (exists != null && exists == 0) jdbc.execute("alter table " + table + " add index " + index + " " + columns);
     }
 }
