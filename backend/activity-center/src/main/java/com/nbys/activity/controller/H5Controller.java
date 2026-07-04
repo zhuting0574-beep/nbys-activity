@@ -82,10 +82,10 @@ public class H5Controller {
         }
         row.put("squads", squads);
         row.put("members", Rows.list(jdbc,
-                "select e.*, u.username, u.callsign, " +
+                "select e.*, u.username, u.callsign, u.is_regular_member, " +
                         "case when exists(select 1 from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
                         "where ev.source_activity_id=e.activity_id and ar.user_id=e.user_id and ar.present=1) then 1 else 0 end checked_in " +
-                        "from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.camp_no,e.squad_no,e.id", id));
+                        "from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id", id));
         row.put("checkin", Rows.one(jdbc, "select ar.* from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=? and ar.user_id=?", id, userId));
         return ApiResponse.ok(row);
     }

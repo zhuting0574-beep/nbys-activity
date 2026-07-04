@@ -44,6 +44,12 @@ body {
   background: #2563eb;
 }
 
+.home-menu {
+  margin-bottom: 14px;
+  color: #bfdbfe;
+  border: 1px solid rgba(147, 197, 253, .22);
+}
+
 .submenu-list {
   margin: -2px 0 8px;
 }

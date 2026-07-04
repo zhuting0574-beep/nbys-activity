@@ -502,6 +502,25 @@ video {
   gap: 4px;
 }
 
+.nav-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-link-btn {
+  padding: 10px 16px;
+  border: 1px solid var(--ys-line-strong);
+  color: var(--ys-text);
+  background: rgba(7, 8, 6, 0.66);
+  cursor: pointer;
+}
+
+.admin-link-btn:hover {
+  border-color: var(--ys-red);
+  background: rgba(213, 71, 53, 0.14);
+}
+
 .ys-links button {
   padding: 10px 12px;
   border: 0;

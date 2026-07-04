@@ -119,6 +119,21 @@ mvn clean package
 4. `user-center`，端口 `8082`
 5. `public-center`，端口 `8083`
 
+推荐统一使用本地服务脚本启动，避免手工进程与 macOS LaunchAgent 重复管理
+`activity-center`：
+
+```bash
+npm run dev:start
+npm run dev:status
+npm run dev:restart
+npm run dev:stop
+```
+
+启动脚本会先卸载 `com.nbys.activity-center` LaunchAgent，再检查所有服务端口。
+如果端口仍由外部进程占用，脚本会停止启动并报告 PID，避免重复实例使用同一个
+Eureka 实例 ID 注册后互相注销。运行前需先建立数据库 SSH 隧道，并确保后端 JAR
+已经构建完成。运行日志保存在 `/tmp/nbys-local-dev/`。
+
 默认数据库连接会走本机 SSH 隧道：
 
 ```text
@@ -147,3 +162,11 @@ SSH_USER=root SSH_HOST=8.160.183.48 LOCAL_DB_PORT=13306 REMOTE_DB_HOST=127.0.0.1
 ```bash
 DB_HOST=127.0.0.1 DB_PORT=13306 DB_NAME=nbys-activity-manager DB_USER=root DB_PASSWORD=xxx
 ```
+
+认证服务还需要为所有后端服务配置相同的签名密钥：
+
+```bash
+AUTH_TOKEN_SECRET=请使用足够长的随机字符串
+```
+
+生产环境必须显式配置该值；访问令牌有效期为 2 小时，登录刷新 Cookie 会滚动续期 30 天。

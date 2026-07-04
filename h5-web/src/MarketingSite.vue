@@ -15,7 +15,10 @@
         </button>
       </nav>
 
-      <button class="action-btn" type="button" @click="$emit('enter-app')">一起行动</button>
+      <div class="nav-actions">
+        <button class="admin-link-btn" type="button" @click="goAdmin">去后管</button>
+        <button class="action-btn" type="button" @click="$emit('enter-app')">一起行动</button>
+      </div>
     </header>
 
     <div class="top-carousel-region carousel-region">
@@ -730,6 +733,10 @@ export default {
     }
   },
   methods: {
+    goAdmin() {
+      const url = location.port === '5174' ? `${location.protocol}//${location.hostname}:5173/admin/` : '/admin/'
+      window.location.href = url
+    },
     updateVideoCarouselVisible() {
       this.videoCarouselVisible = window.innerWidth <= 680 ? 1 : window.innerWidth <= 1080 ? 2 : 3
     },
