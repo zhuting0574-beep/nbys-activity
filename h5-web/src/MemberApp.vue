@@ -16,7 +16,7 @@
         <h2>登录</h2>
         <input v-model="loginForm.account" placeholder="名字 / 呼号" required />
         <input v-model="loginForm.password" placeholder="密码" type="password" required />
-        <button class="btn" style="width: 100%" type="submit">登录</button>
+        <button class="btn" style="width: 100%" type="submit" :disabled="loginSubmitting">{{ loginSubmitting ? '登录中…' : '登录' }}</button>
         <p class="muted">没有账号？赶紧 <a @click="view = 'register'">注册</a>。</p>
       </form>
     </div>
@@ -162,7 +162,9 @@
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
-          <button v-if="detail.display_status === '活动开始' && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" @click="checkin">签到</button>
+          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="checkin">
+            {{ checkinSubmitting ? '签到中…' : '签到' }}
+          </button>
           <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
           <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
@@ -551,6 +553,7 @@ export default {
       me: {},
       systemImages: {},
       loginForm: {},
+      loginSubmitting: false,
       logoUrl,
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
@@ -562,6 +565,7 @@ export default {
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
+      checkinSubmitting: false,
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
       squadEdits: {},
@@ -690,9 +694,11 @@ export default {
       if (resolve) resolve(value)
     },
     async login() {
+      if (this.loginSubmitting) return
+      this.loginSubmitting = true
       let activityLoadingStarted = false
       try {
-        const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
+        const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm, timeout: 30000 })
         setToken(data.token)
         this.view = 'app'
         if (data.must_change_password) {
@@ -708,6 +714,7 @@ export default {
       } catch (error) {
         this.showToast(error.message || '登录失败')
       } finally {
+        this.loginSubmitting = false
         if (activityLoadingStarted) this.$emit('ready')
       }
     },
@@ -868,6 +875,16 @@ export default {
       if (!value) return ''
       return String(value).replace('T', ' ').slice(0, 16)
     },
+    canCheckinActivity(activity) {
+      if (!activity?.start_at) return false
+      const start = new Date(String(activity.start_at).replace(' ', 'T'))
+      if (Number.isNaN(start.getTime())) return false
+      const now = new Date()
+      const sameDay = now.getFullYear() === start.getFullYear()
+        && now.getMonth() === start.getMonth()
+        && now.getDate() === start.getDate()
+      return sameDay && now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000
+    },
     formatAttendanceDate(value) {
       if (!value) return '时间待定'
       return String(value).replace('T', ' ').slice(0, 10)
@@ -898,8 +915,15 @@ export default {
     cancelEnroll() {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
     },
-    checkin() {
-      return api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' }).then(() => this.openActivity(this.selectedActivity))
+    async checkin() {
+      if (this.checkinSubmitting) return
+      this.checkinSubmitting = true
+      try {
+        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' })
+        await this.openActivity(this.selectedActivity)
+      } finally {
+        this.checkinSubmitting = false
+      }
     },
     squadsByCamp(camp) {
       return (this.detail.squads || []).filter(squad => squad.camp_no === camp)

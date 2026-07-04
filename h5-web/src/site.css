@@ -509,16 +509,14 @@ video {
 }
 
 .admin-link-btn {
-  padding: 10px 16px;
   border: 1px solid var(--ys-line-strong);
   color: var(--ys-text);
-  background: rgba(7, 8, 6, 0.66);
+  background: rgba(255, 255, 255, 0.06);
   cursor: pointer;
 }
 
 .admin-link-btn:hover {
-  border-color: var(--ys-red);
-  background: rgba(213, 71, 53, 0.14);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .ys-links button {
@@ -536,6 +534,7 @@ video {
 }
 
 .action-btn,
+.admin-link-btn,
 .primary-cta,
 .secondary-cta {
   border-radius: 999px;
@@ -2180,7 +2179,8 @@ video {
     font-size: 15px;
   }
 
-  .action-btn {
+  .action-btn,
+  .admin-link-btn {
     display: inline-flex;
     justify-content: center;
     padding: 9px 12px;

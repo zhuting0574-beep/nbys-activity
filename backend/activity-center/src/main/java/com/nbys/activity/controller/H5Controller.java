@@ -233,11 +233,8 @@ public class H5Controller {
         LocalDateTime now = LocalDateTime.now();
         if (!now.toLocalDate().equals(start.toLocalDate()) || now.isBefore(start.minusHours(3))) throw new IllegalArgumentException("活动当天开始前3小时才允许签到");
         Integer eventId = ensureAttendanceEvent(id, a);
-        if (Rows.one(jdbc, "select id from attendance_records where event_id=? and user_id=?", eventId, userId) == null) {
-            jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now())", eventId, userId, userId);
-        } else {
-            jdbc.update("update attendance_records set present=1, updated_by_id=?, updated_at=now() where event_id=? and user_id=?", userId, eventId, userId);
-        }
+        jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now()) " +
+                "on duplicate key update present=1,updated_by_id=values(updated_by_id),updated_at=now()", eventId, userId, userId);
         return ApiResponse.ok(null);
     }
 

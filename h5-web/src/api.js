@@ -38,7 +38,7 @@ export async function api(url, options = {}, retried = false) {
     options.body = JSON.stringify(body)
   }
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), options.timeout || 10000)
+  const timeout = setTimeout(() => controller.abort(), options.timeout || 20000)
   let response
   try {
     response = await fetch(url, { ...options, headers, signal: controller.signal, credentials: 'include' })
