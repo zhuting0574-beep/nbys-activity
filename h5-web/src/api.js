@@ -8,12 +8,28 @@ export function setToken(value) {
 }
 
 let errorHandler = null
+let refreshPromise = null
 
 export function setErrorHandler(handler) {
   errorHandler = handler
 }
 
-export async function api(url, options = {}) {
+async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+      .then(async response => {
+        const result = await response.json().catch(() => null)
+        if (!response.ok || result?.code !== 0 || !result?.data?.token) throw new Error('登录已失效')
+        setToken(result.data.token)
+        return result.data.token
+      })
+      .finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
+}
+
+export async function api(url, options = {}, retried = false) {
+  const silent = options.silent === true
   const headers = { ...(options.headers || {}) }
   const body = options.body
   if (token()) headers.Authorization = `Bearer ${token()}`
@@ -22,13 +38,13 @@ export async function api(url, options = {}) {
     options.body = JSON.stringify(body)
   }
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), options.timeout || 10000)
+  const timeout = setTimeout(() => controller.abort(), options.timeout || 20000)
   let response
   try {
-    response = await fetch(url, { ...options, headers, signal: controller.signal })
+    response = await fetch(url, { ...options, headers, signal: controller.signal, credentials: 'include' })
   } catch (error) {
     const message = error.name === 'AbortError' ? '请求超时，请确认后端服务已启动' : '网络异常，请确认后端服务已启动'
-    if (errorHandler) errorHandler(message)
+    if (!silent && errorHandler) errorHandler(message)
     throw new Error(message)
   } finally {
     clearTimeout(timeout)
@@ -40,19 +56,28 @@ export async function api(url, options = {}) {
       result = JSON.parse(text)
     } catch {
       const message = text.trim() || `请求失败(${response.status})`
-      if (errorHandler) errorHandler(message)
+      if (!silent && errorHandler) errorHandler(message)
       throw new Error(message)
     }
   }
   if (!response.ok) {
-    const message = result?.message || text.trim() || `请求失败(${response.status})`
-    if (errorHandler) errorHandler(message)
+    if (response.status === 401 && !retried && url !== '/api/auth/refresh') {
+      try {
+        await refreshAccessToken()
+        return api(url, { ...options, body }, true)
+      } catch {
+        setToken('')
+        window.dispatchEvent(new CustomEvent('nbys-auth-expired'))
+      }
+    }
+    const message = result?.message || (response.status >= 500 ? '服务暂时不可用，请稍后重试' : `请求失败(${response.status})`)
+    if (response.status !== 401 && !silent && errorHandler) errorHandler(message)
     throw new Error(message)
   }
   if (!result) return null
   if (result.code !== 0) {
     const message = result.message || '请求失败'
-    if (errorHandler) errorHandler(message)
+    if (!silent && errorHandler) errorHandler(message)
     throw new Error(message)
   }
   return result.data

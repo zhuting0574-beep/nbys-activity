@@ -11,6 +11,7 @@
   <div v-else class="shell">
     <aside class="side">
       <div class="brand">NBYS 后管</div>
+      <div class="menu home-menu" @click="goSiteHome">← 回到首页</div>
       <div v-for="item in menus" :key="item.key">
         <div class="menu" :class="{ active: active === item.key }" @click="active = item.key; load()">
           {{ item.name }}
@@ -132,6 +133,7 @@
           <el-button @click="loadActivities">查询</el-button>
           <el-button type="primary" v-if="can('activity:create')" @click="openActivity()">新增活动</el-button>
           <el-button type="success" v-if="can('plan:create')" @click="openPlan()">新增活动策划</el-button>
+          <el-button v-if="fromH5Activity" @click="goH5ActivityDetail">返回活动详情页面</el-button>
         </div>
         <el-table :data="activities" border>
           <el-table-column prop="display_record_type" label="类型" width="110" />
@@ -458,7 +460,7 @@
     <template #footer><el-button @click="editLauncher = null">取消</el-button><el-button type="primary" @click="saveLauncher">保存</el-button></template>
   </el-dialog>
   <el-dialog v-model="activityVisible" title="活动" width="760px">
-    <el-form v-if="activityForm" label-width="130px">
+    <el-form v-if="activityForm" label-width="130px" :disabled="!!activityForm.id && !can('activity:update')">
       <el-form-item label="Banner图">
         <img v-if="activityBannerPreview()" class="banner-preview" :src="activityBannerPreview()" />
         <div v-else class="banner-empty">建议上传活动横幅图，将展示在 H5 首页和活动详情页</div>
@@ -511,7 +513,7 @@
         </div>
       </el-form-item>
     </el-form>
-    <template #footer><el-button @click="activityForm = null">取消</el-button><el-button type="primary" @click="saveActivity">保存</el-button></template>
+    <template #footer><el-button @click="activityForm = null">取消</el-button><el-button v-if="activityForm && (activityForm.id ? can('activity:update') : can('activity:create'))" type="primary" @click="saveActivity">保存</el-button></template>
   </el-dialog>
 
   <el-dialog v-model="planVisible" title="活动策划" width="760px">
@@ -679,6 +681,7 @@ const PlanForm = {
 export default {
   components: { ActivityForm, PlanForm },
   data() {
+    const query = new URLSearchParams(location.search)
     return {
 	      tokenValue: token(),
 	      me: {},
@@ -686,7 +689,9 @@ export default {
 	      jobs,
 	      activityStatuses,
       homepageSections,
-	      active: 'dashboard',
+      active: query.get('view') || 'dashboard',
+      sourceActivityId: Number(query.get('activityId')) || null,
+      enteredFromH5: query.get('from') === 'h5',
       systemActive: 'systemImages',
 	      filters: {},
       dashboardYear: String(new Date().getFullYear()),
@@ -798,6 +803,9 @@ export default {
     uploadHeaders() {
       return { Authorization: `Bearer ${this.tokenValue}` }
     },
+    fromH5Activity() {
+      return this.enteredFromH5 && !!this.sourceActivityId
+    },
     venueVisible: { get() { return !!this.editVenue }, set(v) { if (!v) this.editVenue = null } },
     modeVisible: { get() { return !!this.editMode }, set(v) { if (!v) this.editMode = null } },
     userVisible: { get() { return !!this.editUser }, set(v) { if (!v) this.editUser = null } },
@@ -807,7 +815,12 @@ export default {
     eventVisible: { get() { return !!this.editEvent }, set(v) { if (!v) this.editEvent = null } }
   },
   async mounted() {
-    if (this.tokenValue) await this.init()
+    try {
+      await this.init()
+    } catch (error) {
+      this.tokenValue = ''
+      if (new URLSearchParams(location.search).get('view') === 'activities') this.redirectToH5Login()
+    }
     window.addEventListener('resize', this.resizeDashboardCharts)
   },
   beforeUnmount() {
@@ -831,8 +844,27 @@ export default {
     },
     async init() {
       this.me = await api('/api/admin/auth/me')
+      this.tokenValue = token()
+      if (!this.menus.some(item => item.key === this.active)) this.active = 'dashboard'
       this.roles = await api('/api/admin/roles/options')
       await Promise.all([this.loadModes(), this.loadVenues(), this.load()])
+      if (this.active === 'activities' && this.sourceActivityId && this.can('activity:view')) {
+        await this.openActivity({ id: this.sourceActivityId })
+      }
+    },
+    h5Base() {
+      return location.port === '5173' ? `${location.protocol}//${location.hostname}:5174/activity/` : '/activity/'
+    },
+    goSiteHome() {
+      window.location.href = this.h5Base()
+    },
+    goH5ActivityDetail() {
+      if (!this.fromH5Activity) return
+      window.location.href = `${this.h5Base()}?activityId=${encodeURIComponent(this.sourceActivityId)}#/app`
+    },
+    redirectToH5Login() {
+      const current = location.href
+      window.location.href = `${this.h5Base()}?returnTo=${encodeURIComponent(current)}#/app`
     },
     load() {
       return ({ dashboard: this.loadDashboard, activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()

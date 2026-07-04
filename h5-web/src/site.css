@@ -502,6 +502,23 @@ video {
   gap: 4px;
 }
 
+.nav-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-link-btn {
+  border: 1px solid var(--ys-line-strong);
+  color: var(--ys-text);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.admin-link-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .ys-links button {
   padding: 10px 12px;
   border: 0;
@@ -517,6 +534,7 @@ video {
 }
 
 .action-btn,
+.admin-link-btn,
 .primary-cta,
 .secondary-cta {
   border-radius: 999px;
@@ -2161,7 +2179,8 @@ video {
     font-size: 15px;
   }
 
-  .action-btn {
+  .action-btn,
+  .admin-link-btn {
     display: inline-flex;
     justify-content: center;
     padding: 9px 12px;

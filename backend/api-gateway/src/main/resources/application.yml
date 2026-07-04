@@ -22,7 +22,7 @@ spring:
         - id: user-center
           uri: lb://user-center
           predicates:
-            - Path=/api/admin/auth,/api/admin/auth/**,/api/admin/users,/api/admin/users/**,/api/h5/auth,/api/h5/auth/**,/api/h5/me,/api/h5/me/**
+            - Path=/api/auth,/api/auth/**,/api/admin/auth,/api/admin/auth/**,/api/admin/users,/api/admin/users/**,/api/h5/auth,/api/h5/auth/**,/api/h5/me,/api/h5/me/**
         - id: public-center
           uri: lb://public-center
           predicates:

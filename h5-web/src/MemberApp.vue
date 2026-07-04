@@ -5,8 +5,10 @@
         <img class="brand-logo" :src="displayLogoUrl" alt="甬士 Logo" />
         <span>宁波甬士活动管理系统</span>
       </a>
-      <button v-if="showHeaderBack" class="header-back" @click="goHome">返回首页</button>
-      <button v-else-if="showSiteHome" class="header-back" @click="goSiteHome">返回主页</button>
+      <div class="header-actions">
+        <button v-if="showHeaderBack" class="header-back" @click="goHome">返回首页</button>
+        <button v-else-if="showSiteHome" class="header-back" @click="goSiteHome">返回首页</button>
+      </div>
     </header>
 
     <div v-if="view === 'login'" class="page auth-page" :style="authPageStyle">
@@ -14,7 +16,7 @@
         <h2>登录</h2>
         <input v-model="loginForm.account" placeholder="名字 / 呼号" required />
         <input v-model="loginForm.password" placeholder="密码" type="password" required />
-        <button class="btn" style="width: 100%" type="submit">登录</button>
+        <button class="btn" style="width: 100%" type="submit" :disabled="loginSubmitting">{{ loginSubmitting ? '登录中…' : '登录' }}</button>
         <p class="muted">没有账号？赶紧 <a @click="view = 'register'">注册</a>。</p>
       </form>
     </div>
@@ -158,8 +160,11 @@
         <p class="detail-copy">我的状态：{{ detail.checkin?.present ? '已签到' : detail.my_enrollment ? '已报名' : '未报名' }}</p>
 
         <div class="detail-actions">
+          <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
-          <button v-if="detail.display_status === '活动开始' && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" @click="checkin">签到</button>
+          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="checkin">
+            {{ checkinSubmitting ? '签到中…' : '签到' }}
+          </button>
           <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
           <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
@@ -291,15 +296,21 @@
 
     <div v-if="tab === 'activityRentals'" class="page">
       <h2>活动发射器租借</h2>
+      <div class="rental-notice">
+        <p>发射器租赁默认只有发射器+头灯接收器，是否含瞄具和头盔会在说明里描述。</p>
+        <p>发射器租赁默认不提供电池，请自备XT30 11.1V电池*1 ， CR123A 3.7V 头灯电池*2</p>
+        <p>发射器如因使用不当造成物理损坏，需要照市场价赔偿。</p>
+      </div>
       <div class="activity-rental-grid">
         <div v-for="item in activityRentalItems" :key="item.id" class="rental-card activity-rental-card">
-          <div class="rental-photo">
-            <img v-if="item.photo_filename" :src="item.photo_filename" alt="发射器图片" />
-            <span v-else>无照片</span>
-          </div>
+          <button v-if="item.photo_filename" type="button" class="rental-photo rental-photo-button" aria-label="查看发射器大图" @click="openRentalPreview(item)">
+            <img :src="item.photo_filename" :alt="`${item.name || '发射器'}图片`" />
+          </button>
+          <div v-else class="rental-photo"><span>无照片</span></div>
           <div class="rental-body">
             <h3>{{ item.name }}</h3>
             <p class="rental-meta">所有人：{{ item.owner_callsign || item.owner_name }} · 租金：{{ item.rent_fee }}</p>
+            <p class="rental-desc activity-rental-desc">{{ item.description || '暂无发射器说明' }}</p>
             <p v-if="item.rental_status" class="rental-renter">租赁者：{{ item.renter_callsign || item.renter_name }}</p>
             <button v-if="isMyLauncherRental(item)" class="btn danger activity-rental-btn" @click="cancelLauncherRental(item)">
               取消租赁
@@ -509,6 +520,19 @@
       </div>
     </div>
 
+    <Transition name="rental-preview">
+      <div v-if="rentalPreview" class="rental-lightbox" role="dialog" aria-modal="true" aria-label="发射器图片预览" @click.self="closeRentalPreview">
+        <div class="rental-lightbox-panel">
+          <button type="button" class="rental-lightbox-close" aria-label="关闭图片预览" @click="closeRentalPreview">×</button>
+          <img :src="rentalPreview.photo_filename" :alt="`${rentalPreview.name || '发射器'}详情图`" />
+          <div class="rental-lightbox-copy">
+            <strong>{{ rentalPreview.name }}</strong>
+            <span>{{ rentalPreview.description || '暂无发射器说明' }}</span>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     </template>
 
     <div v-if="toast.show" class="toast" role="alert" aria-live="assertive">{{ toast.message }}</div>
@@ -529,6 +553,7 @@ export default {
       me: {},
       systemImages: {},
       loginForm: {},
+      loginSubmitting: false,
       logoUrl,
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
@@ -540,12 +565,14 @@ export default {
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
+      checkinSubmitting: false,
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
       squadEdits: {},
       memberAssignments: {},
       rentalItems: [],
       activityRentalItems: [],
+      rentalPreview: null,
       rentalForm: {},
       profileForm: {},
       passwordForm: {},
@@ -601,6 +628,11 @@ export default {
     showSiteHome() {
       return this.view === 'app' && this.tab === 'activities' && !this.selectedActivity && !this.selectedPlan
     },
+    canManageActivities() {
+      const role = String(this.me.role || '')
+      const guest = role === 'guest' || (role === 'user' && !this.me.is_regular_member)
+      return !guest && (this.me.permissions || []).includes('activity:view')
+    },
     displayLogoUrl() {
       return this.systemImages.login_logo_url || this.logoUrl
     },
@@ -611,21 +643,34 @@ export default {
   },
   async mounted() {
     setErrorHandler(this.showToast)
+    window.addEventListener('nbys-auth-expired', this.expireSession)
     try {
-      if (token()) {
-        await Promise.all([this.loadSystemImages(), this.init()])
-      } else {
-        await this.loadSystemImages()
-        await this.preloadImages([this.displayLogoUrl, this.systemImages.login_background_url])
-      }
+      await Promise.all([this.loadSystemImages(), this.init()])
+      await this.openRequestedActivity()
+    } catch {
+      setToken('')
+      this.view = new URLSearchParams(location.search).get('invite') ? 'register' : 'login'
+      await this.loadSystemImages()
+      await this.preloadImages([this.displayLogoUrl, this.systemImages.login_background_url])
     } finally {
       this.$emit('ready')
     }
   },
+  beforeUnmount() {
+    window.removeEventListener('nbys-auth-expired', this.expireSession)
+  },
   methods: {
+    expireSession() {
+      setToken('')
+      this.view = 'login'
+      this.tab = 'activities'
+      this.selectedActivity = null
+      this.selectedPlan = null
+      this.me = {}
+    },
     async loadSystemImages() {
       try {
-        this.systemImages = await api('/api/public/system-settings/images')
+        this.systemImages = await api('/api/public/system-settings/images', { silent: true })
       } catch (error) {
         this.systemImages = {}
       }
@@ -649,9 +694,11 @@ export default {
       if (resolve) resolve(value)
     },
     async login() {
+      if (this.loginSubmitting) return
+      this.loginSubmitting = true
       let activityLoadingStarted = false
       try {
-        const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm })
+        const data = await api('/api/h5/auth/login', { method: 'POST', body: this.loginForm, timeout: 30000 })
         setToken(data.token)
         this.view = 'app'
         if (data.must_change_password) {
@@ -663,9 +710,11 @@ export default {
         this.$emit('loading-start')
         activityLoadingStarted = true
         await this.init()
+        if (!this.redirectAfterLogin()) await this.openRequestedActivity()
       } catch (error) {
         this.showToast(error.message || '登录失败')
       } finally {
+        this.loginSubmitting = false
         if (activityLoadingStarted) this.$emit('ready')
       }
     },
@@ -747,6 +796,35 @@ export default {
     goSiteHome() {
       window.location.hash = '#/'
     },
+    goAdminActivity() {
+      if (!this.selectedActivity || !this.canManageActivities) return
+      const base = location.port === '5174' ? `${location.protocol}//${location.hostname}:5173/admin/` : '/admin/'
+      const params = new URLSearchParams({ view: 'activities', from: 'h5', activityId: String(this.selectedActivity) })
+      window.location.href = `${base}?${params.toString()}`
+    },
+    async openRequestedActivity() {
+      const id = Number(new URLSearchParams(location.search).get('activityId'))
+      if (this.view === 'app' && Number.isInteger(id) && id > 0 && Number(this.selectedActivity) !== id) {
+        await this.openActivity(id)
+      }
+    },
+    redirectAfterLogin() {
+      const target = new URLSearchParams(location.search).get('returnTo')
+      if (!target) return false
+      if (target.startsWith('/')) {
+        window.location.href = target
+        return true
+      }
+      try {
+        const destination = new URL(target)
+        const localAdmin = location.port === '5174' && destination.hostname === location.hostname && destination.port === '5173'
+        if (destination.origin === location.origin || localAdmin) {
+          window.location.href = destination.href
+          return true
+        }
+      } catch {}
+      return false
+    },
     statusLabel(status) {
       return status === '活动开始' ? '进行中' : status
     },
@@ -797,6 +875,16 @@ export default {
       if (!value) return ''
       return String(value).replace('T', ' ').slice(0, 16)
     },
+    canCheckinActivity(activity) {
+      if (!activity?.start_at) return false
+      const start = new Date(String(activity.start_at).replace(' ', 'T'))
+      if (Number.isNaN(start.getTime())) return false
+      const now = new Date()
+      const sameDay = now.getFullYear() === start.getFullYear()
+        && now.getMonth() === start.getMonth()
+        && now.getDate() === start.getDate()
+      return sameDay && now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000
+    },
     formatAttendanceDate(value) {
       if (!value) return '时间待定'
       return String(value).replace('T', ' ').slice(0, 10)
@@ -827,8 +915,15 @@ export default {
     cancelEnroll() {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
     },
-    checkin() {
-      return api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' }).then(() => this.openActivity(this.selectedActivity))
+    async checkin() {
+      if (this.checkinSubmitting) return
+      this.checkinSubmitting = true
+      try {
+        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' })
+        await this.openActivity(this.selectedActivity)
+      } finally {
+        this.checkinSubmitting = false
+      }
     },
     squadsByCamp(camp) {
       return (this.detail.squads || []).filter(squad => squad.camp_no === camp)
@@ -977,6 +1072,12 @@ export default {
     openActivityRentals() {
       this.tab = 'activityRentals'
       return api(`/api/h5/activities/${this.selectedActivity}/launcher-rentals`).then(data => { this.activityRentalItems = data })
+    },
+    openRentalPreview(item) {
+      if (item?.photo_filename) this.rentalPreview = item
+    },
+    closeRentalPreview() {
+      this.rentalPreview = null
     },
     rentalButtonDisabled(item) {
       return Number(item.created_by_id) === Number(this.me.id) || !!item.rental_status
@@ -1154,7 +1255,8 @@ export default {
         })
       }
     },
-    logout() {
+    async logout() {
+      try { await api('/api/auth/logout', { method: 'POST' }) } catch {}
       setToken('')
       this.view = 'login'
       this.tab = 'activities'

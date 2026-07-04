@@ -87,7 +87,7 @@ public class AdminActivityController {
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
         row.put("enrollments", Rows.list(jdbc,
-                "select e.*, u.username, u.callsign from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.id", id));
+                "select e.*, u.username, u.callsign, u.is_regular_member from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id", id));
         row.put("squads", Rows.list(jdbc, "select * from squad_settings where activity_id=? order by camp_no,squad_no", id));
         row.put("launcher_ids", launcherIds(id));
         return ApiResponse.ok(row);
@@ -165,7 +165,7 @@ public class AdminActivityController {
     public void exportEnrollments(@PathVariable int id, HttpServletRequest req, HttpServletResponse response) throws IOException {
         auth.require(req, "activity:view");
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select u.username from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by e.id",
+                "select u.username from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id",
                 id);
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("报名表");

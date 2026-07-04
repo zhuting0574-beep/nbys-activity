@@ -1,5 +1,9 @@
 {
   "scripts": {
+    "dev:start": "./scripts/local-dev.sh start",
+    "dev:stop": "./scripts/local-dev.sh stop",
+    "dev:restart": "./scripts/local-dev.sh restart",
+    "dev:status": "./scripts/local-dev.sh status",
     "admin:dev": "npm --prefix admin-web run dev",
     "admin:build": "npm --prefix admin-web run build",
     "h5:dev": "npm --prefix h5-web run dev",
