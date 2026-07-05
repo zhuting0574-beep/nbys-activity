@@ -383,7 +383,7 @@
             <img v-if="systemImages.login_background_url" class="settings-preview" :src="systemImages.login_background_url" />
             <div v-else class="settings-empty">未设置背景图</div>
             <div class="banner-upload-row">
-              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_background_url = r.data.url"><el-button>上传背景图</el-button></el-upload>
+              <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => systemImages.login_background_url = r.data.url" :on-error="handleUploadError"><el-button>上传背景图</el-button></el-upload>
               <el-button v-if="systemImages.login_background_url" @click="systemImages.login_background_url = ''">清除</el-button>
             </div>
           </div>
@@ -392,7 +392,7 @@
             <img v-if="systemImages.login_logo_url" class="settings-logo-preview" :src="systemImages.login_logo_url" />
             <div v-else class="settings-empty settings-logo-empty">使用默认 Logo</div>
             <div class="banner-upload-row">
-              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_logo_url = r.data.url"><el-button>上传Logo</el-button></el-upload>
+              <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => systemImages.login_logo_url = r.data.url" :on-error="handleUploadError"><el-button>上传Logo</el-button></el-upload>
               <el-button v-if="systemImages.login_logo_url" @click="systemImages.login_logo_url = ''">清除</el-button>
             </div>
           </div>
@@ -417,9 +417,10 @@
                   v-if="can('systemImage:update')"
                   action="/api/admin/files/upload"
                   accept="image/*"
-                  :headers="uploadHeaders"
+                  :http-request="uploadAdminFile"
                   :show-file-list="false"
                   :on-success="response => uploadHomepageCarousel(section.key, response)"
+                  :on-error="handleUploadError"
                 >
                   <el-button type="primary" size="small">上传图片</el-button>
                 </el-upload>
@@ -447,7 +448,7 @@
     </main>
   </div>
 
-  <el-dialog v-model="venueVisible" title="场地" width="560px"><el-form label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address" /></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
+  <el-dialog v-model="venueVisible" title="场地" width="560px"><el-form label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address" /></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
   <el-dialog v-model="modeVisible" title="模式"><el-form label-width="90px"><el-form-item label="模式名称"><el-input v-model="editMode.name" /></el-form-item><el-form-item label="模式内容"><el-input v-model="editMode.rules" type="textarea" /></el-form-item><el-form-item label="人数"><el-input v-model="editMode.suitable_people" /></el-form-item></el-form><template #footer><el-button @click="editMode = null">取消</el-button><el-button type="primary" @click="saveMode">保存</el-button></template></el-dialog>
   <el-dialog v-model="userVisible" title="用户"><el-form label-width="110px"><el-form-item label="呼号"><el-input v-model="editUser.callsign" /></el-form-item><el-form-item label="权限"><el-select v-model="editUser.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item><el-form-item label="账号禁用"><el-switch v-model="editUser.disabled" /></el-form-item><el-form-item label="正式队员"><el-switch v-model="editUser.is_regular_member" /></el-form-item></el-form><template #footer><el-button @click="editUser = null">取消</el-button><el-button type="primary" @click="saveUser">保存</el-button></template></el-dialog>
   <el-dialog v-model="launcherVisible" title="发射器" width="560px">
@@ -465,7 +466,7 @@
         <img v-if="activityBannerPreview()" class="banner-preview" :src="activityBannerPreview()" />
         <div v-else class="banner-empty">建议上传活动横幅图，将展示在 H5 首页和活动详情页</div>
         <div class="banner-upload-row">
-          <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="setActivityBanner"><el-button>上传Banner</el-button></el-upload>
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="setActivityBanner" :on-error="handleUploadError"><el-button>上传Banner</el-button></el-upload>
           <el-button v-if="activityBannerPreview()" @click="clearActivityBanner">清除</el-button>
         </div>
       </el-form-item>
@@ -522,7 +523,7 @@
         <img v-if="planForm.banner_url" class="banner-preview" :src="planForm.banner_url" />
         <div v-else class="banner-empty">建议上传策划横幅图，将展示在 H5 首页和投票详情页</div>
         <div class="banner-upload-row">
-          <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => planForm.banner_url = r.data.url"><el-button>上传Banner</el-button></el-upload>
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => planForm.banner_url = r.data.url" :on-error="handleUploadError"><el-button>上传Banner</el-button></el-upload>
           <el-button v-if="planForm.banner_url" @click="planForm.banner_url = ''">清除</el-button>
         </div>
       </el-form-item>
@@ -632,6 +633,13 @@ const homepageSections = [
   { key: 'cooperate', name: '合作 Join', description: '合作方式与报名入口' }
 ]
 
+async function uploadAdminFileRequest(options) {
+  const body = new FormData()
+  body.append(options.filename || 'file', options.file)
+  const data = await api('/api/admin/files/upload', { method: 'POST', body })
+  return { data }
+}
+
 const ActivityForm = {
   props: ['modelValue', 'modes', 'uploadHeaders'],
   emits: ['update:modelValue', 'save', 'cancel'],
@@ -642,10 +650,11 @@ const ActivityForm = {
     }
   },
   data() { return { jobs } },
+  methods: { uploadAdminFile: options => uploadAdminFileRequest(options) },
   template: `<el-form label-width="130px">
     <el-form-item label="Banner图">
       <div class="banner-upload-row">
-        <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
+        <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
         <el-button v-if="form.banner_url" @click="form.banner_url=''">清除</el-button>
       </div>
       <img v-if="form.banner_url" class="banner-preview" :src="form.banner_url">
@@ -673,10 +682,11 @@ const PlanForm = {
       set(value) { this.$emit('update:modelValue', value) }
     }
   },
+  methods: { uploadAdminFile: options => uploadAdminFileRequest(options) },
   template: `<el-form label-width="130px">
     <el-form-item label="Banner图">
       <div class="banner-upload-row">
-        <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
+        <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
         <el-button v-if="form.banner_url" @click="form.banner_url=''">清除</el-button>
       </div>
       <img v-if="form.banner_url" class="banner-preview" :src="form.banner_url">
@@ -848,6 +858,12 @@ export default {
     }
   },
   methods: {
+    uploadAdminFile(options) {
+      return uploadAdminFileRequest(options)
+    },
+    handleUploadError(error) {
+      ElMessage.error(error?.message || '图片上传失败，请稍后重试')
+    },
     can(permission) {
       return !this.me.permissions || this.me.permissions.includes(permission)
     },

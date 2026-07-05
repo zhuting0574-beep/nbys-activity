@@ -35,7 +35,7 @@ export async function api(url, options = {}, retried = false) {
     options.body = JSON.stringify(body)
   }
   const response = await fetch(url, { ...options, headers, credentials: 'include' })
-  const result = await response.json()
+  const result = await response.json().catch(() => null)
   if (response.status === 401 && !retried && url !== '/api/auth/refresh') {
     try {
       await refreshAccessToken()
@@ -49,9 +49,10 @@ export async function api(url, options = {}, retried = false) {
       }
     }
   }
-  if (result.code !== 0) {
-    if (response.status !== 401) ElMessage.error(result.message || '请求失败')
-    throw new Error(result.message || '请求失败')
+  if (!response.ok || !result || result.code !== 0) {
+    const message = result?.message || (response.status === 413 ? '图片过大，无法上传' : `请求失败（HTTP ${response.status}）`)
+    if (response.status !== 401) ElMessage.error(message)
+    throw new Error(message)
   }
   return result.data
 }
