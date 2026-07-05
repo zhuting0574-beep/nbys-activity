@@ -67,7 +67,9 @@ public class H5Controller {
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
         row.put("enroll_count", enrolledUserCount(id));
-        row.put("is_activity_creator", row.get("created_by_id") != null && String.valueOf(row.get("created_by_id")).equals(String.valueOf(userId)));
+        boolean activityManager = isCreator(row, userId);
+        row.put("is_activity_creator", activityManager);
+        row.put("is_activity_organizer", activityManager);
         row.put("my_enrollment", Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId));
         List<Map<String, Object>> squads = Rows.list(jdbc,
                 "select s.*, (select count(*) from enrollments e where e.activity_id=s.activity_id and e.camp_no=s.camp_no and e.squad_no=s.squad_no) member_count " +
@@ -149,21 +151,34 @@ public class H5Controller {
 
     @GetMapping("/attendance/my-summary")
     public ApiResponse<Map<String, Object>> myAttendanceSummary(HttpServletRequest req) {
-        int userId = ((Number) auth.current(req).get("id")).intValue();
-        return ApiResponse.ok(attendanceSummary(userId));
+        return ApiResponse.ok(attendanceSummary(auth.current(req)));
     }
 
-    private Map<String, Object> attendanceSummary(int userId) {
+    private Map<String, Object> attendanceSummary(Map<String, Object> user) {
+        int userId = ((Number) user.get("id")).intValue();
         int year = LocalDate.now().getYear();
         String start = year + "-01-01";
         String end = (year + 1) + "-01-01";
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        out.put("present_count", Rows.one(jdbc,
-                "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
-                        "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
-                userId, start, end).get("total"));
-        out.put("activity_total", Rows.one(jdbc,
-                "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
+        if (auth.isGuest(user)) {
+            String visibleToGuest = " and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id " +
+                    "and (coalesce(a.visibility_type,'all') not in ('official','official_plus_invite') " +
+                    "or (a.visibility_type='official_plus_invite' and find_in_set(?,coalesce(a.invitee_ids,''))>0))))";
+            out.put("present_count", Rows.one(jdbc,
+                    "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?" + visibleToGuest,
+                    userId, start, end, userId).get("total"));
+            out.put("activity_total", Rows.one(jdbc,
+                    "select count(*) total from attendance_events ev where ev.event_date>=? and ev.event_date<?" + visibleToGuest,
+                    start, end, userId).get("total"));
+        } else {
+            out.put("present_count", Rows.one(jdbc,
+                    "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
+                    userId, start, end).get("total"));
+            out.put("activity_total", Rows.one(jdbc,
+                    "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
+        }
         return out;
     }
 
@@ -272,7 +287,7 @@ public class H5Controller {
         Map<String, Object> activity = managedActivity(id);
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=? for update", squadId, id);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
-        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) throw new SecurityException("只有活动发起人或本队队长可以修改小队设置");
+        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) throw new SecurityException("只有活动发起人、组织人或本队队长可以修改小队设置");
         int locked = body.containsKey("locked") ? (bool(body.get("locked")) ? 1 : 0) : (bool(squad.get("locked")) ? 1 : 0);
         String channel = body.containsKey("radio_channel") ? text(body.get("radio_channel")) : text(squad.get("radio_channel"));
         if (!channel.matches("^[0-9]{3}\\.[0-9]{3}$")) throw new IllegalArgumentException("对讲频率格式应为439.100");
@@ -358,7 +373,7 @@ public class H5Controller {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("activities", activityRows(me));
         out.put("plans", planRows(me, userId));
-        out.put("attendance_summary", attendanceSummary(userId));
+        out.put("attendance_summary", attendanceSummary(me));
         out.put("notifications", notificationRows(userId));
         return ApiResponse.ok(out);
     }
@@ -417,11 +432,14 @@ public class H5Controller {
     }
 
     private boolean isCreator(Map<String, Object> activity, int userId) {
-        return sameId(activity.get("created_by_id"), userId);
+        if (sameId(activity.get("created_by_id"), userId)) return true;
+        return Rows.one(jdbc,
+                "select id from attendance_events where source_activity_id=? and find_in_set(?,coalesce(organizer_ids,''))>0 limit 1",
+                activity.get("id"), String.valueOf(userId)) != null;
     }
 
     private void requireCreator(Map<String, Object> activity, int userId) {
-        if (!isCreator(activity, userId)) throw new SecurityException("只有活动发起人可以执行该操作");
+        if (!isCreator(activity, userId)) throw new SecurityException("只有活动发起人或组织人可以执行该操作");
     }
 
     private Map<String, Object> enrollmentForUpdate(int activityId, int userId) {
@@ -466,20 +484,37 @@ public class H5Controller {
     }
 
     private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
-        Map<String, Object> existing = Rows.one(jdbc, "select id from attendance_events where source_activity_id=?", activityId);
-        if (existing != null) return ((Number) existing.get("id")).intValue();
+        String organizer = activityOrganizer(a);
+        String organizerId = a.get("created_by_id") == null ? "" : String.valueOf(a.get("created_by_id"));
+        Map<String, Object> existing = Rows.one(jdbc, "select id,organizer,organizer_ids from attendance_events where source_activity_id=?", activityId);
+        if (existing != null) {
+            if (text(existing.get("organizer_ids")).isEmpty() && !organizerId.isEmpty()) {
+                String displayName = text(existing.get("organizer")).isEmpty() ? organizer : text(existing.get("organizer"));
+                jdbc.update("update attendance_events set organizer=?,organizer_ids=? where id=?", displayName, organizerId, existing.get("id"));
+            }
+            return ((Number) existing.get("id")).intValue();
+        }
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into attendance_events(source_activity_id,name,event_date,location,organizer,activity_region,is_manual,created_at) values(?,?,date(?),?,?,?,0,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into attendance_events(source_activity_id,name,event_date,location,organizer,organizer_ids,activity_region,is_manual,created_at) values(?,?,date(?),?,?,?,?,0,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, activityId);
             ps.setObject(2, a.get("name"));
             ps.setObject(3, a.get("start_at"));
             ps.setObject(4, a.get("location"));
-            ps.setObject(5, "");
-            ps.setObject(6, a.get("activity_region"));
+            ps.setObject(5, organizer);
+            ps.setObject(6, organizerId);
+            ps.setObject(7, a.get("activity_region"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
+    }
+
+    private String activityOrganizer(Map<String, Object> activity) {
+        if (activity.get("created_by_id") == null) return "";
+        Map<String, Object> creator = Rows.one(jdbc,
+                "select coalesce(nullif(callsign,''),username) organizer from users where id=?",
+                activity.get("created_by_id"));
+        return creator == null ? "" : text(creator.get("organizer"));
     }
 
     private String displayStatus(Map<String, Object> row) {

@@ -5,6 +5,10 @@ spring:
   application:
     name: api-gateway
   cloud:
+    loadbalancer:
+      eager-load:
+        enabled: true
+        clients: activity-center,user-center,public-center
     gateway:
       discovery:
         locator:

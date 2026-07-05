@@ -257,7 +257,7 @@
             <h2>历史活动记录</h2>
             <p>用于补录非平台组织的活动；创建后可在下方表格手动点选出勤。</p>
           </div>
-          <el-button type="primary" v-if="can('attendance:create')" @click="editEvent = {}">手动增加历史活动</el-button>
+          <el-button type="primary" v-if="can('attendance:create')" @click="openAttendanceEvent()">手动增加历史活动</el-button>
         </div>
 
         <div class="attendance-card">
@@ -297,9 +297,9 @@
           </div>
           <div class="attendance-table-scroll">
             <el-table class="attendance-matrix" :style="{ minWidth: attendanceTableMinWidth }" :data="attendanceUsers" border height="560">
-              <el-table-column prop="callsign" label="人员" fixed width="160" />
-              <el-table-column label="出勤次数" fixed width="100"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
-              <el-table-column v-for="event in attendanceEvents" :key="event.id" width="190">
+              <el-table-column prop="callsign" label="人员" fixed="left" width="112" />
+              <el-table-column label="出勤次数" fixed="left" width="50"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
+              <el-table-column v-for="event in attendanceEvents" :key="event.id" width="105">
                 <template #header>
                   <div class="attendance-event-head">
                     <strong>{{ event.name }}</strong>
@@ -310,7 +310,7 @@
                     <span>总: {{ eventPresentCount(event.id) }}</span>
                     <span>正式: {{ eventFormalPresentCount(event.id) }}</span>
                     <div class="attendance-event-actions">
-                      <el-button size="small" v-if="can('attendance:update')" @click.stop="editEvent = { ...event }">编辑</el-button>
+                      <el-button size="small" v-if="can('attendance:update')" @click.stop="openAttendanceEvent(event)">编辑</el-button>
                       <el-button size="small" type="danger" v-if="can('attendance:delete') && event.is_manual" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
                     </div>
                   </div>
@@ -597,13 +597,27 @@
       <el-button type="primary" @click="confirmConvertPicker">确认</el-button>
     </template>
   </el-dialog>
-  <el-dialog v-model="eventVisible" title="历史活动"><el-form label-width="90px"><el-form-item label="活动名称"><el-input v-model="editEvent.name" /></el-form-item><el-form-item label="日期"><el-date-picker v-model="editEvent.event_date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="场地"><el-input v-model="editEvent.location" /></el-form-item><el-form-item label="组织人"><el-input v-model="editEvent.organizer" /></el-form-item><el-form-item label="地区"><el-select v-model="editEvent.activity_region"><el-option label="宁波" value="宁波" /><el-option label="外地" value="外地" /></el-select></el-form-item></el-form><template #footer><el-button @click="editEvent = null">取消</el-button><el-button type="primary" @click="saveEvent">保存</el-button></template></el-dialog>
+  <el-dialog v-model="eventVisible" title="历史活动">
+    <el-form v-if="editEvent" label-width="90px">
+      <el-form-item label="活动名称"><el-input v-model="editEvent.name" /></el-form-item>
+      <el-form-item label="日期"><el-date-picker v-model="editEvent.event_date" value-format="YYYY-MM-DD" /></el-form-item>
+      <el-form-item label="场地"><el-input v-model="editEvent.location" /></el-form-item>
+      <el-form-item label="组织人">
+        <el-select v-model="editEvent.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="地区"><el-select v-model="editEvent.activity_region"><el-option label="宁波" value="宁波" /><el-option label="外地" value="外地" /></el-select></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editEvent = null">取消</el-button><el-button type="primary" @click="saveEvent">保存</el-button></template>
+  </el-dialog>
 </template>
 
 <script>
 import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, setToken, token } from './api'
+import defaultActivityBanner from './assets/activity-default.jpg'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动开始', '活动结束', '活动取消', '投票中', '已生成活动']
@@ -702,6 +716,7 @@ export default {
 	      modes: [],
 	      users: [],
 	      nonFormalUsers: [],
+	      formalUsers: [],
 	      invitePickerVisible: false,
 	      invitePickerTarget: '',
 	      invitePickerSelected: [],
@@ -777,7 +792,7 @@ export default {
       return this.dashboardOverview.rankings || {}
     },
     attendanceTableMinWidth() {
-      return `${260 + (this.attendanceEvents || []).length * 190}px`
+      return `${162 + (this.attendanceEvents || []).length * 105}px`
     },
     permissionTreeData() {
       const actionNames = {
@@ -1023,6 +1038,21 @@ export default {
 	      this.attendanceUsers = matrix.users
 	      this.attendanceRecords = matrix.records
 	    },
+    async loadFormalUsers() {
+      if (!this.formalUsers.length) this.formalUsers = await api('/api/admin/users/formal/options')
+      return this.formalUsers
+    },
+    async openAttendanceEvent(event = null) {
+      await this.loadFormalUsers()
+      let organizerIds = this.parseIds(event?.organizer_ids).map(Number).filter(Number.isFinite)
+      if (!organizerIds.length && event?.organizer) {
+        const legacyNames = String(event.organizer).split(/[、,，]/).map(value => value.trim()).filter(Boolean)
+        organizerIds = this.formalUsers
+          .filter(user => legacyNames.includes(user.callsign || user.username))
+          .map(user => Number(user.id))
+      }
+      this.editEvent = { ...(event || {}), organizer_ids: organizerIds }
+    },
     async loadPermissions() {
       this.permissionPages = await api('/api/admin/permissions/pages')
       await this.loadRolePermissions()
@@ -1063,7 +1093,7 @@ export default {
       if (!this.activityForm) return ''
       if (this.activityForm.banner_source === 'custom' && this.activityForm.banner_url) return this.activityForm.banner_url
       const venue = this.venues.find(item => Number(item.id) === Number(this.activityForm.venue_id))
-      return (venue && venue.image_url) || this.activityForm.banner_url || ''
+      return (venue && venue.image_url) || this.activityForm.banner_url || defaultActivityBanner
     },
     setActivityBanner(response) {
       this.activityForm.banner_url = response.data.url
@@ -1074,7 +1104,7 @@ export default {
       this.activityForm.banner_source = 'venue'
     },
     venueLabel(venue) {
-      return `${venue.name || ''}${venue.address ? ` / ${venue.address}` : ''}`
+      return venue.name || ''
     },
     setActivityVenue(id) {
       if (!this.activityForm) return

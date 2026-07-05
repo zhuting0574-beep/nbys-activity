@@ -57,8 +57,7 @@
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
-            <img v-if="activity.banner_url" class="banner" :src="activity.banner_url" loading="lazy" decoding="async" />
-            <div v-else class="banner banner-placeholder">{{ activity.record_kind === 'plan' ? '活动策划' : '正式活动' }}</div>
+            <img class="banner" :src="activity.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
             <h3>{{ activity.name }}</h3>
             <div v-if="activity.record_kind === 'activity'" class="card-meta">
               <p>{{ formatTimeRange(activity.start_at, activity.end_at) }}</p>
@@ -140,8 +139,7 @@
 
     <div v-if="tab === 'activities' && selectedActivity" class="page detail-page">
       <section class="detail-card">
-        <img v-if="detail.banner_url" class="detail-banner" :src="detail.banner_url" loading="lazy" decoding="async" />
-        <div v-else class="detail-banner banner-placeholder">正式活动</div>
+        <img class="detail-banner" :src="detail.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
         <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
@@ -386,7 +384,16 @@
             <button class="btn secondary" @click="loadAttendanceMatrix">重新加载</button>
           </div>
           <div v-else-if="!attendanceMatrix.events.length" class="attendance-state">本年度暂无活动</div>
-          <div v-else class="attendance-table-scroll">
+          <div
+            v-else
+            class="attendance-table-scroll"
+            :class="{ dragging: attendanceDrag.active }"
+            @pointerdown="startAttendanceDrag"
+            @pointermove="moveAttendanceDrag"
+            @pointerup="stopAttendanceDrag"
+            @pointercancel="stopAttendanceDrag"
+            @pointerleave="stopAttendanceDrag"
+          >
             <table class="attendance-table">
               <thead>
                 <tr>
@@ -542,6 +549,7 @@
 <script>
 import { api, setErrorHandler, setToken, token } from './api'
 import logoUrl from './assets/nbys-logo.png'
+import defaultActivityBanner from './assets/activity-default.jpg'
 import QRCode from 'qrcode'
 
 export default {
@@ -555,12 +563,14 @@ export default {
       loginForm: {},
       loginSubmitting: false,
       logoUrl,
+      defaultActivityBanner,
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
       attendanceSummary: { present_count: 0, activity_total: 0 },
       attendanceMatrix: { year: new Date().getFullYear(), username: '', present_count: 0, events: [] },
       attendanceMatrixLoading: false,
       attendanceMatrixError: '',
+      attendanceDrag: { active: false, pointerId: null, startX: 0, scrollLeft: 0 },
       selectedActivity: null,
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
@@ -888,6 +898,28 @@ export default {
     formatAttendanceDate(value) {
       if (!value) return '时间待定'
       return String(value).replace('T', ' ').slice(0, 10)
+    },
+    startAttendanceDrag(event) {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return
+      const scroller = event.currentTarget
+      this.attendanceDrag = {
+        active: true,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        scrollLeft: scroller.scrollLeft
+      }
+      scroller.setPointerCapture?.(event.pointerId)
+    },
+    moveAttendanceDrag(event) {
+      if (!this.attendanceDrag.active || this.attendanceDrag.pointerId !== event.pointerId) return
+      event.preventDefault()
+      event.currentTarget.scrollLeft = this.attendanceDrag.scrollLeft + this.attendanceDrag.startX - event.clientX
+    },
+    stopAttendanceDrag(event) {
+      if (!this.attendanceDrag.active || this.attendanceDrag.pointerId !== event.pointerId) return
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      this.attendanceDrag.active = false
+      this.attendanceDrag.pointerId = null
     },
     async openActivity(id) {
       this.selectedPlan = null

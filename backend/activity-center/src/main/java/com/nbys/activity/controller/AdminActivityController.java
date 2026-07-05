@@ -45,19 +45,26 @@ public class AdminActivityController {
         String st = status == null ? "" : status.trim();
         List<Map<String, Object>> activities = Rows.list(jdbc,
                 "select a.*, " +
-                        "(select count(*) from enrollments e where e.activity_id=a.id) enroll_count, " +
-                        "(select count(*) from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=a.id and ar.present=1) checkin_count " +
-                        "from activities a where a.record_type='activity' " +
+                        "coalesce(e.enroll_count,0) enroll_count,coalesce(c.checkin_count,0) checkin_count " +
+                        "from activities a " +
+                        "left join (select activity_id,count(*) enroll_count from enrollments group by activity_id) e on e.activity_id=a.id " +
+                        "left join (select ev.source_activity_id,count(*) checkin_count from attendance_events ev " +
+                        "join attendance_records ar on ar.event_id=ev.id and ar.present=1 " +
+                        "where ev.source_activity_id is not null group by ev.source_activity_id) c on c.source_activity_id=a.id " +
+                        "where a.record_type='activity' " +
                         "and (?='' or a.name like concat('%',?,'%')) and (?='' or a.record_type=?) " +
                         "and (? is null or a.start_at>=?) and (? is null or a.end_at<=?) order by a.created_at desc,a.id desc",
                 q, q, rt, rt, startAt, startAt, endAt, endAt);
+        Map<String, Map<String, Object>> venues = venueLookup();
+        Map<String, Integer> gameModeLimits = gameModeLimits();
         List<Map<String, Object>> filteredActivities = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : activities) {
-            applyDefaultVenueBanner(row);
-            enrichVenueFields(row);
+            Map<String, Object> venue = resolveVenue(row, venues);
+            applyDefaultVenueBanner(row, venue);
+            enrichVenueFields(row, venue);
             row.put("display_status", displayStatus(row));
             row.put("display_record_type", "正式活动");
-            row.put("signup_limit", signupLimit(row));
+            row.put("signup_limit", signupLimit(row, gameModeLimits));
             if (st.isEmpty() || st.equals(String.valueOf(row.get("display_status")))) filteredActivities.add(row);
         }
         List<Map<String, Object>> plans = Rows.list(jdbc,
@@ -466,10 +473,13 @@ public class AdminActivityController {
     }
 
     private int signupLimit(Map<String, Object> row) {
+        return signupLimit(row, gameModeLimits());
+    }
+
+    private int signupLimit(Map<String, Object> row, Map<String, Integer> modeLimits) {
         int modeMax = 0;
         for (String mode : Rows.csv(String.valueOf(row.get("game_modes")))) {
-            Map<String, Object> m = Rows.one(jdbc, "select suitable_people from game_modes where name=?", mode);
-            if (m != null) modeMax = Math.max(modeMax, num(m.get("suitable_people"), 0));
+            modeMax = Math.max(modeMax, modeLimits.getOrDefault(mode, 0));
         }
         int campLimit = num(row.get("camp_count"), 0) * num(row.get("camp_limit"), 0);
         int squadLimit = num(row.get("camp_count"), 0) * num(row.get("squad_count"), 0) * num(row.get("squad_limit"), 0);
@@ -492,6 +502,11 @@ public class AdminActivityController {
         if (venue != null && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
     }
 
+    private void applyDefaultVenueBanner(Map<String, Object> row, Map<String, Object> venue) {
+        if ("custom".equals(text(row.get("banner_source"))) && !text(row.get("banner_url")).isEmpty()) return;
+        if (venue != null && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
+    }
+
     private void enrichVenueFields(Map<String, Object> row) {
         Map<String, Object> venue = null;
         if (row.get("venue_id") != null) {
@@ -508,6 +523,42 @@ public class AdminActivityController {
             row.put("venue_name", row.get("location"));
             row.put("venue_address", row.get("location"));
         }
+    }
+
+    private void enrichVenueFields(Map<String, Object> row, Map<String, Object> venue) {
+        if (venue != null) {
+            row.put("venue_name", venue.get("name"));
+            row.put("venue_address", venue.get("address"));
+        } else {
+            row.put("venue_name", row.get("location"));
+            row.put("venue_address", row.get("location"));
+        }
+    }
+
+    private Map<String, Map<String, Object>> venueLookup() {
+        Map<String, Map<String, Object>> lookup = new HashMap<String, Map<String, Object>>();
+        for (Map<String, Object> venue : Rows.list(jdbc, "select id,name,address,image_url from venues")) {
+            lookup.put("id:" + venue.get("id"), venue);
+            if (!text(venue.get("name")).isEmpty()) lookup.put("location:" + text(venue.get("name")), venue);
+            if (!text(venue.get("address")).isEmpty()) lookup.put("location:" + text(venue.get("address")), venue);
+        }
+        return lookup;
+    }
+
+    private Map<String, Object> resolveVenue(Map<String, Object> row, Map<String, Map<String, Object>> venues) {
+        if (row.get("venue_id") != null) {
+            Map<String, Object> venue = venues.get("id:" + row.get("venue_id"));
+            if (venue != null) return venue;
+        }
+        return venues.get("location:" + text(row.get("location")));
+    }
+
+    private Map<String, Integer> gameModeLimits() {
+        Map<String, Integer> limits = new HashMap<String, Integer>();
+        for (Map<String, Object> mode : Rows.list(jdbc, "select name,suitable_people from game_modes")) {
+            limits.put(text(mode.get("name")), num(mode.get("suitable_people"), 0));
+        }
+        return limits;
     }
 
     private void markPlanConverted(Object sourcePlanId, Integer activityId) {

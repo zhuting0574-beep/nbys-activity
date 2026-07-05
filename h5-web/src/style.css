@@ -375,6 +375,7 @@ select {
 
 .mine-panel {
   display: grid;
+  min-width: 0;
   gap: 14px;
   padding: 16px;
 }
@@ -430,12 +431,23 @@ select {
 }
 
 .attendance-table-scroll {
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(148, 163, 184, .22);
   border-radius: 14px;
   background: rgba(2, 6, 23, .34);
   -webkit-overflow-scrolling: touch;
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.attendance-table-scroll.dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .attendance-table {
