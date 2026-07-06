@@ -614,11 +614,11 @@ export default {
         }
       ],
       activityTypes: [
-        { code: '周常', title: '周常活动', text: '固定下场，熟悉规则和安全距离。' },
-        { code: '剧本', title: '主题剧本', text: '阵营、任务点、行动区域和撤离条件。' },
-        { code: '山地', title: '山地徒步', text: '路线、体力、通讯和天气。' },
-        { code: '远征', title: '外地交流', text: '去外地场地，按对方规则进场。' },
-        { code: '试场', title: '试场体验', text: '短流程、低强度、小规模。' }
+        { code: '周常', title: '周常', text: '固定下场，熟悉规则和安全距离。' },
+        { code: '剧本', title: '剧本', text: '阵营、任务点、行动区域和撤离条件。' },
+        { code: '山地', title: '山地', text: '路线、体力、通讯和天气。' },
+        { code: '远征', title: '远征', text: '去外地场地，按对方规则进场。' },
+        { code: '试场', title: '试场', text: '短流程、低强度、小规模。' }
       ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },

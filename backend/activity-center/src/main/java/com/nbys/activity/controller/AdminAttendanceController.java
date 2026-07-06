@@ -58,10 +58,15 @@ public class AdminAttendanceController {
         List<Map<String, Object>> users = Rows.list(jdbc, "select id,username,callsign,is_regular_member from users where disabled=0 and (?=0 or is_regular_member=1) order by is_regular_member desc,callsign,username", formal);
         List<Map<String, Object>> records = Rows.list(jdbc,
                 "select ar.* from attendance_records ar join attendance_events ev on ev.id=ar.event_id where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)", year, start, end, r, r);
+        List<Map<String, Object>> enrollments = Rows.list(jdbc,
+                "select ev.id event_id,e.user_id from attendance_events ev join enrollments e on e.activity_id=ev.source_activity_id " +
+                        "where ev.source_activity_id is not null and (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)",
+                year, start, end, r, r);
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("events", events);
         out.put("users", users);
         out.put("records", records);
+        out.put("enrollments", enrollments);
         return ApiResponse.ok(out);
     }
 

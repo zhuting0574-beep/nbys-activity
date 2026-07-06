@@ -20,10 +20,26 @@ body {
 }
 
 .side {
+  display: flex;
+  flex-direction: column;
   width: 220px;
   padding: 18px 12px;
   color: #fff;
   background: #111827;
+}
+
+.side-spacer {
+  flex: 1;
+  min-height: 24px;
+}
+
+.logout-menu {
+  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, .28);
+}
+
+.logout-menu:hover {
+  background: #b91c1c;
 }
 
 .brand {
@@ -652,6 +668,11 @@ body {
 }
 
 .attendance-dot.present {
+  font-weight: 700;
+}
+
+.attendance-dot.enrolled {
+  color: #16a34a;
   font-weight: 700;
 }
 

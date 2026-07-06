@@ -57,7 +57,7 @@ public class H5Controller {
         for (Map<String, Object> row : rows) {
             enrichVenue(row);
             String status = displayStatus(row);
-            if (visible(row, me) && ("报名中".equals(status) || "活动开始".equals(status))) {
+            if (visible(row, me) && ("报名中".equals(status) || "活动进行中".equals(status))) {
                 row.put("display_status", status);
                 row.put("signup_limit", signupLimit(row));
                 result.add(row);
@@ -206,9 +206,10 @@ public class H5Controller {
 
         List<Map<String, Object>> events = Rows.list(jdbc,
                 "select ev.id,ev.name,ev.event_date,ev.location,ev.organizer,ev.activity_region," +
-                        "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended " +
+                        "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended," +
+                        "case when ev.source_activity_id is not null and exists(select 1 from enrollments e where e.activity_id=ev.source_activity_id and e.user_id=?) then 1 else 0 end enrolled " +
                         "from attendance_events ev where ev.event_date>=? and ev.event_date<? order by ev.event_date asc,ev.id asc",
-                userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
+                userId, userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
         int presentCount = 0;
         for (Map<String, Object> event : events) {
             if (num(event.get("attended"), 0) == 1) presentCount++;
@@ -477,6 +478,7 @@ public class H5Controller {
 
     private boolean isCreator(Map<String, Object> activity, int userId) {
         if (sameId(activity.get("created_by_id"), userId)) return true;
+        if (Rows.csv(text(activity.get("organizer_ids"))).contains(String.valueOf(userId))) return true;
         return Rows.one(jdbc,
                 "select id from attendance_events where source_activity_id=? and find_in_set(?,coalesce(organizer_ids,''))>0 limit 1",
                 activity.get("id"), String.valueOf(userId)) != null;
@@ -529,7 +531,9 @@ public class H5Controller {
 
     private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
         String organizer = activityOrganizer(a);
-        String organizerId = a.get("created_by_id") == null ? "" : String.valueOf(a.get("created_by_id"));
+        String selectedOrganizerIds = text(a.get("organizer_ids"));
+        if (selectedOrganizerIds.isEmpty() && a.get("created_by_id") != null) selectedOrganizerIds = String.valueOf(a.get("created_by_id"));
+        final String organizerId = selectedOrganizerIds;
         Map<String, Object> existing = Rows.one(jdbc, "select id,organizer,organizer_ids from attendance_events where source_activity_id=?", activityId);
         if (existing != null) {
             if (text(existing.get("organizer_ids")).isEmpty() && !organizerId.isEmpty()) {
@@ -554,11 +558,15 @@ public class H5Controller {
     }
 
     private String activityOrganizer(Map<String, Object> activity) {
-        if (activity.get("created_by_id") == null) return "";
-        Map<String, Object> creator = Rows.one(jdbc,
-                "select coalesce(nullif(callsign,''),username) organizer from users where id=?",
-                activity.get("created_by_id"));
-        return creator == null ? "" : text(creator.get("organizer"));
+        String ids = text(activity.get("organizer_ids"));
+        if (ids.isEmpty() && activity.get("created_by_id") != null) ids = String.valueOf(activity.get("created_by_id"));
+        if (ids.isEmpty()) return "";
+        List<Map<String, Object>> users = Rows.list(jdbc,
+                "select coalesce(nullif(callsign,''),username) organizer from users " +
+                        "where find_in_set(cast(id as char),?)>0 order by callsign,id", ids);
+        List<String> names = new ArrayList<String>();
+        for (Map<String, Object> user : users) names.add(text(user.get("organizer")));
+        return String.join("、", names);
     }
 
     private boolean hasPermission(Map<String, Object> user, String permission) {
@@ -645,8 +653,12 @@ public class H5Controller {
 
     private String displayStatus(Map<String, Object> row) {
         if (row.get("deleted_at") != null) return "活动取消";
-        String now = new java.sql.Timestamp(System.currentTimeMillis()).toString();
-        return String.valueOf(row.get("start_at")).compareTo(now) > 0 ? "报名中" : String.valueOf(row.get("end_at")).compareTo(now) < 0 ? "活动结束" : "活动开始";
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime start = dateTime(row.get("start_at"));
+        LocalDateTime end = dateTime(row.get("end_at"));
+        if (!now.isBefore(end)) return "活动结束";
+        if (!now.isBefore(start)) return "活动进行中";
+        return "报名中";
     }
 
     private int signupLimit(Map<String, Object> row) {

@@ -413,6 +413,7 @@
                   <td class="attendance-count sticky-count">{{ attendanceMatrix.present_count }}</td>
                   <td v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-mark-cell">
                     <span v-if="Number(event.attended) === 1" class="attendance-dot" :aria-label="`${event.name} 已出勤`"></span>
+                    <span v-else-if="Number(event.enrolled) === 1" class="attendance-dot enrolled" :aria-label="`${event.name} 已报名未签到`"></span>
                   </td>
                 </tr>
               </tbody>
@@ -802,7 +803,7 @@ export default {
     },
     applyDashboard(dashboard = {}) {
       const activeActivities = (dashboard.activities || [])
-        .filter(activity => ['报名中', '活动开始', '进行中'].includes(activity.display_status))
+        .filter(activity => ['报名中', '活动进行中', '活动开始', '进行中'].includes(activity.display_status))
         .map(activity => ({ ...activity, record_kind: 'activity' }))
       const planning = (dashboard.plans || [])
         .map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
@@ -831,7 +832,7 @@ export default {
     loadActivities() {
       return Promise.all([api('/api/h5/activities'), api('/api/h5/activity-plans')]).then(([activities, plans]) => {
         const activeActivities = activities
-          .filter(activity => ['报名中', '活动开始', '进行中'].includes(activity.display_status))
+          .filter(activity => ['报名中', '活动进行中', '活动开始', '进行中'].includes(activity.display_status))
           .map(activity => ({ ...activity, record_kind: 'activity' }))
         const planning = plans.map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
         this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
@@ -886,11 +887,11 @@ export default {
       return false
     },
     statusLabel(status) {
-      return status === '活动开始' ? '进行中' : status
+      return status === '活动开始' || status === '活动进行中' ? '进行中' : status
     },
     statusClass(status) {
       if (status === '报名中') return 'signup'
-      if (status === '活动开始' || status === '进行中') return 'running'
+      if (status === '活动开始' || status === '活动进行中' || status === '进行中') return 'running'
       if (status === '策划中') return 'planning'
       return ''
     },

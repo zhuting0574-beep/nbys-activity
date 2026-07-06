@@ -21,7 +21,11 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activities", "banner_url", "varchar(500) DEFAULT NULL COMMENT '活动banner图'", "name");
             addColumn("activities", "banner_source", "varchar(20) NOT NULL DEFAULT 'venue' COMMENT 'custom=用户上传, venue=跟随场地默认图'", "banner_url");
             addColumn("activities", "venue_id", "int DEFAULT NULL COMMENT '关联场地ID'", "location");
+            addColumn("activities", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");
             addColumn("activity_plans", "banner_url", "varchar(500) DEFAULT NULL COMMENT '策划banner图'", "name");
+            addColumn("activity_plans", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");
+            jdbc.update("update activities set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
+            jdbc.update("update activity_plans set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
             addColumn("venues", "longitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 longitude for check-in'", "address");

@@ -19,12 +19,15 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 
 @RestController
 @RequestMapping("/api/admin")
 public class AdminActivityController {
     private static final String DEFAULT_PLAN_BANNER = "/uploads/activity-plan-default.jpg";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final JdbcTemplate jdbc;
     private final AuthService auth;
@@ -115,14 +118,16 @@ public class AdminActivityController {
     @Transactional
     public ApiResponse<Void> update(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "activity:update");
+        Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         Integer venueId = numOrNull(body.get("venue_id"));
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
-        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=? where id=?",
+        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), bannerUrl, bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
                 num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
-                Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), id);
+                Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
+        jdbc.update("update attendance_events set organizer=?,organizer_ids=? where source_activity_id=?", organizers.get("names"), organizers.get("ids"), id);
         replaceLauncherOptions(id, body.get("launcher_ids"));
         return ApiResponse.ok(null);
     }
@@ -142,9 +147,15 @@ public class AdminActivityController {
     }
 
     @DeleteMapping("/activities/{id}")
+    @Transactional
     public ApiResponse<Void> delete(@PathVariable int id, HttpServletRequest req) {
         auth.require(req, "activity:delete");
+        jdbc.update("update activity_plans set converted_activity_id=null,hidden=0 where converted_activity_id=?", id);
+        jdbc.update("delete from attendance_records where event_id in (select id from attendance_events where source_activity_id=?)", id);
+        jdbc.update("delete from attendance_events where source_activity_id=?", id);
+        jdbc.update("delete from extraction_run_records where activity_id=?", id);
         jdbc.update("delete from activity_launcher_options where activity_id=?", id);
+        jdbc.update("delete n from user_notifications n join activity_launcher_rentals r on r.id=n.related_id where n.type='launcher_rental' and r.activity_id=?", id);
         jdbc.update("delete from activity_launcher_rentals where activity_id=?", id);
         jdbc.update("delete from enrollments where activity_id=?", id);
         jdbc.update("delete from squad_settings where activity_id=?", id);
@@ -214,15 +225,17 @@ public class AdminActivityController {
     @PostMapping("/activity-plans")
     public ApiResponse<Map<String, Object>> createPlan(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "plan:create");
+        Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activity_plans(name,banner_url,vote_deadline,hidden,visibility_type,invitee_ids,created_by_id,created_at) values(?,?,?,0,?,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activity_plans(name,banner_url,vote_deadline,hidden,visibility_type,invitee_ids,created_by_id,organizer_ids,created_at) values(?,?,?,0,?,?,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, planBanner(body.get("banner_url")));
             ps.setObject(3, body.get("vote_deadline"));
             ps.setObject(4, body.get("visibility_type"));
             ps.setObject(5, Rows.joinValue(body.get("invitee_ids")));
             ps.setObject(6, auth.currentUserId(req));
+            ps.setObject(7, organizers.get("ids"));
             return ps;
         }, kh);
         int id = kh.getKey().intValue();
@@ -266,8 +279,9 @@ public class AdminActivityController {
     @PutMapping("/activity-plans/{id}")
     public ApiResponse<Void> updatePlan(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "plan:update");
-        jdbc.update("update activity_plans set name=?, banner_url=?, vote_deadline=?, visibility_type=?, invitee_ids=? where id=?",
-                body.get("name"), planBanner(body.get("banner_url")), body.get("vote_deadline"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), id);
+        Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
+        jdbc.update("update activity_plans set name=?, banner_url=?, vote_deadline=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
+                body.get("name"), planBanner(body.get("banner_url")), body.get("vote_deadline"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
         replacePlanOptions(id, body);
         return ApiResponse.ok(null);
     }
@@ -296,8 +310,9 @@ public class AdminActivityController {
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
+        Map<String, String> organizers = organizers(body.get("organizer_ids"), userId);
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, bannerUrl);
             ps.setObject(3, bannerSource);
@@ -317,9 +332,30 @@ public class AdminActivityController {
             ps.setObject(17, body.get("visibility_type"));
             ps.setObject(18, Rows.joinValue(body.get("invitee_ids")));
             ps.setObject(19, userId);
+            ps.setObject(20, organizers.get("ids"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
+    }
+
+    private Map<String, String> organizers(Object value, Integer defaultUserId) {
+        LinkedHashSet<String> requested = new LinkedHashSet<String>(Rows.csv(Rows.joinValue(value)));
+        if (requested.isEmpty() && defaultUserId != null) requested.add(String.valueOf(defaultUserId));
+        String ids = Rows.join(requested);
+        List<Map<String, Object>> users = Rows.list(jdbc,
+                "select id,coalesce(nullif(callsign,''),username) name from users " +
+                        "where disabled=0 and is_regular_member=1 and find_in_set(cast(id as char),?)>0 order by callsign,id", ids);
+        if (users.size() != requested.size()) throw new IllegalArgumentException("组织人只能选择启用的正式队员");
+        List<Object> validIds = new ArrayList<Object>();
+        List<String> names = new ArrayList<String>();
+        for (Map<String, Object> user : users) {
+            validIds.add(user.get("id"));
+            names.add(String.valueOf(user.get("name")));
+        }
+        Map<String, String> result = new HashMap<String, String>();
+        result.put("ids", Rows.join(validIds));
+        result.put("names", String.join("、", names));
+        return result;
     }
 
     private String activityLocation(Map<String, Object> body, Integer venueId) {
@@ -468,8 +504,12 @@ public class AdminActivityController {
 
     private String displayStatus(Map<String, Object> row) {
         if (row.get("deleted_at") != null) return "活动取消";
-        return String.valueOf(row.get("start_at")).compareTo(new java.sql.Timestamp(System.currentTimeMillis()).toString()) > 0 ? "报名中"
-                : String.valueOf(row.get("end_at")).compareTo(new java.sql.Timestamp(System.currentTimeMillis()).toString()) < 0 ? "活动结束" : "活动开始";
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime start = LocalDateTime.parse(String.valueOf(row.get("start_at")).replace(' ', 'T'));
+        LocalDateTime end = LocalDateTime.parse(String.valueOf(row.get("end_at")).replace(' ', 'T'));
+        if (!now.isBefore(end)) return "活动结束";
+        if (!now.isBefore(start)) return "活动进行中";
+        return "报名中";
     }
 
     private int signupLimit(Map<String, Object> row) {

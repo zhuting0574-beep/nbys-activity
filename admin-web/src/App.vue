@@ -22,6 +22,8 @@
           </div>
         </div>
       </div>
+      <div class="side-spacer"></div>
+      <div class="menu logout-menu" @click="logout">退出登录</div>
     </aside>
 
     <main class="main">
@@ -293,7 +295,7 @@
         <div class="attendance-card">
           <div class="attendance-section-head">
             <h2>出勤表</h2>
-            <p>实心圆点表示出勤。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
+            <p>实心绿点表示已签到，空心绿点表示已报名但未签到。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
           </div>
           <div class="attendance-table-scroll">
             <el-table class="attendance-matrix" :data="attendanceUsers" border height="560">
@@ -316,8 +318,8 @@
                   </div>
                 </template>
                 <template #default="{ row }">
-                  <button class="attendance-dot" :class="{ present: isPresent(event.id, row.id) }" :disabled="!can('attendance:update')" @click="togglePresent(event.id, row.id)">
-                    {{ isPresent(event.id, row.id) ? '●' : '' }}
+                  <button class="attendance-dot" :class="{ present: isPresent(event.id, row.id), enrolled: isEnrolled(event.id, row.id) && !isPresent(event.id, row.id) }" :disabled="!can('attendance:update')" @click="togglePresent(event.id, row.id)">
+                    {{ isPresent(event.id, row.id) ? '●' : isEnrolled(event.id, row.id) ? '○' : '' }}
                   </button>
                 </template>
               </el-table-column>
@@ -471,6 +473,11 @@
         </div>
       </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="activityForm.name" /></el-form-item>
+      <el-form-item label="组织者">
+        <el-select v-model="activityForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="活动类型"><el-select v-model="activityForm.activity_type"><el-option label="周常" value="周常" /><el-option label="本地活动" value="本地活动" /><el-option label="外地活动" value="外地活动" /></el-select></el-form-item>
       <el-form-item label="场地">
         <el-select v-model="activityForm.venue_id" clearable filterable placeholder="选择场地" @change="setActivityVenue">
@@ -479,8 +486,8 @@
       </el-form-item>
       <el-form-item label="地点"><el-input v-model="activityForm.location" placeholder="选择场地后自动填入，也可手动修改" /></el-form-item>
       <el-form-item label="时间">
-        <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
-        <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
+        <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
       </el-form-item>
       <el-form-item label="人数配置">
         <div class="number-config-grid">
@@ -528,11 +535,16 @@
         </div>
       </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="planForm.name" /></el-form-item>
-      <el-form-item label="投票截止"><el-date-picker v-model="planForm.vote_deadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
+      <el-form-item label="组织者">
+        <el-select v-model="planForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="投票截止"><el-date-picker v-model="planForm.vote_deadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" /></el-form-item>
       <el-form-item label="可选日期">
         <div class="plan-date-list">
           <div v-for="(item, i) in planForm.dates" :key="i" class="plan-date-row">
-            <el-date-picker v-model="item.date" value-format="YYYY-MM-DD" />
+            <el-date-picker v-model="item.date" value-format="YYYY-MM-DD" :teleported="false" placement="bottom-start" />
             <el-input v-model="item.remark" maxlength="200" placeholder="备注" style="width: 220px" />
             <el-button @click="planForm.dates.splice(i, 1)">删除</el-button>
           </div>
@@ -621,7 +633,7 @@ import { api, setToken, token } from './api'
 import defaultActivityBanner from './assets/activity-default.jpg'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
-const activityStatuses = ['报名中', '活动开始', '活动结束', '活动取消', '投票中', '已生成活动']
+const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
 const homepageSections = [
   { key: 'top', name: '首屏 Top', description: '包含首页主视觉和指标横条' },
   { key: 'about', name: '关于 About', description: '活动介绍与新玩家说明' },
@@ -758,6 +770,7 @@ export default {
       attendanceEvents: [],
       attendanceUsers: [],
       attendanceRecords: [],
+      attendanceEnrollments: [],
       permissionPages: [],
       permissionRole: 'user',
       rolePerms: [],
@@ -871,6 +884,26 @@ export default {
       setToken(data.token)
       this.tokenValue = data.token
       await this.init()
+    },
+    async logout() {
+      try {
+        await ElMessageBox.confirm('确认退出后管系统？', '退出登录', {
+          confirmButtonText: '退出',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+      } catch {
+        return
+      }
+      try {
+        await api('/api/auth/logout', { method: 'POST', body: {} })
+      } finally {
+        setToken('')
+        this.tokenValue = ''
+        this.me = {}
+        this.loginForm = {}
+        history.replaceState(null, '', location.pathname)
+      }
     },
     async init() {
       this.me = await api('/api/admin/auth/me')
@@ -1056,6 +1089,7 @@ export default {
 	        return String(a.callsign || a.username || '').localeCompare(String(b.callsign || b.username || ''), 'zh-CN')
 	      })
 	      this.attendanceRecords = matrix.records
+	      this.attendanceEnrollments = matrix.enrollments || []
 	    },
     async loadFormalUsers() {
       if (!this.formalUsers.length) this.formalUsers = await api('/api/admin/users/formal/options')
@@ -1092,13 +1126,15 @@ export default {
       })
     },
 	    async openActivity(row) {
+	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activities/${row.id}`)
 	      this.activityForm = {
 	        ...detail,
+	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        banner_source: detail.banner_source || 'venue',
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        launcher_ids: this.parseIds(detail.launcher_ids),
@@ -1133,13 +1169,15 @@ export default {
       if (this.activityForm.banner_source !== 'custom') this.activityForm.banner_source = 'venue'
     },
 	    async openPlan(row) {
+	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.planForm = { banner_url: '', visibility_type: 'all', invitee_ids: [], dates: [{ date: '', remark: '' }], venue_ids: [], game_mode_ids: [] }
+	        this.planForm = { banner_url: '', organizer_ids: [Number(this.me.id)], visibility_type: 'all', invitee_ids: [], dates: [{ date: '', remark: '' }], venue_ids: [], game_mode_ids: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activity-plans/${row.id}`)
 	      this.planForm = {
 	        ...detail,
+	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        dates: (detail.dates || []).map(item => ({ date: item.date || '', remark: item.remark || '' })),
 	        venue_ids: (detail.venues || []).map(item => item.id),
@@ -1267,6 +1305,7 @@ export default {
         squad_count: 1,
         squad_limit: 0,
         activity_region: '宁波',
+        organizer_ids: this.parseIds(plan.organizer_ids).map(Number),
         visibility_type: plan.visibility_type || 'all',
         invitee_ids: this.parseIds(plan.invitee_ids),
         launcher_ids: [],
@@ -1419,8 +1458,11 @@ export default {
 	    remove(url, callback) {
 	      return ElMessageBox.confirm('确认删除？').then(() => api(url, { method: 'DELETE' }).then(() => callback && callback()))
 	    },
-    isPresent(eventId, userId) {
-      return this.attendanceRecords.some(r => r.event_id === eventId && r.user_id === userId && r.present)
+	    isPresent(eventId, userId) {
+      return this.attendanceRecords.some(r => Number(r.event_id) === Number(eventId) && Number(r.user_id) === Number(userId) && r.present)
+    },
+	    isEnrolled(eventId, userId) {
+      return this.attendanceEnrollments.some(r => Number(r.event_id) === Number(eventId) && Number(r.user_id) === Number(userId))
     },
 	    countPresent(userId) {
 	      return this.attendanceRecords.filter(r => r.user_id === userId && r.present).length
