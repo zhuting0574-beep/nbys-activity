@@ -313,7 +313,7 @@
                     <span>正式: {{ eventFormalPresentCount(event.id) }}</span>
                     <div class="attendance-event-actions">
                       <el-button size="small" v-if="can('attendance:update')" @click.stop="openAttendanceEvent(event)">编辑</el-button>
-                      <el-button size="small" type="danger" v-if="can('attendance:delete') && event.is_manual" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
+                      <el-button size="small" type="danger" v-if="event.is_manual ? can('attendance:delete') : can('activity:delete')" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
                     </div>
                   </div>
                 </template>
@@ -1452,7 +1452,14 @@ export default {
 	      return api(`/api/admin/attendance/history-activities${this.editEvent.id ? `/${this.editEvent.id}` : ''}`, { method: this.editEvent.id ? 'PUT' : 'POST', body: this.editEvent }).then(() => { this.editEvent = null; this.loadAttendance() })
 	    },
 	    deleteAttendanceEvent(event) {
-	      return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
+	      if (event.is_manual) return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
+	      if (!event.source_activity_id) return ElMessage.warning('该出勤记录未关联正式活动，无法从活动列表同步删除')
+	      return ElMessageBox.confirm(
+	        `确认删除正式活动“${event.name}”？报名、签到、阵营、小队和租赁记录也会同步删除。`,
+	        '删除正式活动',
+	        { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+	      ).then(() => api(`/api/admin/activities/${event.source_activity_id}`, { method: 'DELETE' }))
+	        .then(() => Promise.all([this.loadAttendance(), this.loadActivities()]))
 	    },
 	    post(url, callback) { return api(url, { method: 'POST', body: {} }).then(() => callback && callback()) },
 	    remove(url, callback) {
