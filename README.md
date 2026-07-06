@@ -1,5 +1,11 @@
 # NBYS Activity Platform
 
+## 签到配置
+
+- 后端生产环境设置 `CHECKIN_QR_SECRET`（未设置时回退到 `AUTH_TOKEN_SECRET`），用于活动签到二维码签名。
+- 复制 `admin-web/.env.example` 为对应环境文件，并配置高德 Web 端 `VITE_AMAP_KEY` 和 `VITE_AMAP_SECURITY_CODE`，用于场地地图选点。
+- HTTPS 是浏览器定位的必要条件；本地 `localhost` 调试除外。
+
 前后端分离 + 微服务工程：
 
 - 后管前端：`admin-web`，Vue 3 + Vite + Element Plus

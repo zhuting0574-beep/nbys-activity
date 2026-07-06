@@ -160,9 +160,10 @@
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
-          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="checkin">
-            {{ checkinSubmitting ? '签到中…' : '签到' }}
+          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
+            签到
           </button>
+          <button v-if="detail.can_show_checkin_qr && canCheckinActivity(detail)" class="btn secondary detail-main-action" @click="showCheckinQr">签到二维码</button>
           <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
           <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
@@ -515,6 +516,48 @@
       </div>
     </div>
 
+    <div v-if="checkinDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="活动签到">
+      <div class="modal-backdrop" @click="closeCheckinDialog"></div>
+      <div class="modal-panel confirm-panel checkin-modal-panel">
+        <template v-if="checkinDialog.mode === 'choice'">
+          <h2>选择签到方式</h2>
+          <p>自主签到需验证活动场地 1 公里范围；扫描现场二维码无需定位。</p>
+          <p class="muted">场地地址：{{ displayVenueAddress(detail) || '地址待配置' }}</p>
+          <div class="checkin-choice-actions">
+            <button class="btn" :disabled="checkinSubmitting" @click="startLocationCheckin">自主定位签到</button>
+            <button class="btn secondary" :disabled="checkinSubmitting" @click="startQrScanner">扫描签到二维码</button>
+          </div>
+          <button class="btn secondary" :disabled="checkinSubmitting" @click="closeCheckinDialog">取消</button>
+        </template>
+        <template v-else-if="checkinDialog.mode === 'scanner'">
+          <h2>扫描签到二维码</h2>
+          <p class="muted">请将活动发起者展示的二维码放入取景框。</p>
+          <div id="checkin-qr-reader" class="checkin-qr-reader"></div>
+          <button class="btn secondary" @click="closeCheckinDialog">取消扫码</button>
+        </template>
+        <template v-else>
+          <h2>扫码签到</h2>
+          <p>二维码已识别，可直接完成签到，无需获取当前位置。</p>
+          <p class="muted">场地地址：{{ displayVenueAddress(detail) || '地址待配置' }}</p>
+          <div class="confirm-actions">
+            <button class="btn secondary" :disabled="checkinSubmitting" @click="closeCheckinDialog">取消</button>
+            <button class="btn" :disabled="checkinSubmitting" @click="checkin">{{ checkinSubmitting ? '签到中…' : '确认签到' }}</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div v-if="checkinQrDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="活动签到二维码">
+      <div class="modal-backdrop" @click="checkinQrDialog.show = false"></div>
+      <div class="modal-panel confirm-panel checkin-modal-panel">
+        <h2>活动签到二维码</h2>
+        <img v-if="checkinQrDialog.dataUrl" class="checkin-qr-image" :src="checkinQrDialog.dataUrl" alt="活动签到二维码" />
+        <p>请参与者扫码登录，识别有效二维码后即可签到。</p>
+        <p class="muted">有效至：{{ formatDateTime(checkinQrDialog.expiresAt) }}</p>
+        <button class="btn secondary" @click="checkinQrDialog.show = false">关闭</button>
+      </div>
+    </div>
+
     <div v-if="confirmDialog.show" class="modal">
       <div class="modal-backdrop" @click="resolveConfirm(false)"></div>
       <div class="modal-panel confirm-panel">
@@ -551,6 +594,7 @@ import { api, setErrorHandler, setToken, token } from './api'
 import logoUrl from './assets/nbys-logo.png'
 import defaultActivityBanner from './assets/activity-default.jpg'
 import QRCode from 'qrcode'
+import { Html5Qrcode } from 'html5-qrcode'
 
 export default {
   emits: ['loading-start', 'ready'],
@@ -576,6 +620,9 @@ export default {
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
       checkinSubmitting: false,
+      checkinDialog: { show: false, qrToken: '', mode: 'choice' },
+      checkinQrScanner: null,
+      checkinQrDialog: { show: false, dataUrl: '', expiresAt: '' },
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
       squadEdits: {},
@@ -668,6 +715,7 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('nbys-auth-expired', this.expireSession)
+    this.stopQrScanner()
   },
   methods: {
     expireSession() {
@@ -817,6 +865,8 @@ export default {
       if (this.view === 'app' && Number.isInteger(id) && id > 0 && Number(this.selectedActivity) !== id) {
         await this.openActivity(id)
       }
+      const qrToken = new URLSearchParams(location.search).get('checkinToken') || ''
+      if (this.view === 'app' && this.selectedActivity && qrToken && !this.detail.checkin?.present) this.openCheckinDialog(qrToken)
     },
     redirectAfterLogin() {
       const target = new URLSearchParams(location.search).get('returnTo')
@@ -886,14 +936,13 @@ export default {
       return String(value).replace('T', ' ').slice(0, 16)
     },
     canCheckinActivity(activity) {
-      if (!activity?.start_at) return false
+      if (typeof activity?.checkin_open === 'boolean') return activity.checkin_open
+      if (!activity?.start_at || !activity?.end_at) return false
       const start = new Date(String(activity.start_at).replace(' ', 'T'))
+      const end = new Date(String(activity.end_at).replace(' ', 'T'))
       if (Number.isNaN(start.getTime())) return false
       const now = new Date()
-      const sameDay = now.getFullYear() === start.getFullYear()
-        && now.getMonth() === start.getMonth()
-        && now.getDate() === start.getDate()
-      return sameDay && now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000
+      return now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000 && now.getTime() <= end.getTime()
     },
     formatAttendanceDate(value) {
       if (!value) return '时间待定'
@@ -947,14 +996,103 @@ export default {
     cancelEnroll() {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
     },
+    openCheckinDialog(qrToken = '') {
+      this.checkinDialog = { show: true, qrToken, mode: qrToken ? 'confirm' : 'choice' }
+    },
+    async closeCheckinDialog() {
+      if (this.checkinSubmitting) return
+      await this.stopQrScanner()
+      this.checkinDialog = { show: false, qrToken: '', mode: 'choice' }
+    },
+    startLocationCheckin() {
+      this.checkinDialog.qrToken = ''
+      return this.checkin()
+    },
+    async startQrScanner() {
+      this.checkinDialog.mode = 'scanner'
+      await this.$nextTick()
+      try {
+        await this.stopQrScanner()
+        this.checkinQrScanner = new Html5Qrcode('checkin-qr-reader')
+        await this.checkinQrScanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+          decodedText => this.handleScannedCheckin(decodedText),
+          () => {}
+        )
+      } catch (error) {
+        await this.stopQrScanner()
+        this.checkinDialog.mode = 'choice'
+        this.showToast('无法打开摄像头，请允许相机权限后重试')
+      }
+    },
+    async stopQrScanner() {
+      const scanner = this.checkinQrScanner
+      this.checkinQrScanner = null
+      if (!scanner) return
+      try {
+        if (scanner.isScanning) await scanner.stop()
+        scanner.clear()
+      } catch {}
+    },
+    async handleScannedCheckin(decodedText) {
+      if (this.checkinDialog.mode !== 'scanner') return
+      try {
+        const url = new URL(decodedText, location.origin)
+        const activityId = Number(url.searchParams.get('activityId'))
+        const qrToken = url.searchParams.get('checkinToken') || ''
+        if (activityId !== Number(this.selectedActivity) || !qrToken) throw new Error('请扫描当前活动的签到二维码')
+        this.checkinDialog.mode = 'confirm'
+        await this.stopQrScanner()
+        this.checkinDialog = { show: true, qrToken, mode: 'confirm' }
+        this.showToast('二维码识别成功')
+      } catch (error) {
+        this.showToast(error.message || '签到二维码无效')
+      }
+    },
+    currentPosition() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('当前浏览器不支持定位，请使用手机浏览器打开'))
+        navigator.geolocation.getCurrentPosition(resolve, error => {
+          const messages = { 1: '定位权限被拒绝，请在浏览器设置中允许定位', 2: '暂时无法获取位置，请到开阔处重试', 3: '获取位置超时，请重试' }
+          reject(new Error(messages[error.code] || '获取位置失败，请重试'))
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+      })
+    },
     async checkin() {
       if (this.checkinSubmitting) return
       this.checkinSubmitting = true
       try {
-        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' })
+        const qrToken = this.checkinDialog.qrToken
+        const position = qrToken ? null : await this.currentPosition()
+        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, {
+          method: 'POST',
+          body: {
+            latitude: position?.coords.latitude,
+            longitude: position?.coords.longitude,
+            accuracy: position?.coords.accuracy,
+            source: qrToken ? 'qr' : 'location',
+            qr_token: qrToken || undefined
+          }
+        })
+        this.checkinDialog = { show: false, qrToken: '', mode: 'choice' }
+        this.showToast('签到成功')
         await this.openActivity(this.selectedActivity)
+      } catch (error) {
+        this.showToast(error.message || '签到失败')
       } finally {
         this.checkinSubmitting = false
+      }
+    },
+    async showCheckinQr() {
+      try {
+        const result = await api(`/api/h5/activities/${this.selectedActivity}/checkin-qr`)
+        const params = new URLSearchParams({ activityId: String(this.selectedActivity), checkinToken: result.token })
+        const url = `${location.origin}${location.pathname}?${params.toString()}#/app`
+        const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 2, errorCorrectionLevel: 'M' })
+        this.checkinQrDialog = { show: true, dataUrl, expiresAt: result.expires_at }
+      } catch (error) {
+        this.showToast(error.message || '二维码生成失败')
       }
     },
     squadsByCamp(camp) {

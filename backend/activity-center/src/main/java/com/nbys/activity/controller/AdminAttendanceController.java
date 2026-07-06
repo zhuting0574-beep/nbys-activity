@@ -55,7 +55,7 @@ public class AdminAttendanceController {
         String end = year == null ? null : (year + 1) + "-01-01";
         List<Map<String, Object>> events = Rows.list(jdbc, "select * from attendance_events where (? is null or (event_date>=? and event_date<?)) and (?='' or activity_region=?) order by event_date", year, start, end, r, r);
         int formal = formalOnly ? 1 : 0;
-        List<Map<String, Object>> users = Rows.list(jdbc, "select id,username,callsign,is_regular_member from users where disabled=0 and (?=0 or is_regular_member=1) order by callsign", formal);
+        List<Map<String, Object>> users = Rows.list(jdbc, "select id,username,callsign,is_regular_member from users where disabled=0 and (?=0 or is_regular_member=1) order by is_regular_member desc,callsign,username", formal);
         List<Map<String, Object>> records = Rows.list(jdbc,
                 "select ar.* from attendance_records ar join attendance_events ev on ev.id=ar.event_id where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)", year, start, end, r, r);
         Map<String, Object> out = new LinkedHashMap<String, Object>();

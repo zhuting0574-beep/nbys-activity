@@ -296,7 +296,7 @@
             <p>实心圆点表示出勤。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
           </div>
           <div class="attendance-table-scroll">
-            <el-table class="attendance-matrix" :style="{ minWidth: attendanceTableMinWidth }" :data="attendanceUsers" border height="560">
+            <el-table class="attendance-matrix" :data="attendanceUsers" border height="560">
               <el-table-column prop="callsign" label="人员" fixed="left" width="112" />
               <el-table-column label="出勤次数" fixed="left" width="50"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
               <el-table-column v-for="event in attendanceEvents" :key="event.id" width="105">
@@ -448,7 +448,7 @@
     </main>
   </div>
 
-  <el-dialog v-model="venueVisible" title="场地" width="560px"><el-form label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address" /></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
+  <el-dialog v-model="venueVisible" title="场地" width="720px" @opened="initVenueMap"><el-form v-if="editVenue" label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address"><template #append><el-button @click="locateVenueAddress">按地址定位</el-button></template></el-input></el-form-item><el-form-item label="地图选点"><div class="venue-map-wrap"><div id="venue-map" class="venue-map"></div><p class="muted">点击地图设置签到中心点；签到范围为该点周围 1 公里。</p></div></el-form-item><el-form-item label="经纬度"><div class="venue-coordinate-row"><el-input-number v-model="editVenue.longitude" :precision="7" :step="0.000001" placeholder="经度" /><el-input-number v-model="editVenue.latitude" :precision="7" :step="0.000001" placeholder="纬度" /></div></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
   <el-dialog v-model="modeVisible" title="模式"><el-form label-width="90px"><el-form-item label="模式名称"><el-input v-model="editMode.name" /></el-form-item><el-form-item label="模式内容"><el-input v-model="editMode.rules" type="textarea" /></el-form-item><el-form-item label="人数"><el-input v-model="editMode.suitable_people" /></el-form-item></el-form><template #footer><el-button @click="editMode = null">取消</el-button><el-button type="primary" @click="saveMode">保存</el-button></template></el-dialog>
   <el-dialog v-model="userVisible" title="用户"><el-form label-width="110px"><el-form-item label="呼号"><el-input v-model="editUser.callsign" /></el-form-item><el-form-item label="权限"><el-select v-model="editUser.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item><el-form-item label="账号禁用"><el-switch v-model="editUser.disabled" /></el-form-item><el-form-item label="正式队员"><el-switch v-model="editUser.is_regular_member" /></el-form-item></el-form><template #footer><el-button @click="editUser = null">取消</el-button><el-button type="primary" @click="saveUser">保存</el-button></template></el-dialog>
   <el-dialog v-model="launcherVisible" title="发射器" width="560px">
@@ -746,6 +746,8 @@ export default {
 	      convertPickerResolve: null,
 	      roles: [],
       editVenue: null,
+      venueMap: null,
+      venueMarker: null,
       editMode: null,
       editUser: null,
       activityForm: null,
@@ -800,9 +802,6 @@ export default {
     },
     dashboardRankings() {
       return this.dashboardOverview.rankings || {}
-    },
-    attendanceTableMinWidth() {
-      return `${162 + (this.attendanceEvents || []).length * 105}px`
     },
     permissionTreeData() {
       const actionNames = {
@@ -1051,7 +1050,11 @@ export default {
 	      this.summary = await api(`/api/admin/attendance/summary?${params.toString()}`)
 	      const matrix = await api(`/api/admin/attendance/matrix?${params.toString()}`)
 	      this.attendanceEvents = matrix.events
-	      this.attendanceUsers = matrix.users
+	      this.attendanceUsers = [...(matrix.users || [])].sort((a, b) => {
+	        const membershipOrder = Number(!!b.is_regular_member) - Number(!!a.is_regular_member)
+	        if (membershipOrder) return membershipOrder
+	        return String(a.callsign || a.username || '').localeCompare(String(b.callsign || b.username || ''), 'zh-CN')
+	      })
 	      this.attendanceRecords = matrix.records
 	    },
     async loadFormalUsers() {
@@ -1321,7 +1324,62 @@ export default {
       link.click()
       URL.revokeObjectURL(link.href)
     },
+    async loadAmap() {
+      if (window.AMap) return window.AMap
+      const key = import.meta.env.VITE_AMAP_KEY
+      if (!key) throw new Error('未配置 VITE_AMAP_KEY，可先手工填写经纬度')
+      const securityJsCode = import.meta.env.VITE_AMAP_SECURITY_CODE
+      if (securityJsCode) window._AMapSecurityConfig = { securityJsCode }
+      if (!window.__amapLoader) {
+        window.__amapLoader = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.Geocoder`
+          script.onload = () => resolve(window.AMap)
+          script.onerror = () => reject(new Error('高德地图加载失败'))
+          document.head.appendChild(script)
+        })
+      }
+      return window.__amapLoader
+    },
+    async initVenueMap() {
+      try {
+        const AMap = await this.loadAmap()
+        this.venueMap?.destroy()
+        this.venueMarker = null
+        const hasPoint = Number.isFinite(Number(this.editVenue.longitude)) && Number.isFinite(Number(this.editVenue.latitude))
+        const center = hasPoint ? [Number(this.editVenue.longitude), Number(this.editVenue.latitude)] : [121.55027, 29.87386]
+        this.venueMap = new AMap.Map('venue-map', { zoom: hasPoint ? 16 : 11, center })
+        if (hasPoint) this.setVenueMapPoint(center[0], center[1])
+        this.venueMap.on('click', event => this.setVenueMapPoint(event.lnglat.getLng(), event.lnglat.getLat()))
+      } catch (error) {
+        ElMessage.warning(error.message)
+      }
+    },
+    setVenueMapPoint(longitude, latitude) {
+      if (!this.editVenue) return
+      this.editVenue.longitude = Number(Number(longitude).toFixed(7))
+      this.editVenue.latitude = Number(Number(latitude).toFixed(7))
+      if (!this.venueMap || !window.AMap) return
+      if (!this.venueMarker) this.venueMarker = new window.AMap.Marker({ map: this.venueMap })
+      this.venueMarker.setPosition([longitude, latitude])
+    },
+    async locateVenueAddress() {
+      if (!String(this.editVenue?.address || '').trim()) return ElMessage.warning('请先填写场地地址')
+      try {
+        const AMap = await this.loadAmap()
+        const geocoder = new AMap.Geocoder({ city: '全国' })
+        geocoder.getLocation(this.editVenue.address, (status, result) => {
+          const point = result?.geocodes?.[0]?.location
+          if (status !== 'complete' || !point) return ElMessage.warning('未找到该地址，请在地图中手工选点')
+          this.setVenueMapPoint(point.getLng(), point.getLat())
+          this.venueMap?.setZoomAndCenter(16, point)
+        })
+      } catch (error) {
+        ElMessage.warning(error.message)
+      }
+    },
     saveVenue() {
+      if (this.editVenue.longitude == null || this.editVenue.latitude == null) return ElMessage.warning('请在地图选择签到中心点')
       return api(`/api/admin/venues${this.editVenue.id ? `/${this.editVenue.id}` : ''}`, { method: this.editVenue.id ? 'PUT' : 'POST', body: this.editVenue }).then(() => { this.editVenue = null; this.loadVenues() })
     },
     saveMode() {

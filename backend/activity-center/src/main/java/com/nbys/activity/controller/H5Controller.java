@@ -6,6 +6,7 @@ import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,19 +15,29 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 @RestController
 @RequestMapping("/api/h5")
 public class H5Controller {
     private static final String DEFAULT_PLAN_BANNER = "/uploads/activity-plan-default.jpg";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final double CHECKIN_RADIUS_METERS = 1000d;
 
     private final JdbcTemplate jdbc;
     private final AuthService auth;
+    private final byte[] checkinQrSecret;
 
-    public H5Controller(JdbcTemplate jdbc, AuthService auth) {
+    public H5Controller(JdbcTemplate jdbc, AuthService auth,
+                        @Value("${CHECKIN_QR_SECRET:${AUTH_TOKEN_SECRET:nbys-local-development-secret-change-me}}") String checkinQrSecret) {
         this.jdbc = jdbc;
         this.auth = auth;
+        this.checkinQrSecret = checkinQrSecret.getBytes(StandardCharsets.UTF_8);
     }
 
     @GetMapping("/activities")
@@ -70,6 +81,9 @@ public class H5Controller {
         boolean activityManager = isCreator(row, userId);
         row.put("is_activity_creator", activityManager);
         row.put("is_activity_organizer", activityManager);
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        row.put("checkin_open", isCheckinOpen(row, now));
+        row.put("can_show_checkin_qr", activityManager || hasPermission(me, "activity:update"));
         row.put("my_enrollment", Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId));
         List<Map<String, Object>> squads = Rows.list(jdbc,
                 "select s.*, (select count(*) from enrollments e where e.activity_id=s.activity_id and e.camp_no=s.camp_no and e.squad_no=s.squad_no) member_count " +
@@ -240,17 +254,47 @@ public class H5Controller {
     }
 
     @PostMapping("/activities/{id}/checkin")
-    public ApiResponse<Void> checkin(@PathVariable int id, HttpServletRequest req) {
+    public ApiResponse<Void> checkin(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, userId) == null) throw new IllegalArgumentException("请先报名");
         Map<String, Object> a = Rows.one(jdbc, "select * from activities where id=?", id);
-        LocalDateTime start = LocalDateTime.parse(String.valueOf(a.get("start_at")).replace(" ", "T"));
-        LocalDateTime now = LocalDateTime.now();
-        if (!now.toLocalDate().equals(start.toLocalDate()) || now.isBefore(start.minusHours(3))) throw new IllegalArgumentException("活动当天开始前3小时才允许签到");
+        if (a == null) throw new IllegalArgumentException("活动不存在");
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        requireCheckinWindow(a, now);
+        String source = text(body.get("source"));
+        if (!"location".equals(source) && !"qr".equals(source)) throw new IllegalArgumentException("签到方式不合法");
+        if ("qr".equals(source)) {
+            verifyCheckinQrToken(id, text(body.get("qr_token")), now);
+        } else {
+            Map<String, Object> venue = checkinVenue(a);
+            double latitude = coordinate(body.get("latitude"), -90, 90, "定位纬度不合法");
+            double longitude = coordinate(body.get("longitude"), -180, 180, "定位经度不合法");
+            double venueLatitude = coordinate(venue.get("latitude"), -90, 90, "活动场地未配置签到坐标，请联系管理员");
+            double venueLongitude = coordinate(venue.get("longitude"), -180, 180, "活动场地未配置签到坐标，请联系管理员");
+            double distance = distanceMeters(latitude, longitude, venueLatitude, venueLongitude);
+            if (distance > CHECKIN_RADIUS_METERS) throw new IllegalArgumentException("当前位置距离活动场地约" + Math.round(distance) + "米，超过1公里签到范围");
+        }
         Integer eventId = ensureAttendanceEvent(id, a);
         jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now()) " +
                 "on duplicate key update present=1,updated_by_id=values(updated_by_id),updated_at=now()", eventId, userId, userId);
         return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/activities/{id}/checkin-qr")
+    public ApiResponse<Map<String, Object>> checkinQr(@PathVariable int id, HttpServletRequest req) {
+        Map<String, Object> me = auth.current(req);
+        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? and deleted_at is null", id);
+        if (activity == null) throw new IllegalArgumentException("活动不存在");
+        int userId = ((Number) me.get("id")).intValue();
+        if (!isCreator(activity, userId) && !hasPermission(me, "activity:update")) throw new SecurityException("没有展示签到二维码的权限");
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        requireCheckinWindow(activity, now);
+        long expiresAt = dateTime(activity.get("end_at")).atZone(BUSINESS_ZONE).toEpochSecond();
+        String payload = id + ":" + expiresAt;
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("token", Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + "." + signCheckinQr(payload));
+        out.put("expires_at", activity.get("end_at"));
+        return ApiResponse.ok(out);
     }
 
     @Transactional
@@ -517,6 +561,88 @@ public class H5Controller {
         return creator == null ? "" : text(creator.get("organizer"));
     }
 
+    private boolean hasPermission(Map<String, Object> user, String permission) {
+        Object permissions = user.get("permissions");
+        return permissions instanceof Collection && ((Collection<?>) permissions).contains(permission);
+    }
+
+    private LocalDateTime dateTime(Object value) {
+        if (value == null) throw new IllegalArgumentException("活动时间未配置");
+        return LocalDateTime.parse(String.valueOf(value).replace(" ", "T"));
+    }
+
+    private boolean isCheckinOpen(Map<String, Object> activity, LocalDateTime now) {
+        try {
+            return isWithinCheckinWindow(now, dateTime(activity.get("start_at")), dateTime(activity.get("end_at")));
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void requireCheckinWindow(Map<String, Object> activity, LocalDateTime now) {
+        LocalDateTime activityStart = dateTime(activity.get("start_at"));
+        LocalDateTime start = activityStart.minusHours(3);
+        LocalDateTime end = dateTime(activity.get("end_at"));
+        if (now.isBefore(start)) throw new IllegalArgumentException("活动开始前3小时开放签到");
+        if (now.isAfter(end)) throw new IllegalArgumentException("活动已结束，签到已关闭");
+    }
+
+    static boolean isWithinCheckinWindow(LocalDateTime now, LocalDateTime start, LocalDateTime end) {
+        return !now.isBefore(start.minusHours(3)) && !now.isAfter(end);
+    }
+
+    private Map<String, Object> checkinVenue(Map<String, Object> activity) {
+        if (activity.get("venue_id") == null) throw new IllegalArgumentException("活动未关联后台场地，无法签到");
+        Map<String, Object> venue = Rows.one(jdbc, "select id,address,longitude,latitude from venues where id=?", activity.get("venue_id"));
+        if (venue == null) throw new IllegalArgumentException("活动场地不存在，请联系管理员");
+        if (venue.get("longitude") == null || venue.get("latitude") == null) throw new IllegalArgumentException("活动场地未配置签到坐标，请联系管理员");
+        return venue;
+    }
+
+    private double coordinate(Object value, double min, double max, String message) {
+        try {
+            double number = Double.parseDouble(String.valueOf(value));
+            if (!Double.isFinite(number) || number < min || number > max) throw new IllegalArgumentException(message);
+            return number;
+        } catch (NullPointerException | NumberFormatException e) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    static double distanceMeters(double latitude1, double longitude1, double latitude2, double longitude2) {
+        double earthRadius = 6371008.8d;
+        double latDistance = Math.toRadians(latitude2 - latitude1);
+        double lngDistance = Math.toRadians(longitude2 - longitude1);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(latitude1)) * Math.cos(Math.toRadians(latitude2))
+                * Math.sin(lngDistance / 2) * Math.sin(lngDistance / 2);
+        return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    private String signCheckinQr(String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(checkinQrSecret, "HmacSHA256"));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("二维码签名失败", e);
+        }
+    }
+
+    private void verifyCheckinQrToken(int activityId, String token, LocalDateTime now) {
+        try {
+            String[] parts = token.split("\\.", 2);
+            if (parts.length != 2) throw new IllegalArgumentException();
+            String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+            if (!MessageDigest.isEqual(parts[1].getBytes(StandardCharsets.UTF_8), signCheckinQr(payload).getBytes(StandardCharsets.UTF_8))) throw new IllegalArgumentException();
+            String[] values = payload.split(":", 2);
+            long expiresAt = Long.parseLong(values[1]);
+            if (Integer.parseInt(values[0]) != activityId || now.atZone(BUSINESS_ZONE).toEpochSecond() > expiresAt) throw new IllegalArgumentException();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("签到二维码无效或已过期");
+        }
+    }
+
     private String displayStatus(Map<String, Object> row) {
         if (row.get("deleted_at") != null) return "活动取消";
         String now = new java.sql.Timestamp(System.currentTimeMillis()).toString();
@@ -541,19 +667,21 @@ public class H5Controller {
         boolean customBanner = "custom".equals(text(row.get("banner_source"))) && !text(row.get("banner_url")).isEmpty();
         Map<String, Object> venue = null;
         if (row.get("venue_id") != null) {
-            venue = Rows.one(jdbc, "select name,address,image_url from venues where id=?", row.get("venue_id"));
+            venue = Rows.one(jdbc, "select name,address,longitude,latitude,image_url from venues where id=?", row.get("venue_id"));
         }
         if (venue == null) {
             String location = text(row.get("location"));
-            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address,image_url from venues where name=? or address=? limit 1", location, location);
+            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address,longitude,latitude,image_url from venues where name=? or address=? limit 1", location, location);
         }
         if (venue != null) {
             if (!customBanner && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
             row.put("venue_name", venue.get("name"));
             row.put("venue_address", venue.get("address"));
+            row.put("venue_coordinates_configured", venue.get("longitude") != null && venue.get("latitude") != null);
         } else {
             row.put("venue_name", row.get("location"));
             row.put("venue_address", row.get("location"));
+            row.put("venue_coordinates_configured", false);
         }
     }
 

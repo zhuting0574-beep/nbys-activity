@@ -24,6 +24,8 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activity_plans", "banner_url", "varchar(500) DEFAULT NULL COMMENT '策划banner图'", "name");
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
+            addColumn("venues", "longitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 longitude for check-in'", "address");
+            addColumn("venues", "latitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 latitude for check-in'", "longitude");
             addColumn("users", "avatar_url", "varchar(500) DEFAULT NULL COMMENT '用户头像'", "callsign");
             dropColumn("users", "phone");
             dropColumn("users", "id_card");
