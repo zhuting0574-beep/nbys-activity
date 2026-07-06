@@ -66,6 +66,11 @@ body {
   border: 1px solid rgba(147, 197, 253, .22);
 }
 
+.venue-upload-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
 .submenu-list {
   margin: -2px 0 8px;
 }

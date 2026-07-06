@@ -450,7 +450,7 @@
     </main>
   </div>
 
-  <el-dialog v-model="venueVisible" title="场地" width="720px" @opened="initVenueMap"><el-form v-if="editVenue" label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address"><template #append><el-button @click="locateVenueAddress">按地址定位</el-button></template></el-input></el-form-item><el-form-item label="地图选点"><div class="venue-map-wrap"><div id="venue-map" class="venue-map"></div><p class="muted">点击地图设置签到中心点；签到范围为该点周围 1 公里。</p></div></el-form-item><el-form-item label="经纬度"><div class="venue-coordinate-row"><el-input-number v-model="editVenue.longitude" :precision="7" :step="0.000001" placeholder="经度" /><el-input-number v-model="editVenue.latitude" :precision="7" :step="0.000001" placeholder="纬度" /></div></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
+  <el-dialog v-model="venueVisible" title="场地" width="720px" @opened="initVenueMap"><el-form v-if="editVenue" label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadVenueFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><p class="muted venue-upload-hint">超过300KB的图片会自动压缩后保存</p><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address"><template #append><el-button @click="locateVenueAddress">按地址定位</el-button></template></el-input></el-form-item><el-form-item label="地图选点"><div class="venue-map-wrap"><div id="venue-map" class="venue-map"></div><p class="muted">点击地图设置签到中心点；签到范围为该点周围 1 公里。</p></div></el-form-item><el-form-item label="经纬度"><div class="venue-coordinate-row"><el-input-number v-model="editVenue.longitude" :precision="7" :step="0.000001" placeholder="经度" /><el-input-number v-model="editVenue.latitude" :precision="7" :step="0.000001" placeholder="纬度" /></div></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
   <el-dialog v-model="modeVisible" title="模式"><el-form label-width="90px"><el-form-item label="模式名称"><el-input v-model="editMode.name" /></el-form-item><el-form-item label="模式内容"><el-input v-model="editMode.rules" type="textarea" /></el-form-item><el-form-item label="人数"><el-input v-model="editMode.suitable_people" /></el-form-item></el-form><template #footer><el-button @click="editMode = null">取消</el-button><el-button type="primary" @click="saveMode">保存</el-button></template></el-dialog>
   <el-dialog v-model="userVisible" title="用户"><el-form label-width="110px"><el-form-item label="呼号"><el-input v-model="editUser.callsign" /></el-form-item><el-form-item label="权限"><el-select v-model="editUser.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item><el-form-item label="账号禁用"><el-switch v-model="editUser.disabled" /></el-form-item><el-form-item label="正式队员"><el-switch v-model="editUser.is_regular_member" /></el-form-item></el-form><template #footer><el-button @click="editUser = null">取消</el-button><el-button type="primary" @click="saveUser">保存</el-button></template></el-dialog>
   <el-dialog v-model="launcherVisible" title="发射器" width="560px">
@@ -631,6 +631,7 @@ import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, setToken, token } from './api'
 import defaultActivityBanner from './assets/activity-default.jpg'
+import { compressImageFile, DEFAULT_MAX_BYTES } from './imageCompression'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
@@ -872,6 +873,14 @@ export default {
   methods: {
     uploadAdminFile(options) {
       return uploadAdminFileRequest(options)
+    },
+    async uploadVenueFile(options) {
+      const originalSize = options.file.size
+      const compressedFile = await compressImageFile(options.file)
+      if (originalSize > DEFAULT_MAX_BYTES) {
+        ElMessage.success(`图片已压缩至${Math.ceil(compressedFile.size / 1024)}KB`)
+      }
+      return uploadAdminFileRequest({ ...options, file: compressedFile })
     },
     handleUploadError(error) {
       ElMessage.error(error?.message || '图片上传失败，请稍后重试')
