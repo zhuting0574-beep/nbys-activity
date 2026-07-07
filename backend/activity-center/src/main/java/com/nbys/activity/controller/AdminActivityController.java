@@ -258,6 +258,28 @@ public class AdminActivityController {
         return ApiResponse.ok(row);
     }
 
+    @GetMapping("/activity-plans/{id}/votes")
+    public ApiResponse<Map<String, Object>> planVotes(@PathVariable int id, HttpServletRequest req) {
+        Map<String, Object> me = auth.currentAdmin(req);
+        Map<String, Object> plan = Rows.one(jdbc, "select * from activity_plans where id=?", id);
+        if (plan == null) throw new IllegalArgumentException("策划不存在");
+        if (!canViewPlanVotes(plan, me)) throw new SecurityException("没有查看投票详情权限");
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("plan", plan);
+        out.put("total_voters", Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", id).get("total"));
+        out.put("sections", Arrays.asList(
+                voteSection(id, "date", "日期投票", planDateVoteOptions(id)),
+                voteSection(id, "venue", "场地投票", planVenueVoteOptions(id)),
+                voteSection(id, "game_mode", "模式投票", planModeVoteOptions(id))
+        ));
+        out.put("voters", Rows.list(jdbc,
+                "select u.id,u.username,u.callsign,u.avatar_url,u.is_regular_member,max(v.created_at) voted_at " +
+                        "from plan_votes v join users u on u.id=v.user_id where v.plan_id=? " +
+                        "group by u.id,u.username,u.callsign,u.avatar_url,u.is_regular_member order by u.is_regular_member desc,voted_at desc,u.id desc",
+                id));
+        return ApiResponse.ok(out);
+    }
+
     @GetMapping("/activity-plans/{id}/convert-preview")
     public ApiResponse<Map<String, Object>> convertPreview(@PathVariable int id, HttpServletRequest req) {
         auth.require(req, "plan:update");
@@ -368,6 +390,59 @@ public class AdminActivityController {
         result.put("ids", Rows.join(validIds));
         result.put("names", String.join("、", names));
         return result;
+    }
+
+    private boolean canViewPlanVotes(Map<String, Object> plan, Map<String, Object> user) {
+        String role = text(user.get("role"));
+        if ("superadmin".equals(role) || "admin".equals(role) || "activity_admin".equals(role)) return true;
+        String userId = String.valueOf(user.get("id"));
+        if (userId.equals(String.valueOf(plan.get("created_by_id")))) return true;
+        return Rows.csv(text(plan.get("organizer_ids"))).contains(userId);
+    }
+
+    private Map<String, Object> voteSection(int planId, String type, String title, List<Map<String, Object>> options) {
+        Map<Integer, List<Map<String, Object>>> voters = new HashMap<Integer, List<Map<String, Object>>>();
+        for (Map<String, Object> voter : Rows.list(jdbc,
+                "select v.option_id,u.id,u.username,u.callsign,u.avatar_url,u.is_regular_member,v.created_at voted_at " +
+                        "from plan_votes v join users u on u.id=v.user_id where v.plan_id=? and v.option_type=? " +
+                        "order by u.is_regular_member desc,v.created_at desc,u.id desc",
+                planId, type)) {
+            voters.computeIfAbsent(num(voter.get("option_id"), 0), key -> new ArrayList<Map<String, Object>>()).add(voter);
+        }
+        for (Map<String, Object> option : options) {
+            int optionId = num(option.get("id"), 0);
+            List<Map<String, Object>> optionVoters = voters.getOrDefault(optionId, Collections.emptyList());
+            int formalCount = 0;
+            for (Map<String, Object> voter : optionVoters) if (bool(voter.get("is_regular_member"))) formalCount++;
+            option.put("vote_count", optionVoters.size());
+            option.put("formal_vote_count", formalCount);
+            option.put("voters", optionVoters);
+        }
+        Map<String, Object> section = new LinkedHashMap<String, Object>();
+        section.put("type", type);
+        section.put("title", title);
+        section.put("options", options);
+        return section;
+    }
+
+    private List<Map<String, Object>> planDateVoteOptions(int planId) {
+        List<Map<String, Object>> rows = Rows.list(jdbc,
+                "select id,date label,remark subtitle from plan_date_options where plan_id=? order by date,id", planId);
+        for (Map<String, Object> row : rows) row.put("subtitle", text(row.get("subtitle")));
+        return rows;
+    }
+
+    private List<Map<String, Object>> planVenueVoteOptions(int planId) {
+        return Rows.list(jdbc,
+                "select v.id,v.name label,v.address subtitle from plan_venue_options o join venues v on v.id=o.venue_id where o.plan_id=? order by o.id",
+                planId);
+    }
+
+    private List<Map<String, Object>> planModeVoteOptions(int planId) {
+        return Rows.list(jdbc,
+                "select g.id,g.name label,case when g.suitable_people is null then '' else concat(g.suitable_people,'人') end subtitle " +
+                        "from plan_game_mode_options o join game_modes g on g.id=o.game_mode_id where o.plan_id=? order by o.id",
+                planId);
     }
 
     private String activityLocation(Map<String, Object> body, Integer venueId) {
@@ -697,6 +772,12 @@ public class AdminActivityController {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private boolean bool(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
     private String text(Object value) {

@@ -164,6 +164,7 @@
                 <el-button size="small" type="danger" v-if="can('activity:delete')" @click="remove(`/api/admin/activities/${row.id}`, loadActivities)">删除</el-button>
               </template>
               <template v-else>
+                <el-button size="small" v-if="canViewPlanVotes(row)" @click="openPlanVotes(row)">投票详情</el-button>
                 <el-button size="small" type="primary" v-if="can('activity:create') && !row.converted_activity_id" @click="convertPlan(row)">转为活动</el-button>
                 <el-button size="small" type="danger" v-if="can('plan:delete')" @click="remove(`/api/admin/activity-plans/${row.id}`, loadActivities)">删除</el-button>
               </template>
@@ -578,6 +579,42 @@
     </el-form>
     <template #footer><el-button @click="planForm = null">取消</el-button><el-button type="primary" @click="savePlan">保存</el-button></template>
   </el-dialog>
+  <el-dialog v-model="planVotesVisible" title="投票详情" width="920px">
+    <div v-loading="planVotesLoading" class="plan-votes-dialog">
+      <div class="plan-votes-head">
+        <div>
+          <h3>{{ planVotes.plan?.name || '-' }}</h3>
+          <p class="muted">总投票人数：{{ planVotes.total_voters || 0 }}</p>
+        </div>
+        <el-tag type="success">正式队员已标注</el-tag>
+      </div>
+      <div v-for="section in planVotes.sections || []" :key="section.type" class="plan-vote-section">
+        <h4>{{ section.title }}</h4>
+        <div class="plan-vote-options">
+          <div v-for="option in section.options || []" :key="`${section.type}-${option.id}`" class="plan-vote-option">
+            <div class="plan-vote-option-head">
+              <div>
+                <strong>{{ option.label }}</strong>
+                <p v-if="option.subtitle" class="muted">{{ option.subtitle }}</p>
+              </div>
+              <div class="plan-vote-counts">
+                <el-tag>{{ option.vote_count || 0 }} 票</el-tag>
+                <el-tag type="success">{{ option.formal_vote_count || 0 }} 正式</el-tag>
+              </div>
+            </div>
+            <div v-if="(option.voters || []).length" class="plan-voter-list">
+              <span v-for="voter in option.voters" :key="`${section.type}-${option.id}-${voter.id}`" class="plan-voter-pill" :class="{ formal: !!voter.is_regular_member }">
+                {{ voterLabel(voter) }}
+                <b v-if="!!voter.is_regular_member">正式</b>
+              </span>
+            </div>
+            <p v-else class="muted">暂无投票</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template #footer><el-button @click="planVotesVisible = false">关闭</el-button></template>
+  </el-dialog>
   <el-dialog v-model="invitePickerVisible" title="选择邀请人员" width="560px">
     <el-checkbox-group v-model="invitePickerSelected" class="invitee-option-list">
       <el-checkbox v-for="user in nonFormalUsers" :key="user.id" :label="String(user.id)">
@@ -766,9 +803,12 @@ export default {
       homepageCarouselImages: [],
 	      convertPickerVisible: false,
 	      convertPickerTitle: '',
-	      convertPickerOptions: [],
-	      convertPickerValue: '',
-	      convertPickerResolve: null,
+      convertPickerOptions: [],
+      convertPickerValue: '',
+      convertPickerResolve: null,
+      planVotesVisible: false,
+      planVotesLoading: false,
+      planVotes: { plan: null, total_voters: 0, sections: [] },
 	      roles: [],
       editVenue: null,
       venueMap: null,
@@ -899,6 +939,28 @@ export default {
     },
     can(permission) {
       return !this.me.permissions || this.me.permissions.includes(permission)
+    },
+    isAdminRole() {
+      return ['superadmin', 'admin', 'activity_admin'].includes(String(this.me.role || ''))
+    },
+    canViewPlanVotes(row) {
+      if (!row || row.record_type !== 'plan') return false
+      if (this.isAdminRole()) return true
+      if (String(row.created_by_id || '') === String(this.me.id || '')) return true
+      return this.parseIds(row.organizer_ids).includes(String(this.me.id || ''))
+    },
+    voterLabel(voter) {
+      return voter.callsign || voter.username || `ID ${voter.id}`
+    },
+    async openPlanVotes(row) {
+      this.planVotesVisible = true
+      this.planVotesLoading = true
+      this.planVotes = { plan: row, total_voters: 0, sections: [] }
+      try {
+        this.planVotes = await api(`/api/admin/activity-plans/${row.id}/votes`)
+      } finally {
+        this.planVotesLoading = false
+      }
     },
     async login() {
       const data = await api('/api/admin/auth/login', { method: 'POST', body: this.loginForm })

@@ -145,6 +145,7 @@
       <button class="btn plan-vote-btn" :disabled="selectedPlan.voted" @click="submitPlanVote">
         {{ selectedPlan.voted ? '已投票' : '投票' }}
       </button>
+      <button class="btn secondary plan-vote-btn" @click="openShareDialog">分享策划</button>
     </div>
 
     <div v-if="tab === 'activities' && selectedActivity" class="page detail-page">
@@ -179,6 +180,7 @@
 
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
+          <button class="btn secondary detail-main-action" @click="openShareDialog">分享活动</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
           <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
             签到
@@ -579,6 +581,28 @@
       </div>
     </div>
 
+    <div v-if="shareDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="微信分享活动">
+      <div class="modal-backdrop" @click="shareDialog.show = false"></div>
+      <div class="modal-panel confirm-panel share-modal-panel">
+        <h2>分享活动</h2>
+        <div class="share-preview-card">
+          <img :src="shareDialog.image" alt="活动分享图" />
+          <div>
+            <strong>{{ shareDialog.title }}</strong>
+            <span>{{ shareDialog.time }}</span>
+            <span>{{ shareDialog.location }}</span>
+          </div>
+        </div>
+        <p class="muted">微信内可点击右上角分享给好友或朋友圈；也可以复制链接发送。</p>
+        <div class="share-link-box">{{ shareDialog.url }}</div>
+        <div class="confirm-actions">
+          <button class="btn secondary" @click="shareDialog.show = false">关闭</button>
+          <button class="btn secondary" @click="copyShareLink">复制链接</button>
+          <button class="btn" @click="nativeShareActivity">系统分享</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="confirmDialog.show" class="modal">
       <div class="modal-backdrop" @click="resolveConfirm(false)"></div>
       <div class="modal-panel confirm-panel">
@@ -644,6 +668,7 @@ export default {
       checkinDialog: { show: false, qrToken: '', mode: 'choice' },
       checkinQrScanner: null,
       checkinQrDialog: { show: false, dataUrl: '', expiresAt: '' },
+      shareDialog: { show: false, title: '', time: '', location: '', image: '', url: '' },
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
       squadEdits: {},
@@ -746,6 +771,8 @@ export default {
   },
   methods: {
     expireSession() {
+      if (this.selectedActivity) this.replaceActivityUrl(this.selectedActivity)
+      if (this.selectedPlan) this.replacePlanUrl(this.selectedPlan.id)
       setToken('')
       this.view = 'login'
       this.tab = 'activities'
@@ -875,6 +902,7 @@ export default {
         this.tab = 'activities'
         this.selectedActivity = null
         this.selectedPlan = null
+        this.clearDetailUrl()
         this.loadActivities()
       }
     },
@@ -888,11 +916,17 @@ export default {
       window.location.href = `${base}?${params.toString()}`
     },
     async openRequestedActivity() {
-      const id = Number(new URLSearchParams(location.search).get('activityId'))
+      const params = new URLSearchParams(location.search)
+      const id = Number(params.get('activityId'))
       if (this.view === 'app' && Number.isInteger(id) && id > 0 && Number(this.selectedActivity) !== id) {
         await this.openActivity(id)
+        return
       }
-      const qrToken = new URLSearchParams(location.search).get('checkinToken') || ''
+      const planId = Number(params.get('planId'))
+      if (this.view === 'app' && Number.isInteger(planId) && planId > 0 && Number(this.selectedPlan?.id) !== planId) {
+        await this.openPlanById(planId)
+      }
+      const qrToken = params.get('checkinToken') || ''
       if (this.view === 'app' && this.selectedActivity && qrToken && !this.detail.checkin?.present) this.openCheckinDialog(qrToken)
     },
     redirectAfterLogin() {
@@ -923,9 +957,24 @@ export default {
     },
     openHomeCard(item) {
       if (item.record_kind === 'activity') return this.openActivity(item.id)
+      return this.openPlan(item)
+    },
+    openPlan(item) {
       this.selectedActivity = null
+      this.detail = {}
       this.selectedPlan = item
       this.planVoteForm = this.planVoteFormFromPlan(item)
+      this.replacePlanUrl(item.id)
+      this.updatePlanShareMeta()
+    },
+    async openPlanById(id) {
+      let plan = this.activities.find(item => item.record_kind === 'plan' && Number(item.id) === Number(id))
+      if (!plan) {
+        await this.loadActivities()
+        plan = this.activities.find(item => item.record_kind === 'plan' && Number(item.id) === Number(id))
+      }
+      if (!plan) throw new Error('策划不存在或不可见')
+      this.openPlan(plan)
     },
     planVoteFormFromPlan(plan) {
       return {
@@ -1015,10 +1064,134 @@ export default {
     async openActivity(id) {
       this.selectedPlan = null
       this.selectedActivity = id
+      this.replaceActivityUrl(id)
       this.detail = await api(`/api/h5/activities/${id}`)
       this.prepareJoinJobs()
       this.prepareSquadEdits()
       this.prepareMemberAssignments()
+      this.updateActivityShareMeta()
+    },
+    activityShareUrl(id = this.selectedActivity) {
+      const url = new URL(location.href)
+      url.search = ''
+      url.searchParams.set('activityId', String(id))
+      url.hash = '#/app'
+      return url.href
+    },
+    replaceActivityUrl(id) {
+      if (!id || this.view !== 'app') return
+      const next = this.activityShareUrl(id)
+      if (next !== location.href) history.replaceState(null, '', next)
+    },
+    planShareUrl(id = this.selectedPlan?.id) {
+      const url = new URL(location.href)
+      url.search = ''
+      url.searchParams.set('planId', String(id))
+      url.hash = '#/app'
+      return url.href
+    },
+    replacePlanUrl(id) {
+      if (!id || this.view !== 'app') return
+      const next = this.planShareUrl(id)
+      if (next !== location.href) history.replaceState(null, '', next)
+    },
+    clearDetailUrl() {
+      const url = new URL(location.href)
+      if (!url.searchParams.has('activityId') && !url.searchParams.has('planId') && !url.searchParams.has('checkinToken')) return
+      url.searchParams.delete('activityId')
+      url.searchParams.delete('planId')
+      url.searchParams.delete('checkinToken')
+      url.hash = '#/app'
+      history.replaceState(null, '', url.href)
+    },
+    absoluteUrl(value) {
+      return new URL(value || this.defaultActivityBanner, location.origin).href
+    },
+    shareTitle() {
+      if (this.selectedPlan) return this.selectedPlan.name || '宁波甬士活动策划'
+      return this.detail.name || '宁波甬士活动'
+    },
+    shareDescription() {
+      if (this.selectedPlan) return `发起人：${this.selectedPlan.creator_name || '未设置'}`
+      const time = this.formatTimeRange(this.detail.start_at, this.detail.end_at)
+      const venue = this.displayVenueAddress(this.detail) || this.displayVenueName(this.detail)
+      return [time, venue].filter(Boolean).join(' · ')
+    },
+    updateActivityShareMeta() {
+      const title = this.shareTitle()
+      const description = this.shareDescription()
+      const image = this.absoluteUrl(this.detail.banner_url || this.defaultActivityBanner)
+      document.title = title
+      this.setMeta('description', description)
+      this.setMeta('og:title', title, 'property')
+      this.setMeta('og:description', description, 'property')
+      this.setMeta('og:image', image, 'property')
+      this.setMeta('og:url', this.activityShareUrl(), 'property')
+    },
+    updatePlanShareMeta() {
+      const title = this.shareTitle()
+      const description = this.shareDescription()
+      const image = this.absoluteUrl(this.selectedPlan?.banner_url || this.defaultActivityBanner)
+      document.title = title
+      this.setMeta('description', description)
+      this.setMeta('og:title', title, 'property')
+      this.setMeta('og:description', description, 'property')
+      this.setMeta('og:image', image, 'property')
+      this.setMeta('og:url', this.planShareUrl(), 'property')
+    },
+    setMeta(name, content, attr = 'name') {
+      if (!content) return
+      let el = document.head.querySelector(`meta[${attr}="${name}"]`)
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, name)
+        document.head.appendChild(el)
+      }
+      el.setAttribute('content', content)
+    },
+    openShareDialog() {
+      const isPlan = !!this.selectedPlan
+      const url = isPlan ? this.planShareUrl() : this.activityShareUrl()
+      this.shareDialog = {
+        show: true,
+        title: this.shareTitle(),
+        time: isPlan ? `发起人：${this.selectedPlan.creator_name || '未设置'}` : (this.formatTimeRange(this.detail.start_at, this.detail.end_at) || '时间待定'),
+        location: isPlan ? `投票截止：${this.formatDateTime(this.selectedPlan.vote_deadline) || '待定'}` : (this.displayVenueAddress(this.detail) || this.displayVenueName(this.detail) || '地点待定'),
+        image: this.absoluteUrl((isPlan ? this.selectedPlan.banner_url : this.detail.banner_url) || this.defaultActivityBanner),
+        url
+      }
+      isPlan ? this.updatePlanShareMeta() : this.updateActivityShareMeta()
+    },
+    async copyShareLink() {
+      const url = this.shareDialog.url || this.activityShareUrl()
+      try {
+        await navigator.clipboard.writeText(url)
+      } catch {
+        const input = document.createElement('textarea')
+        input.value = url
+        input.setAttribute('readonly', 'readonly')
+        input.style.position = 'fixed'
+        input.style.left = '-9999px'
+        document.body.appendChild(input)
+        input.select()
+        document.execCommand('copy')
+        document.body.removeChild(input)
+      }
+      this.showToast('活动链接已复制')
+    },
+    async nativeShareActivity() {
+      const data = {
+        title: this.shareDialog.title || this.shareTitle(),
+        text: `${this.shareDialog.time || ''} ${this.shareDialog.location || ''}`.trim(),
+        url: this.shareDialog.url || this.activityShareUrl()
+      }
+      if (!navigator.share) {
+        await this.copyShareLink()
+        return
+      }
+      try {
+        await navigator.share(data)
+      } catch {}
     },
     async submitPlanVote() {
       const body = this.planVoteForm

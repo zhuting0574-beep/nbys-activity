@@ -1766,3 +1766,67 @@ select option {
   margin: 16px auto;
   border-radius: 12px;
 }
+
+.share-modal-panel {
+  width: min(460px, 100%);
+  background: #111827;
+  border-color: rgba(148, 163, 184, .3);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, .58);
+}
+
+.share-preview-card {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px;
+  margin: 12px 0;
+  text-align: left;
+  background: rgba(15, 23, 42, .78);
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 14px;
+}
+
+.share-preview-card img {
+  width: 108px;
+  height: 76px;
+  object-fit: cover;
+  background: rgba(2, 6, 23, .6);
+  border-radius: 10px;
+}
+
+.share-preview-card div {
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  min-width: 0;
+}
+
+.share-preview-card strong {
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-preview-card span {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-link-box {
+  overflow-wrap: anywhere;
+  padding: 10px;
+  margin: 12px 0;
+  color: #bfdbfe;
+  text-align: left;
+  background: rgba(2, 6, 23, .45);
+  border: 1px solid rgba(59, 130, 246, .28);
+  border-radius: 12px;
+  font-size: 12px;
+}

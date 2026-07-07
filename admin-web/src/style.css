@@ -117,6 +117,86 @@ body {
   color: #64748b;
 }
 
+.plan-votes-dialog {
+  display: grid;
+  gap: 16px;
+}
+
+.plan-votes-head,
+.plan-vote-option-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.plan-votes-head h3,
+.plan-vote-section h4,
+.plan-vote-option strong {
+  margin: 0;
+}
+
+.plan-vote-section {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.plan-vote-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.plan-vote-option {
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.plan-vote-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.plan-voter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.plan-voter-pill {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 9px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.plan-voter-pill.formal {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+  font-weight: 700;
+}
+
+.plan-voter-pill b {
+  padding: 1px 5px;
+  color: #fff;
+  background: #16a34a;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
 .dashboard-page {
   display: grid;
   gap: 18px;
