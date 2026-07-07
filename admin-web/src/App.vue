@@ -145,7 +145,12 @@
             <template #default="{ row }">{{ formatDateTime(row.start_at || row.vote_deadline || row.end_at) }}</template>
           </el-table-column>
           <el-table-column label="地点" min-width="120"><template #default="{ row }">{{ row.venue_name || row.location || '-' }}</template></el-table-column>
-          <el-table-column label="报名"><template #default="{ row }">{{ row.enroll_count || 0 }} / {{ row.signup_limit || '-' }}</template></el-table-column>
+          <el-table-column label="报名">
+            <template #default="{ row }">
+              <span v-if="row.record_type === 'plan'">{{ row.voter_count || row.enroll_count || 0 }}</span>
+              <span v-else>{{ row.enroll_count || 0 }} / {{ row.signup_limit || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="checkin_count" label="签到" />
           <el-table-column prop="display_status" label="状态" />
           <el-table-column label="操作" width="520">

@@ -71,8 +71,11 @@ public class AdminActivityController {
             if (st.isEmpty() || st.equals(String.valueOf(row.get("display_status")))) filteredActivities.add(row);
         }
         List<Map<String, Object>> plans = Rows.list(jdbc,
-                "select p.*, 'plan' record_type, null start_at, p.vote_deadline end_at, null location, 0 enroll_count, 0 checkin_count " +
-                        "from activity_plans p where (?='' or p.name like concat('%',?,'%')) and (?='' or ?='plan') order by p.created_at desc,p.id desc",
+                "select p.*, 'plan' record_type, null start_at, p.vote_deadline end_at, null location, " +
+                        "coalesce(v.voter_count,0) voter_count, coalesce(v.voter_count,0) enroll_count, 0 checkin_count " +
+                        "from activity_plans p " +
+                        "left join (select plan_id,count(distinct user_id) voter_count from plan_votes group by plan_id) v on v.plan_id=p.id " +
+                        "where (?='' or p.name like concat('%',?,'%')) and (?='' or ?='plan') order by p.created_at desc,p.id desc",
                 q, q, rt, rt);
         List<Map<String, Object>> filteredPlans = new ArrayList<Map<String, Object>>();
         for (Map<String, Object> row : plans) {
