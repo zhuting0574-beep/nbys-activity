@@ -21,9 +21,16 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activities", "banner_url", "varchar(500) DEFAULT NULL COMMENT '活动banner图'", "name");
             addColumn("activities", "banner_source", "varchar(20) NOT NULL DEFAULT 'venue' COMMENT 'custom=用户上传, venue=跟随场地默认图'", "banner_url");
             addColumn("activities", "venue_id", "int DEFAULT NULL COMMENT '关联场地ID'", "location");
+            addColumn("activities", "checkin_methods", "varchar(30) NOT NULL DEFAULT 'location,qr' COMMENT '签到方式：location,qr'", "venue_id");
+            addColumn("activities", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");
             addColumn("activity_plans", "banner_url", "varchar(500) DEFAULT NULL COMMENT '策划banner图'", "name");
+            addColumn("activity_plans", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");
+            jdbc.update("update activities set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
+            jdbc.update("update activity_plans set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
+            addColumn("venues", "longitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 longitude for check-in'", "address");
+            addColumn("venues", "latitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 latitude for check-in'", "longitude");
             addColumn("users", "avatar_url", "varchar(500) DEFAULT NULL COMMENT '用户头像'", "callsign");
             dropColumn("users", "phone");
             dropColumn("users", "id_card");
@@ -31,6 +38,9 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("users", "temp_password_expires_at", "datetime DEFAULT NULL COMMENT '临时密码过期时间'", "must_change_password");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
+            addColumn("attendance_events", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "organizer");
+            jdbc.update("update attendance_events ev join users u on trim(ev.organizer)=coalesce(nullif(u.callsign,''),u.username) " +
+                    "set ev.organizer_ids=cast(u.id as char) where coalesce(ev.organizer_ids,'')='' and u.disabled=0 and u.is_regular_member=1");
             jdbc.execute("create table if not exists activity_launcher_options (id int not null auto_increment, activity_id int not null, launcher_id int not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_activity_launcher_option(activity_id, launcher_id), key idx_launcher_option_activity(activity_id)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists role_permissions (id int not null auto_increment, role varchar(20) not null, permission_code varchar(80) not null, created_at datetime not null default current_timestamp, primary key(id), unique key uk_role_permission(role, permission_code)) engine=InnoDB default charset=utf8mb4");
             jdbc.execute("create table if not exists user_notifications (id int not null auto_increment, user_id int not null, type varchar(40) not null, title varchar(120) not null, content varchar(500) not null, related_id int default null, read_at datetime default null, created_at datetime not null default current_timestamp, primary key(id), key idx_user_read(user_id, read_at)) engine=InnoDB default charset=utf8mb4");

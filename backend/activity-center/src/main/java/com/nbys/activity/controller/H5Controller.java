@@ -6,6 +6,7 @@ import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,19 +15,29 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 @RestController
 @RequestMapping("/api/h5")
 public class H5Controller {
     private static final String DEFAULT_PLAN_BANNER = "/uploads/activity-plan-default.jpg";
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final double CHECKIN_RADIUS_METERS = 1000d;
 
     private final JdbcTemplate jdbc;
     private final AuthService auth;
+    private final byte[] checkinQrSecret;
 
-    public H5Controller(JdbcTemplate jdbc, AuthService auth) {
+    public H5Controller(JdbcTemplate jdbc, AuthService auth,
+                        @Value("${CHECKIN_QR_SECRET:${AUTH_TOKEN_SECRET:nbys-local-development-secret-change-me}}") String checkinQrSecret) {
         this.jdbc = jdbc;
         this.auth = auth;
+        this.checkinQrSecret = checkinQrSecret.getBytes(StandardCharsets.UTF_8);
     }
 
     @GetMapping("/activities")
@@ -46,7 +57,7 @@ public class H5Controller {
         for (Map<String, Object> row : rows) {
             enrichVenue(row);
             String status = displayStatus(row);
-            if (visible(row, me) && ("报名中".equals(status) || "活动开始".equals(status))) {
+            if (visible(row, me) && ("报名中".equals(status) || "活动进行中".equals(status))) {
                 row.put("display_status", status);
                 row.put("signup_limit", signupLimit(row));
                 result.add(row);
@@ -67,7 +78,14 @@ public class H5Controller {
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
         row.put("enroll_count", enrolledUserCount(id));
-        row.put("is_activity_creator", row.get("created_by_id") != null && String.valueOf(row.get("created_by_id")).equals(String.valueOf(userId)));
+        row.put("checkin_methods", checkinMethods(row));
+        applyActivityVoteSummary(row);
+        boolean activityManager = isCreator(row, userId);
+        row.put("is_activity_creator", activityManager);
+        row.put("is_activity_organizer", activityManager);
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        row.put("checkin_open", isCheckinOpen(row, now));
+        row.put("can_show_checkin_qr", activityManager || hasPermission(me, "activity:update"));
         row.put("my_enrollment", Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=?", id, userId));
         List<Map<String, Object>> squads = Rows.list(jdbc,
                 "select s.*, (select count(*) from enrollments e where e.activity_id=s.activity_id and e.camp_no=s.camp_no and e.squad_no=s.squad_no) member_count " +
@@ -149,21 +167,34 @@ public class H5Controller {
 
     @GetMapping("/attendance/my-summary")
     public ApiResponse<Map<String, Object>> myAttendanceSummary(HttpServletRequest req) {
-        int userId = ((Number) auth.current(req).get("id")).intValue();
-        return ApiResponse.ok(attendanceSummary(userId));
+        return ApiResponse.ok(attendanceSummary(auth.current(req)));
     }
 
-    private Map<String, Object> attendanceSummary(int userId) {
+    private Map<String, Object> attendanceSummary(Map<String, Object> user) {
+        int userId = ((Number) user.get("id")).intValue();
         int year = LocalDate.now().getYear();
         String start = year + "-01-01";
         String end = (year + 1) + "-01-01";
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        out.put("present_count", Rows.one(jdbc,
-                "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
-                        "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
-                userId, start, end).get("total"));
-        out.put("activity_total", Rows.one(jdbc,
-                "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
+        if (auth.isGuest(user)) {
+            String visibleToGuest = " and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id " +
+                    "and (coalesce(a.visibility_type,'all') not in ('official','official_plus_invite') " +
+                    "or (a.visibility_type='official_plus_invite' and find_in_set(?,coalesce(a.invitee_ids,''))>0))))";
+            out.put("present_count", Rows.one(jdbc,
+                    "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?" + visibleToGuest,
+                    userId, start, end, userId).get("total"));
+            out.put("activity_total", Rows.one(jdbc,
+                    "select count(*) total from attendance_events ev where ev.event_date>=? and ev.event_date<?" + visibleToGuest,
+                    start, end, userId).get("total"));
+        } else {
+            out.put("present_count", Rows.one(jdbc,
+                    "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
+                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
+                    userId, start, end).get("total"));
+            out.put("activity_total", Rows.one(jdbc,
+                    "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
+        }
         return out;
     }
 
@@ -177,9 +208,10 @@ public class H5Controller {
 
         List<Map<String, Object>> events = Rows.list(jdbc,
                 "select ev.id,ev.name,ev.event_date,ev.location,ev.organizer,ev.activity_region," +
-                        "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended " +
+                        "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended," +
+                        "case when ev.source_activity_id is not null and exists(select 1 from enrollments e where e.activity_id=ev.source_activity_id and e.user_id=?) then 1 else 0 end enrolled " +
                         "from attendance_events ev where ev.event_date>=? and ev.event_date<? order by ev.event_date asc,ev.id asc",
-                userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
+                userId, userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
         int presentCount = 0;
         for (Map<String, Object> event : events) {
             if (num(event.get("attended"), 0) == 1) presentCount++;
@@ -225,17 +257,49 @@ public class H5Controller {
     }
 
     @PostMapping("/activities/{id}/checkin")
-    public ApiResponse<Void> checkin(@PathVariable int id, HttpServletRequest req) {
+    public ApiResponse<Void> checkin(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, userId) == null) throw new IllegalArgumentException("请先报名");
         Map<String, Object> a = Rows.one(jdbc, "select * from activities where id=?", id);
-        LocalDateTime start = LocalDateTime.parse(String.valueOf(a.get("start_at")).replace(" ", "T"));
-        LocalDateTime now = LocalDateTime.now();
-        if (!now.toLocalDate().equals(start.toLocalDate()) || now.isBefore(start.minusHours(3))) throw new IllegalArgumentException("活动当天开始前3小时才允许签到");
+        if (a == null) throw new IllegalArgumentException("活动不存在");
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        requireCheckinWindow(a, now);
+        String source = text(body.get("source"));
+        if (!"location".equals(source) && !"qr".equals(source)) throw new IllegalArgumentException("签到方式不合法");
+        if (!checkinMethods(a).contains(source)) throw new IllegalArgumentException("该活动未开放此签到方式");
+        if ("qr".equals(source)) {
+            verifyCheckinQrToken(id, text(body.get("qr_token")), now);
+        } else {
+            Map<String, Object> venue = checkinVenue(a);
+            double latitude = coordinate(body.get("latitude"), -90, 90, "定位纬度不合法");
+            double longitude = coordinate(body.get("longitude"), -180, 180, "定位经度不合法");
+            double venueLatitude = coordinate(venue.get("latitude"), -90, 90, "活动场地未配置签到坐标，请联系管理员");
+            double venueLongitude = coordinate(venue.get("longitude"), -180, 180, "活动场地未配置签到坐标，请联系管理员");
+            double distance = distanceMeters(latitude, longitude, venueLatitude, venueLongitude);
+            if (distance > CHECKIN_RADIUS_METERS) throw new IllegalArgumentException("当前位置距离活动场地约" + Math.round(distance) + "米，超过1公里签到范围");
+        }
         Integer eventId = ensureAttendanceEvent(id, a);
         jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now()) " +
                 "on duplicate key update present=1,updated_by_id=values(updated_by_id),updated_at=now()", eventId, userId, userId);
         return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/activities/{id}/checkin-qr")
+    public ApiResponse<Map<String, Object>> checkinQr(@PathVariable int id, HttpServletRequest req) {
+        Map<String, Object> me = auth.current(req);
+        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? and deleted_at is null", id);
+        if (activity == null) throw new IllegalArgumentException("活动不存在");
+        if (!checkinMethods(activity).contains("qr")) throw new IllegalArgumentException("该活动未开放二维码签到");
+        int userId = ((Number) me.get("id")).intValue();
+        if (!isCreator(activity, userId) && !hasPermission(me, "activity:update")) throw new SecurityException("没有展示签到二维码的权限");
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        requireCheckinWindow(activity, now);
+        long expiresAt = dateTime(activity.get("end_at")).atZone(BUSINESS_ZONE).toEpochSecond();
+        String payload = id + ":" + expiresAt;
+        Map<String, Object> out = new LinkedHashMap<String, Object>();
+        out.put("token", Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8)) + "." + signCheckinQr(payload));
+        out.put("expires_at", activity.get("end_at"));
+        return ApiResponse.ok(out);
     }
 
     @Transactional
@@ -272,7 +336,7 @@ public class H5Controller {
         Map<String, Object> activity = managedActivity(id);
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=? for update", squadId, id);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
-        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) throw new SecurityException("只有活动发起人或本队队长可以修改小队设置");
+        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) throw new SecurityException("只有活动发起人、组织人或本队队长可以修改小队设置");
         int locked = body.containsKey("locked") ? (bool(body.get("locked")) ? 1 : 0) : (bool(squad.get("locked")) ? 1 : 0);
         String channel = body.containsKey("radio_channel") ? text(body.get("radio_channel")) : text(squad.get("radio_channel"));
         if (!channel.matches("^[0-9]{3}\\.[0-9]{3}$")) throw new IllegalArgumentException("对讲频率格式应为439.100");
@@ -345,6 +409,7 @@ public class H5Controller {
                 row.put("my_date_option_ids", myVotes.getOrDefault("date", Collections.emptyList()));
                 row.put("my_venue_ids", myVotes.getOrDefault("venue", Collections.emptyList()));
                 row.put("my_game_mode_ids", myVotes.getOrDefault("game_mode", Collections.emptyList()));
+                applyPlanVoteSummary(row);
                 result.add(row);
             }
         }
@@ -358,7 +423,7 @@ public class H5Controller {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("activities", activityRows(me));
         out.put("plans", planRows(me, userId));
-        out.put("attendance_summary", attendanceSummary(userId));
+        out.put("attendance_summary", attendanceSummary(me));
         out.put("notifications", notificationRows(userId));
         return ApiResponse.ok(out);
     }
@@ -417,11 +482,15 @@ public class H5Controller {
     }
 
     private boolean isCreator(Map<String, Object> activity, int userId) {
-        return sameId(activity.get("created_by_id"), userId);
+        if (sameId(activity.get("created_by_id"), userId)) return true;
+        if (Rows.csv(text(activity.get("organizer_ids"))).contains(String.valueOf(userId))) return true;
+        return Rows.one(jdbc,
+                "select id from attendance_events where source_activity_id=? and find_in_set(?,coalesce(organizer_ids,''))>0 limit 1",
+                activity.get("id"), String.valueOf(userId)) != null;
     }
 
     private void requireCreator(Map<String, Object> activity, int userId) {
-        if (!isCreator(activity, userId)) throw new SecurityException("只有活动发起人可以执行该操作");
+        if (!isCreator(activity, userId)) throw new SecurityException("只有活动发起人或组织人可以执行该操作");
     }
 
     private Map<String, Object> enrollmentForUpdate(int activityId, int userId) {
@@ -466,26 +535,135 @@ public class H5Controller {
     }
 
     private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
-        Map<String, Object> existing = Rows.one(jdbc, "select id from attendance_events where source_activity_id=?", activityId);
-        if (existing != null) return ((Number) existing.get("id")).intValue();
+        String organizer = activityOrganizer(a);
+        String selectedOrganizerIds = text(a.get("organizer_ids"));
+        if (selectedOrganizerIds.isEmpty() && a.get("created_by_id") != null) selectedOrganizerIds = String.valueOf(a.get("created_by_id"));
+        final String organizerId = selectedOrganizerIds;
+        Map<String, Object> existing = Rows.one(jdbc, "select id,organizer,organizer_ids from attendance_events where source_activity_id=?", activityId);
+        if (existing != null) {
+            if (text(existing.get("organizer_ids")).isEmpty() && !organizerId.isEmpty()) {
+                String displayName = text(existing.get("organizer")).isEmpty() ? organizer : text(existing.get("organizer"));
+                jdbc.update("update attendance_events set organizer=?,organizer_ids=? where id=?", displayName, organizerId, existing.get("id"));
+            }
+            return ((Number) existing.get("id")).intValue();
+        }
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into attendance_events(source_activity_id,name,event_date,location,organizer,activity_region,is_manual,created_at) values(?,?,date(?),?,?,?,0,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into attendance_events(source_activity_id,name,event_date,location,organizer,organizer_ids,activity_region,is_manual,created_at) values(?,?,date(?),?,?,?,?,0,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, activityId);
             ps.setObject(2, a.get("name"));
             ps.setObject(3, a.get("start_at"));
             ps.setObject(4, a.get("location"));
-            ps.setObject(5, "");
-            ps.setObject(6, a.get("activity_region"));
+            ps.setObject(5, organizer);
+            ps.setObject(6, organizerId);
+            ps.setObject(7, a.get("activity_region"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
     }
 
+    private String activityOrganizer(Map<String, Object> activity) {
+        String ids = text(activity.get("organizer_ids"));
+        if (ids.isEmpty() && activity.get("created_by_id") != null) ids = String.valueOf(activity.get("created_by_id"));
+        if (ids.isEmpty()) return "";
+        List<Map<String, Object>> users = Rows.list(jdbc,
+                "select coalesce(nullif(callsign,''),username) organizer from users " +
+                        "where find_in_set(cast(id as char),?)>0 order by callsign,id", ids);
+        List<String> names = new ArrayList<String>();
+        for (Map<String, Object> user : users) names.add(text(user.get("organizer")));
+        return String.join("、", names);
+    }
+
+    private boolean hasPermission(Map<String, Object> user, String permission) {
+        Object permissions = user.get("permissions");
+        return permissions instanceof Collection && ((Collection<?>) permissions).contains(permission);
+    }
+
+    private LocalDateTime dateTime(Object value) {
+        if (value == null) throw new IllegalArgumentException("活动时间未配置");
+        return LocalDateTime.parse(String.valueOf(value).replace(" ", "T"));
+    }
+
+    private boolean isCheckinOpen(Map<String, Object> activity, LocalDateTime now) {
+        try {
+            return isWithinCheckinWindow(now, dateTime(activity.get("start_at")), dateTime(activity.get("end_at")));
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void requireCheckinWindow(Map<String, Object> activity, LocalDateTime now) {
+        LocalDateTime activityStart = dateTime(activity.get("start_at"));
+        LocalDateTime start = activityStart.minusHours(3);
+        LocalDateTime end = dateTime(activity.get("end_at"));
+        if (now.isBefore(start)) throw new IllegalArgumentException("活动开始前3小时开放签到");
+        if (now.isAfter(end)) throw new IllegalArgumentException("活动已结束，签到已关闭");
+    }
+
+    static boolean isWithinCheckinWindow(LocalDateTime now, LocalDateTime start, LocalDateTime end) {
+        return !now.isBefore(start.minusHours(3)) && !now.isAfter(end);
+    }
+
+    private Map<String, Object> checkinVenue(Map<String, Object> activity) {
+        if (activity.get("venue_id") == null) throw new IllegalArgumentException("活动未关联后台场地，无法签到");
+        Map<String, Object> venue = Rows.one(jdbc, "select id,address,longitude,latitude from venues where id=?", activity.get("venue_id"));
+        if (venue == null) throw new IllegalArgumentException("活动场地不存在，请联系管理员");
+        if (venue.get("longitude") == null || venue.get("latitude") == null) throw new IllegalArgumentException("活动场地未配置签到坐标，请联系管理员");
+        return venue;
+    }
+
+    private double coordinate(Object value, double min, double max, String message) {
+        try {
+            double number = Double.parseDouble(String.valueOf(value));
+            if (!Double.isFinite(number) || number < min || number > max) throw new IllegalArgumentException(message);
+            return number;
+        } catch (NullPointerException | NumberFormatException e) {
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    static double distanceMeters(double latitude1, double longitude1, double latitude2, double longitude2) {
+        double earthRadius = 6371008.8d;
+        double latDistance = Math.toRadians(latitude2 - latitude1);
+        double lngDistance = Math.toRadians(longitude2 - longitude1);
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(latitude1)) * Math.cos(Math.toRadians(latitude2))
+                * Math.sin(lngDistance / 2) * Math.sin(lngDistance / 2);
+        return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    private String signCheckinQr(String payload) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(checkinQrSecret, "HmacSHA256"));
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("二维码签名失败", e);
+        }
+    }
+
+    private void verifyCheckinQrToken(int activityId, String token, LocalDateTime now) {
+        try {
+            String[] parts = token.split("\\.", 2);
+            if (parts.length != 2) throw new IllegalArgumentException();
+            String payload = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
+            if (!MessageDigest.isEqual(parts[1].getBytes(StandardCharsets.UTF_8), signCheckinQr(payload).getBytes(StandardCharsets.UTF_8))) throw new IllegalArgumentException();
+            String[] values = payload.split(":", 2);
+            long expiresAt = Long.parseLong(values[1]);
+            if (Integer.parseInt(values[0]) != activityId || now.atZone(BUSINESS_ZONE).toEpochSecond() > expiresAt) throw new IllegalArgumentException();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("签到二维码无效或已过期");
+        }
+    }
+
     private String displayStatus(Map<String, Object> row) {
         if (row.get("deleted_at") != null) return "活动取消";
-        String now = new java.sql.Timestamp(System.currentTimeMillis()).toString();
-        return String.valueOf(row.get("start_at")).compareTo(now) > 0 ? "报名中" : String.valueOf(row.get("end_at")).compareTo(now) < 0 ? "活动结束" : "活动开始";
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime start = dateTime(row.get("start_at"));
+        LocalDateTime end = dateTime(row.get("end_at"));
+        if (!now.isBefore(end)) return "活动结束";
+        if (!now.isBefore(start)) return "活动进行中";
+        return "报名中";
     }
 
     private int signupLimit(Map<String, Object> row) {
@@ -506,24 +684,60 @@ public class H5Controller {
         boolean customBanner = "custom".equals(text(row.get("banner_source"))) && !text(row.get("banner_url")).isEmpty();
         Map<String, Object> venue = null;
         if (row.get("venue_id") != null) {
-            venue = Rows.one(jdbc, "select name,address,image_url from venues where id=?", row.get("venue_id"));
+            venue = Rows.one(jdbc, "select name,address,longitude,latitude,image_url from venues where id=?", row.get("venue_id"));
         }
         if (venue == null) {
             String location = text(row.get("location"));
-            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address,image_url from venues where name=? or address=? limit 1", location, location);
+            if (!location.isEmpty()) venue = Rows.one(jdbc, "select name,address,longitude,latitude,image_url from venues where name=? or address=? limit 1", location, location);
         }
         if (venue != null) {
             if (!customBanner && !text(venue.get("image_url")).isEmpty()) row.put("banner_url", venue.get("image_url"));
             row.put("venue_name", venue.get("name"));
             row.put("venue_address", venue.get("address"));
+            row.put("venue_coordinates_configured", venue.get("longitude") != null && venue.get("latitude") != null);
         } else {
             row.put("venue_name", row.get("location"));
             row.put("venue_address", row.get("location"));
+            row.put("venue_coordinates_configured", false);
         }
     }
 
     private void applyDefaultPlanBanner(Map<String, Object> row) {
         if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
+    }
+
+    private Set<String> checkinMethods(Map<String, Object> activity) {
+        LinkedHashSet<String> methods = new LinkedHashSet<String>(Rows.csv(text(activity.get("checkin_methods"))));
+        methods.removeIf(method -> !"location".equals(method) && !"qr".equals(method));
+        if (methods.isEmpty()) methods.addAll(Arrays.asList("location", "qr"));
+        return methods;
+    }
+
+    private void applyPlanVoteSummary(Map<String, Object> plan) {
+        int planId = num(plan.get("id"), 0);
+        Map<String, Object> count = Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", planId);
+        plan.put("voter_count", count == null ? 0 : count.get("total"));
+        plan.put("voters", Rows.list(jdbc,
+                "select u.id,u.username,u.callsign,u.avatar_url,max(v.created_at) voted_at from plan_votes v join users u on u.id=v.user_id " +
+                        "where v.plan_id=? group by u.id,u.username,u.callsign,u.avatar_url order by voted_at desc,u.id desc limit 12",
+                planId));
+    }
+
+    private void applyActivityVoteSummary(Map<String, Object> activity) {
+        int activityId = num(activity.get("id"), 0);
+        Map<String, Object> plan = Rows.one(jdbc, "select id from activity_plans where converted_activity_id=? limit 1", activityId);
+        if (plan == null) {
+            activity.put("voter_count", 0);
+            activity.put("voters", Collections.emptyList());
+            return;
+        }
+        int planId = num(plan.get("id"), 0);
+        Map<String, Object> count = Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", planId);
+        activity.put("voter_count", count == null ? 0 : count.get("total"));
+        activity.put("voters", Rows.list(jdbc,
+                "select u.id,u.username,u.callsign,u.avatar_url,max(v.created_at) voted_at from plan_votes v join users u on u.id=v.user_id " +
+                        "where v.plan_id=? group by u.id,u.username,u.callsign,u.avatar_url order by voted_at desc,u.id desc limit 12",
+                planId));
     }
 
     private Map<Integer, List<Map<String, Object>>> groupByPlan(List<Map<String, Object>> rows) {

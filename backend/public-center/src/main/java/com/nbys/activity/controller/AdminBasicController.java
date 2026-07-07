@@ -28,15 +28,16 @@ public class AdminBasicController {
 
     @GetMapping("/venues/options")
     public ApiResponse<List<Map<String, Object>>> venueOptions() {
-        return ApiResponse.ok(Rows.list(jdbc, "select id,name,address,image_url from venues order by id desc"));
+        return ApiResponse.ok(Rows.list(jdbc, "select id,name,address,longitude,latitude,image_url from venues order by id desc"));
     }
 
     @PostMapping("/venues")
     public ApiResponse<Void> createVenue(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "venue:create");
         require(body, "name", "address");
-        jdbc.update("insert into venues(name,address,image_url,created_by_id,created_at) values(?,?,?,?,now())",
-                body.get("name"), body.get("address"), body.get("image_url"), auth.currentUserId(req));
+        validateCoordinates(body);
+        jdbc.update("insert into venues(name,address,longitude,latitude,image_url,created_by_id,created_at) values(?,?,?,?,?,?,now())",
+                body.get("name"), body.get("address"), body.get("longitude"), body.get("latitude"), body.get("image_url"), auth.currentUserId(req));
         return ApiResponse.ok(null);
     }
 
@@ -44,7 +45,8 @@ public class AdminBasicController {
     public ApiResponse<Void> updateVenue(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "venue:update");
         require(body, "name", "address");
-        jdbc.update("update venues set name=?, address=?, image_url=? where id=?", body.get("name"), body.get("address"), body.get("image_url"), id);
+        validateCoordinates(body);
+        jdbc.update("update venues set name=?, address=?, longitude=?, latitude=?, image_url=? where id=?", body.get("name"), body.get("address"), body.get("longitude"), body.get("latitude"), body.get("image_url"), id);
         String location = text(body.get("address"));
         if (location.isEmpty()) location = text(body.get("name"));
         jdbc.update("update activities set location=? where venue_id=?", location, id);
@@ -98,6 +100,22 @@ public class AdminBasicController {
 
     private void require(Map<String, Object> body, String... keys) {
         for (String key : keys) if (body.get(key) == null || String.valueOf(body.get(key)).trim().isEmpty()) throw new IllegalArgumentException(key + "不能为空");
+    }
+
+    private void validateCoordinates(Map<String, Object> body) {
+        Object lng = body.get("longitude");
+        Object lat = body.get("latitude");
+        if (lng == null && lat == null) return;
+        if (lng == null || lat == null) throw new IllegalArgumentException("经纬度必须同时填写");
+        try {
+            double longitude = Double.parseDouble(String.valueOf(lng));
+            double latitude = Double.parseDouble(String.valueOf(lat));
+            if (!Double.isFinite(longitude) || !Double.isFinite(latitude) || longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+                throw new IllegalArgumentException("场地经纬度不合法");
+            }
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("场地经纬度不合法");
+        }
     }
 
     private String text(Object value) {

@@ -22,6 +22,8 @@
           </div>
         </div>
       </div>
+      <div class="side-spacer"></div>
+      <div class="menu logout-menu" @click="logout">退出登录</div>
     </aside>
 
     <main class="main">
@@ -143,7 +145,12 @@
             <template #default="{ row }">{{ formatDateTime(row.start_at || row.vote_deadline || row.end_at) }}</template>
           </el-table-column>
           <el-table-column label="地点" min-width="120"><template #default="{ row }">{{ row.venue_name || row.location || '-' }}</template></el-table-column>
-          <el-table-column label="报名"><template #default="{ row }">{{ row.enroll_count || 0 }} / {{ row.signup_limit || '-' }}</template></el-table-column>
+          <el-table-column label="报名">
+            <template #default="{ row }">
+              <span v-if="row.record_type === 'plan'">{{ row.voter_count || row.enroll_count || 0 }}</span>
+              <span v-else>{{ row.enroll_count || 0 }} / {{ row.signup_limit || '-' }}</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="checkin_count" label="签到" />
           <el-table-column prop="display_status" label="状态" />
           <el-table-column label="操作" width="520">
@@ -157,6 +164,7 @@
                 <el-button size="small" type="danger" v-if="can('activity:delete')" @click="remove(`/api/admin/activities/${row.id}`, loadActivities)">删除</el-button>
               </template>
               <template v-else>
+                <el-button size="small" v-if="canViewPlanVotes(row)" @click="openPlanVotes(row)">投票详情</el-button>
                 <el-button size="small" type="primary" v-if="can('activity:create') && !row.converted_activity_id" @click="convertPlan(row)">转为活动</el-button>
                 <el-button size="small" type="danger" v-if="can('plan:delete')" @click="remove(`/api/admin/activity-plans/${row.id}`, loadActivities)">删除</el-button>
               </template>
@@ -257,7 +265,7 @@
             <h2>历史活动记录</h2>
             <p>用于补录非平台组织的活动；创建后可在下方表格手动点选出勤。</p>
           </div>
-          <el-button type="primary" v-if="can('attendance:create')" @click="editEvent = {}">手动增加历史活动</el-button>
+          <el-button type="primary" v-if="can('attendance:create')" @click="openAttendanceEvent()">手动增加历史活动</el-button>
         </div>
 
         <div class="attendance-card">
@@ -293,13 +301,13 @@
         <div class="attendance-card">
           <div class="attendance-section-head">
             <h2>出勤表</h2>
-            <p>实心圆点表示出勤。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
+            <p>实心绿点表示已签到，空心绿点表示已报名但未签到。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
           </div>
           <div class="attendance-table-scroll">
-            <el-table class="attendance-matrix" :style="{ minWidth: attendanceTableMinWidth }" :data="attendanceUsers" border height="560">
-              <el-table-column prop="callsign" label="人员" fixed width="160" />
-              <el-table-column label="出勤次数" fixed width="100"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
-              <el-table-column v-for="event in attendanceEvents" :key="event.id" width="190">
+            <el-table class="attendance-matrix" :data="attendanceUsers" border height="560">
+              <el-table-column prop="callsign" label="人员" fixed="left" width="112" />
+              <el-table-column label="出勤次数" fixed="left" width="50"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
+              <el-table-column v-for="event in attendanceEvents" :key="event.id" width="105">
                 <template #header>
                   <div class="attendance-event-head">
                     <strong>{{ event.name }}</strong>
@@ -310,14 +318,14 @@
                     <span>总: {{ eventPresentCount(event.id) }}</span>
                     <span>正式: {{ eventFormalPresentCount(event.id) }}</span>
                     <div class="attendance-event-actions">
-                      <el-button size="small" v-if="can('attendance:update')" @click.stop="editEvent = { ...event }">编辑</el-button>
-                      <el-button size="small" type="danger" v-if="can('attendance:delete') && event.is_manual" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
+                      <el-button size="small" v-if="can('attendance:update')" @click.stop="openAttendanceEvent(event)">编辑</el-button>
+                      <el-button size="small" type="danger" v-if="event.is_manual ? can('attendance:delete') : can('activity:delete')" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
                     </div>
                   </div>
                 </template>
                 <template #default="{ row }">
-                  <button class="attendance-dot" :class="{ present: isPresent(event.id, row.id) }" :disabled="!can('attendance:update')" @click="togglePresent(event.id, row.id)">
-                    {{ isPresent(event.id, row.id) ? '●' : '' }}
+                  <button class="attendance-dot" :class="{ present: isPresent(event.id, row.id), enrolled: isEnrolled(event.id, row.id) && !isPresent(event.id, row.id) }" :disabled="!can('attendance:update')" @click="togglePresent(event.id, row.id)">
+                    {{ isPresent(event.id, row.id) ? '●' : isEnrolled(event.id, row.id) ? '○' : '' }}
                   </button>
                 </template>
               </el-table-column>
@@ -383,7 +391,7 @@
             <img v-if="systemImages.login_background_url" class="settings-preview" :src="systemImages.login_background_url" />
             <div v-else class="settings-empty">未设置背景图</div>
             <div class="banner-upload-row">
-              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_background_url = r.data.url"><el-button>上传背景图</el-button></el-upload>
+              <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => systemImages.login_background_url = r.data.url" :on-error="handleUploadError"><el-button>上传背景图</el-button></el-upload>
               <el-button v-if="systemImages.login_background_url" @click="systemImages.login_background_url = ''">清除</el-button>
             </div>
           </div>
@@ -392,7 +400,7 @@
             <img v-if="systemImages.login_logo_url" class="settings-logo-preview" :src="systemImages.login_logo_url" />
             <div v-else class="settings-empty settings-logo-empty">使用默认 Logo</div>
             <div class="banner-upload-row">
-              <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => systemImages.login_logo_url = r.data.url"><el-button>上传Logo</el-button></el-upload>
+              <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => systemImages.login_logo_url = r.data.url" :on-error="handleUploadError"><el-button>上传Logo</el-button></el-upload>
               <el-button v-if="systemImages.login_logo_url" @click="systemImages.login_logo_url = ''">清除</el-button>
             </div>
           </div>
@@ -417,9 +425,10 @@
                   v-if="can('systemImage:update')"
                   action="/api/admin/files/upload"
                   accept="image/*"
-                  :headers="uploadHeaders"
+                  :http-request="uploadAdminFile"
                   :show-file-list="false"
                   :on-success="response => uploadHomepageCarousel(section.key, response)"
+                  :on-error="handleUploadError"
                 >
                   <el-button type="primary" size="small">上传图片</el-button>
                 </el-upload>
@@ -447,7 +456,7 @@
     </main>
   </div>
 
-  <el-dialog v-model="venueVisible" title="场地" width="560px"><el-form label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address" /></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
+  <el-dialog v-model="venueVisible" title="场地" width="720px" @opened="initVenueMap"><el-form v-if="editVenue" label-width="90px"><el-form-item label="场地图片"><div class="banner-upload-row"><el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadVenueFile" :show-file-list="false" :on-success="r => editVenue.image_url = r.data.url" :on-error="handleUploadError"><el-button>上传图片</el-button></el-upload><el-button v-if="editVenue.image_url" @click="editVenue.image_url = ''">清除</el-button></div><p class="muted venue-upload-hint">超过300KB的图片会自动压缩后保存</p><img v-if="editVenue.image_url" class="venue-preview" :src="editVenue.image_url" /><div v-else class="venue-empty">建议上传场地实景图，可作为活动默认Banner</div></el-form-item><el-form-item label="场地名称"><el-input v-model="editVenue.name" /></el-form-item><el-form-item label="场地地址"><el-input v-model="editVenue.address"><template #append><el-button @click="locateVenueAddress">按地址定位</el-button></template></el-input></el-form-item><el-form-item label="地图选点"><div class="venue-map-wrap"><div id="venue-map" class="venue-map"></div><p class="muted">点击地图设置签到中心点；签到范围为该点周围 1 公里。</p></div></el-form-item><el-form-item label="经纬度"><div class="venue-coordinate-row"><el-input-number v-model="editVenue.longitude" :precision="7" :step="0.000001" placeholder="经度" /><el-input-number v-model="editVenue.latitude" :precision="7" :step="0.000001" placeholder="纬度" /></div></el-form-item></el-form><template #footer><el-button @click="editVenue = null">取消</el-button><el-button type="primary" @click="saveVenue">保存</el-button></template></el-dialog>
   <el-dialog v-model="modeVisible" title="模式"><el-form label-width="90px"><el-form-item label="模式名称"><el-input v-model="editMode.name" /></el-form-item><el-form-item label="模式内容"><el-input v-model="editMode.rules" type="textarea" /></el-form-item><el-form-item label="人数"><el-input v-model="editMode.suitable_people" /></el-form-item></el-form><template #footer><el-button @click="editMode = null">取消</el-button><el-button type="primary" @click="saveMode">保存</el-button></template></el-dialog>
   <el-dialog v-model="userVisible" title="用户"><el-form label-width="110px"><el-form-item label="呼号"><el-input v-model="editUser.callsign" /></el-form-item><el-form-item label="权限"><el-select v-model="editUser.role"><el-option v-for="role in roles" :key="role.value" :label="role.label" :value="role.value" /></el-select></el-form-item><el-form-item label="账号禁用"><el-switch v-model="editUser.disabled" /></el-form-item><el-form-item label="正式队员"><el-switch v-model="editUser.is_regular_member" /></el-form-item></el-form><template #footer><el-button @click="editUser = null">取消</el-button><el-button type="primary" @click="saveUser">保存</el-button></template></el-dialog>
   <el-dialog v-model="launcherVisible" title="发射器" width="560px">
@@ -465,11 +474,16 @@
         <img v-if="activityBannerPreview()" class="banner-preview" :src="activityBannerPreview()" />
         <div v-else class="banner-empty">建议上传活动横幅图，将展示在 H5 首页和活动详情页</div>
         <div class="banner-upload-row">
-          <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="setActivityBanner"><el-button>上传Banner</el-button></el-upload>
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="setActivityBanner" :on-error="handleUploadError"><el-button>上传Banner</el-button></el-upload>
           <el-button v-if="activityBannerPreview()" @click="clearActivityBanner">清除</el-button>
         </div>
       </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="activityForm.name" /></el-form-item>
+      <el-form-item label="组织者">
+        <el-select v-model="activityForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
       <el-form-item label="活动类型"><el-select v-model="activityForm.activity_type"><el-option label="周常" value="周常" /><el-option label="本地活动" value="本地活动" /><el-option label="外地活动" value="外地活动" /></el-select></el-form-item>
       <el-form-item label="场地">
         <el-select v-model="activityForm.venue_id" clearable filterable placeholder="选择场地" @change="setActivityVenue">
@@ -477,9 +491,16 @@
         </el-select>
       </el-form-item>
       <el-form-item label="地点"><el-input v-model="activityForm.location" placeholder="选择场地后自动填入，也可手动修改" /></el-form-item>
+      <el-form-item label="签到方式">
+        <el-checkbox-group v-model="activityForm.checkin_methods">
+          <el-checkbox label="location">定位签到</el-checkbox>
+          <el-checkbox label="qr">二维码签到</el-checkbox>
+        </el-checkbox-group>
+        <p class="muted">至少选择一种；H5 签到入口会按这里的配置展示。</p>
+      </el-form-item>
       <el-form-item label="时间">
-        <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
-        <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
+        <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
       </el-form-item>
       <el-form-item label="人数配置">
         <div class="number-config-grid">
@@ -522,16 +543,21 @@
         <img v-if="planForm.banner_url" class="banner-preview" :src="planForm.banner_url" />
         <div v-else class="banner-empty">建议上传策划横幅图，将展示在 H5 首页和投票详情页</div>
         <div class="banner-upload-row">
-          <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r => planForm.banner_url = r.data.url"><el-button>上传Banner</el-button></el-upload>
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r => planForm.banner_url = r.data.url" :on-error="handleUploadError"><el-button>上传Banner</el-button></el-upload>
           <el-button v-if="planForm.banner_url" @click="planForm.banner_url = ''">清除</el-button>
         </div>
       </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="planForm.name" /></el-form-item>
-      <el-form-item label="投票截止"><el-date-picker v-model="planForm.vote_deadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
+      <el-form-item label="组织者">
+        <el-select v-model="planForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="投票截止"><el-date-picker v-model="planForm.vote_deadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" /></el-form-item>
       <el-form-item label="可选日期">
         <div class="plan-date-list">
           <div v-for="(item, i) in planForm.dates" :key="i" class="plan-date-row">
-            <el-date-picker v-model="item.date" value-format="YYYY-MM-DD" />
+            <el-date-picker v-model="item.date" value-format="YYYY-MM-DD" :teleported="false" placement="bottom-start" />
             <el-input v-model="item.remark" maxlength="200" placeholder="备注" style="width: 220px" />
             <el-button @click="planForm.dates.splice(i, 1)">删除</el-button>
           </div>
@@ -552,6 +578,42 @@
       </el-form-item>
     </el-form>
     <template #footer><el-button @click="planForm = null">取消</el-button><el-button type="primary" @click="savePlan">保存</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="planVotesVisible" title="投票详情" width="920px">
+    <div v-loading="planVotesLoading" class="plan-votes-dialog">
+      <div class="plan-votes-head">
+        <div>
+          <h3>{{ planVotes.plan?.name || '-' }}</h3>
+          <p class="muted">总投票人数：{{ planVotes.total_voters || 0 }}</p>
+        </div>
+        <el-tag type="success">正式队员已标注</el-tag>
+      </div>
+      <div v-for="section in planVotes.sections || []" :key="section.type" class="plan-vote-section">
+        <h4>{{ section.title }}</h4>
+        <div class="plan-vote-options">
+          <div v-for="option in section.options || []" :key="`${section.type}-${option.id}`" class="plan-vote-option">
+            <div class="plan-vote-option-head">
+              <div>
+                <strong>{{ option.label }}</strong>
+                <p v-if="option.subtitle" class="muted">{{ option.subtitle }}</p>
+              </div>
+              <div class="plan-vote-counts">
+                <el-tag>{{ option.vote_count || 0 }} 票</el-tag>
+                <el-tag type="success">{{ option.formal_vote_count || 0 }} 正式</el-tag>
+              </div>
+            </div>
+            <div v-if="(option.voters || []).length" class="plan-voter-list">
+              <span v-for="voter in option.voters" :key="`${section.type}-${option.id}-${voter.id}`" class="plan-voter-pill" :class="{ formal: !!voter.is_regular_member }">
+                {{ voterLabel(voter) }}
+                <b v-if="!!voter.is_regular_member">正式</b>
+              </span>
+            </div>
+            <p v-else class="muted">暂无投票</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <template #footer><el-button @click="planVotesVisible = false">关闭</el-button></template>
   </el-dialog>
   <el-dialog v-model="invitePickerVisible" title="选择邀请人员" width="560px">
     <el-checkbox-group v-model="invitePickerSelected" class="invitee-option-list">
@@ -597,16 +659,31 @@
       <el-button type="primary" @click="confirmConvertPicker">确认</el-button>
     </template>
   </el-dialog>
-  <el-dialog v-model="eventVisible" title="历史活动"><el-form label-width="90px"><el-form-item label="活动名称"><el-input v-model="editEvent.name" /></el-form-item><el-form-item label="日期"><el-date-picker v-model="editEvent.event_date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="场地"><el-input v-model="editEvent.location" /></el-form-item><el-form-item label="组织人"><el-input v-model="editEvent.organizer" /></el-form-item><el-form-item label="地区"><el-select v-model="editEvent.activity_region"><el-option label="宁波" value="宁波" /><el-option label="外地" value="外地" /></el-select></el-form-item></el-form><template #footer><el-button @click="editEvent = null">取消</el-button><el-button type="primary" @click="saveEvent">保存</el-button></template></el-dialog>
+  <el-dialog v-model="eventVisible" title="历史活动">
+    <el-form v-if="editEvent" label-width="90px">
+      <el-form-item label="活动名称"><el-input v-model="editEvent.name" /></el-form-item>
+      <el-form-item label="日期"><el-date-picker v-model="editEvent.event_date" value-format="YYYY-MM-DD" /></el-form-item>
+      <el-form-item label="场地"><el-input v-model="editEvent.location" /></el-form-item>
+      <el-form-item label="组织人">
+        <el-select v-model="editEvent.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
+          <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="地区"><el-select v-model="editEvent.activity_region"><el-option label="宁波" value="宁波" /><el-option label="外地" value="外地" /></el-select></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="editEvent = null">取消</el-button><el-button type="primary" @click="saveEvent">保存</el-button></template>
+  </el-dialog>
 </template>
 
 <script>
 import * as echarts from 'echarts'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, setToken, token } from './api'
+import defaultActivityBanner from './assets/activity-default.jpg'
+import { compressImageFile, DEFAULT_MAX_BYTES } from './imageCompression'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
-const activityStatuses = ['报名中', '活动开始', '活动结束', '活动取消', '投票中', '已生成活动']
+const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
 const homepageSections = [
   { key: 'top', name: '首屏 Top', description: '包含首页主视觉和指标横条' },
   { key: 'about', name: '关于 About', description: '活动介绍与新玩家说明' },
@@ -618,6 +695,13 @@ const homepageSections = [
   { key: 'cooperate', name: '合作 Join', description: '合作方式与报名入口' }
 ]
 
+async function uploadAdminFileRequest(options) {
+  const body = new FormData()
+  body.append(options.filename || 'file', options.file)
+  const data = await api('/api/admin/files/upload', { method: 'POST', body })
+  return { data }
+}
+
 const ActivityForm = {
   props: ['modelValue', 'modes', 'uploadHeaders'],
   emits: ['update:modelValue', 'save', 'cancel'],
@@ -628,10 +712,11 @@ const ActivityForm = {
     }
   },
   data() { return { jobs } },
+  methods: { uploadAdminFile: options => uploadAdminFileRequest(options) },
   template: `<el-form label-width="130px">
     <el-form-item label="Banner图">
       <div class="banner-upload-row">
-        <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
+        <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
         <el-button v-if="form.banner_url" @click="form.banner_url=''">清除</el-button>
       </div>
       <img v-if="form.banner_url" class="banner-preview" :src="form.banner_url">
@@ -659,10 +744,11 @@ const PlanForm = {
       set(value) { this.$emit('update:modelValue', value) }
     }
   },
+  methods: { uploadAdminFile: options => uploadAdminFileRequest(options) },
   template: `<el-form label-width="130px">
     <el-form-item label="Banner图">
       <div class="banner-upload-row">
-        <el-upload action="/api/admin/files/upload" accept="image/*" :headers="uploadHeaders" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
+        <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="r=>form.banner_url=r.data.url"><el-button>上传Banner</el-button></el-upload>
         <el-button v-if="form.banner_url" @click="form.banner_url=''">清除</el-button>
       </div>
       <img v-if="form.banner_url" class="banner-preview" :src="form.banner_url">
@@ -702,6 +788,7 @@ export default {
 	      modes: [],
 	      users: [],
 	      nonFormalUsers: [],
+	      formalUsers: [],
 	      invitePickerVisible: false,
 	      invitePickerTarget: '',
 	      invitePickerSelected: [],
@@ -716,11 +803,16 @@ export default {
       homepageCarouselImages: [],
 	      convertPickerVisible: false,
 	      convertPickerTitle: '',
-	      convertPickerOptions: [],
-	      convertPickerValue: '',
-	      convertPickerResolve: null,
+      convertPickerOptions: [],
+      convertPickerValue: '',
+      convertPickerResolve: null,
+      planVotesVisible: false,
+      planVotesLoading: false,
+      planVotes: { plan: null, total_voters: 0, sections: [] },
 	      roles: [],
       editVenue: null,
+      venueMap: null,
+      venueMarker: null,
       editMode: null,
       editUser: null,
       activityForm: null,
@@ -731,6 +823,7 @@ export default {
       attendanceEvents: [],
       attendanceUsers: [],
       attendanceRecords: [],
+      attendanceEnrollments: [],
       permissionPages: [],
       permissionRole: 'user',
       rolePerms: [],
@@ -775,9 +868,6 @@ export default {
     },
     dashboardRankings() {
       return this.dashboardOverview.rankings || {}
-    },
-    attendanceTableMinWidth() {
-      return `${260 + (this.attendanceEvents || []).length * 190}px`
     },
     permissionTreeData() {
       const actionNames = {
@@ -833,14 +923,70 @@ export default {
     }
   },
   methods: {
+    uploadAdminFile(options) {
+      return uploadAdminFileRequest(options)
+    },
+    async uploadVenueFile(options) {
+      const originalSize = options.file.size
+      const compressedFile = await compressImageFile(options.file)
+      if (originalSize > DEFAULT_MAX_BYTES) {
+        ElMessage.success(`图片已压缩至${Math.ceil(compressedFile.size / 1024)}KB`)
+      }
+      return uploadAdminFileRequest({ ...options, file: compressedFile })
+    },
+    handleUploadError(error) {
+      ElMessage.error(error?.message || '图片上传失败，请稍后重试')
+    },
     can(permission) {
       return !this.me.permissions || this.me.permissions.includes(permission)
+    },
+    isAdminRole() {
+      return ['superadmin', 'admin', 'activity_admin'].includes(String(this.me.role || ''))
+    },
+    canViewPlanVotes(row) {
+      if (!row || row.record_type !== 'plan') return false
+      if (this.isAdminRole()) return true
+      if (String(row.created_by_id || '') === String(this.me.id || '')) return true
+      return this.parseIds(row.organizer_ids).includes(String(this.me.id || ''))
+    },
+    voterLabel(voter) {
+      return voter.callsign || voter.username || `ID ${voter.id}`
+    },
+    async openPlanVotes(row) {
+      this.planVotesVisible = true
+      this.planVotesLoading = true
+      this.planVotes = { plan: row, total_voters: 0, sections: [] }
+      try {
+        this.planVotes = await api(`/api/admin/activity-plans/${row.id}/votes`)
+      } finally {
+        this.planVotesLoading = false
+      }
     },
     async login() {
       const data = await api('/api/admin/auth/login', { method: 'POST', body: this.loginForm })
       setToken(data.token)
       this.tokenValue = data.token
       await this.init()
+    },
+    async logout() {
+      try {
+        await ElMessageBox.confirm('确认退出后管系统？', '退出登录', {
+          confirmButtonText: '退出',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+      } catch {
+        return
+      }
+      try {
+        await api('/api/auth/logout', { method: 'POST', body: {} })
+      } finally {
+        setToken('')
+        this.tokenValue = ''
+        this.me = {}
+        this.loginForm = {}
+        history.replaceState(null, '', location.pathname)
+      }
     },
     async init() {
       this.me = await api('/api/admin/auth/me')
@@ -1020,9 +1166,29 @@ export default {
 	      this.summary = await api(`/api/admin/attendance/summary?${params.toString()}`)
 	      const matrix = await api(`/api/admin/attendance/matrix?${params.toString()}`)
 	      this.attendanceEvents = matrix.events
-	      this.attendanceUsers = matrix.users
+	      this.attendanceUsers = [...(matrix.users || [])].sort((a, b) => {
+	        const membershipOrder = Number(!!b.is_regular_member) - Number(!!a.is_regular_member)
+	        if (membershipOrder) return membershipOrder
+	        return String(a.callsign || a.username || '').localeCompare(String(b.callsign || b.username || ''), 'zh-CN')
+	      })
 	      this.attendanceRecords = matrix.records
+	      this.attendanceEnrollments = matrix.enrollments || []
 	    },
+    async loadFormalUsers() {
+      if (!this.formalUsers.length) this.formalUsers = await api('/api/admin/users/formal/options')
+      return this.formalUsers
+    },
+    async openAttendanceEvent(event = null) {
+      await this.loadFormalUsers()
+      let organizerIds = this.parseIds(event?.organizer_ids).map(Number).filter(Number.isFinite)
+      if (!organizerIds.length && event?.organizer) {
+        const legacyNames = String(event.organizer).split(/[、,，]/).map(value => value.trim()).filter(Boolean)
+        organizerIds = this.formalUsers
+          .filter(user => legacyNames.includes(user.callsign || user.username))
+          .map(user => Number(user.id))
+      }
+      this.editEvent = { ...(event || {}), organizer_ids: organizerIds }
+    },
     async loadPermissions() {
       this.permissionPages = await api('/api/admin/permissions/pages')
       await this.loadRolePermissions()
@@ -1043,13 +1209,16 @@ export default {
       })
     },
 	    async openActivity(row) {
+	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activities/${row.id}`)
 	      this.activityForm = {
 	        ...detail,
+	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
+	        checkin_methods: this.parseCheckinMethods(detail.checkin_methods),
 	        banner_source: detail.banner_source || 'venue',
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        launcher_ids: this.parseIds(detail.launcher_ids),
@@ -1063,7 +1232,7 @@ export default {
       if (!this.activityForm) return ''
       if (this.activityForm.banner_source === 'custom' && this.activityForm.banner_url) return this.activityForm.banner_url
       const venue = this.venues.find(item => Number(item.id) === Number(this.activityForm.venue_id))
-      return (venue && venue.image_url) || this.activityForm.banner_url || ''
+      return (venue && venue.image_url) || this.activityForm.banner_url || defaultActivityBanner
     },
     setActivityBanner(response) {
       this.activityForm.banner_url = response.data.url
@@ -1074,7 +1243,7 @@ export default {
       this.activityForm.banner_source = 'venue'
     },
     venueLabel(venue) {
-      return `${venue.name || ''}${venue.address ? ` / ${venue.address}` : ''}`
+      return venue.name || ''
     },
     setActivityVenue(id) {
       if (!this.activityForm) return
@@ -1084,13 +1253,15 @@ export default {
       if (this.activityForm.banner_source !== 'custom') this.activityForm.banner_source = 'venue'
     },
 	    async openPlan(row) {
+	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.planForm = { banner_url: '', visibility_type: 'all', invitee_ids: [], dates: [{ date: '', remark: '' }], venue_ids: [], game_mode_ids: [] }
+	        this.planForm = { banner_url: '', organizer_ids: [Number(this.me.id)], visibility_type: 'all', invitee_ids: [], dates: [{ date: '', remark: '' }], venue_ids: [], game_mode_ids: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activity-plans/${row.id}`)
 	      this.planForm = {
 	        ...detail,
+	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        dates: (detail.dates || []).map(item => ({ date: item.date || '', remark: item.remark || '' })),
 	        venue_ids: (detail.venues || []).map(item => item.id),
@@ -1101,6 +1272,8 @@ export default {
 	    saveActivity() {
 	      this.activityForm.invitee_ids = this.normalizedInviteeIds(this.activityForm)
 	      this.activityForm.launcher_ids = this.normalizedLauncherIds(this.activityForm)
+	      this.activityForm.checkin_methods = this.parseCheckinMethods(this.activityForm.checkin_methods)
+	      if (!this.activityForm.checkin_methods.length) return ElMessage.warning('请至少选择一种签到方式')
 	      const method = this.activityForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activities${this.activityForm.id ? `/${this.activityForm.id}` : ''}`
 	      return api(url, { method, body: this.activityForm }).then(() => { this.activityForm = null; this.loadActivities() })
@@ -1115,6 +1288,10 @@ export default {
 	    parseIds(value) {
 	      if (Array.isArray(value)) return value.map(item => String(item)).filter(Boolean)
 	      return String(value || '').split(',').map(item => item.trim()).filter(Boolean)
+	    },
+	    parseCheckinMethods(value) {
+	      const methods = this.parseIds(value).filter(item => ['location', 'qr'].includes(item))
+	      return methods.length ? [...new Set(methods)] : ['location', 'qr']
 	    },
 	    normalizedInviteeIds(form) {
 	      if (!form) return []
@@ -1218,6 +1395,7 @@ export default {
         squad_count: 1,
         squad_limit: 0,
         activity_region: '宁波',
+        organizer_ids: this.parseIds(plan.organizer_ids).map(Number),
         visibility_type: plan.visibility_type || 'all',
         invitee_ids: this.parseIds(plan.invitee_ids),
         launcher_ids: [],
@@ -1275,7 +1453,62 @@ export default {
       link.click()
       URL.revokeObjectURL(link.href)
     },
+    async loadAmap() {
+      if (window.AMap) return window.AMap
+      const key = import.meta.env.VITE_AMAP_KEY
+      if (!key) throw new Error('未配置 VITE_AMAP_KEY，可先手工填写经纬度')
+      const securityJsCode = import.meta.env.VITE_AMAP_SECURITY_CODE
+      if (securityJsCode) window._AMapSecurityConfig = { securityJsCode }
+      if (!window.__amapLoader) {
+        window.__amapLoader = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.Geocoder`
+          script.onload = () => resolve(window.AMap)
+          script.onerror = () => reject(new Error('高德地图加载失败'))
+          document.head.appendChild(script)
+        })
+      }
+      return window.__amapLoader
+    },
+    async initVenueMap() {
+      try {
+        const AMap = await this.loadAmap()
+        this.venueMap?.destroy()
+        this.venueMarker = null
+        const hasPoint = Number.isFinite(Number(this.editVenue.longitude)) && Number.isFinite(Number(this.editVenue.latitude))
+        const center = hasPoint ? [Number(this.editVenue.longitude), Number(this.editVenue.latitude)] : [121.55027, 29.87386]
+        this.venueMap = new AMap.Map('venue-map', { zoom: hasPoint ? 16 : 11, center })
+        if (hasPoint) this.setVenueMapPoint(center[0], center[1])
+        this.venueMap.on('click', event => this.setVenueMapPoint(event.lnglat.getLng(), event.lnglat.getLat()))
+      } catch (error) {
+        ElMessage.warning(error.message)
+      }
+    },
+    setVenueMapPoint(longitude, latitude) {
+      if (!this.editVenue) return
+      this.editVenue.longitude = Number(Number(longitude).toFixed(7))
+      this.editVenue.latitude = Number(Number(latitude).toFixed(7))
+      if (!this.venueMap || !window.AMap) return
+      if (!this.venueMarker) this.venueMarker = new window.AMap.Marker({ map: this.venueMap })
+      this.venueMarker.setPosition([longitude, latitude])
+    },
+    async locateVenueAddress() {
+      if (!String(this.editVenue?.address || '').trim()) return ElMessage.warning('请先填写场地地址')
+      try {
+        const AMap = await this.loadAmap()
+        const geocoder = new AMap.Geocoder({ city: '全国' })
+        geocoder.getLocation(this.editVenue.address, (status, result) => {
+          const point = result?.geocodes?.[0]?.location
+          if (status !== 'complete' || !point) return ElMessage.warning('未找到该地址，请在地图中手工选点')
+          this.setVenueMapPoint(point.getLng(), point.getLat())
+          this.venueMap?.setZoomAndCenter(16, point)
+        })
+      } catch (error) {
+        ElMessage.warning(error.message)
+      }
+    },
     saveVenue() {
+      if (this.editVenue.longitude == null || this.editVenue.latitude == null) return ElMessage.warning('请在地图选择签到中心点')
       return api(`/api/admin/venues${this.editVenue.id ? `/${this.editVenue.id}` : ''}`, { method: this.editVenue.id ? 'PUT' : 'POST', body: this.editVenue }).then(() => { this.editVenue = null; this.loadVenues() })
     },
     saveMode() {
@@ -1309,14 +1542,24 @@ export default {
 	      return api(`/api/admin/attendance/history-activities${this.editEvent.id ? `/${this.editEvent.id}` : ''}`, { method: this.editEvent.id ? 'PUT' : 'POST', body: this.editEvent }).then(() => { this.editEvent = null; this.loadAttendance() })
 	    },
 	    deleteAttendanceEvent(event) {
-	      return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
+	      if (event.is_manual) return this.remove(`/api/admin/attendance/history-activities/${event.id}`, this.loadAttendance)
+	      if (!event.source_activity_id) return ElMessage.warning('该出勤记录未关联正式活动，无法从活动列表同步删除')
+	      return ElMessageBox.confirm(
+	        `确认删除正式活动“${event.name}”？报名、签到、阵营、小队和租赁记录也会同步删除。`,
+	        '删除正式活动',
+	        { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+	      ).then(() => api(`/api/admin/activities/${event.source_activity_id}`, { method: 'DELETE' }))
+	        .then(() => Promise.all([this.loadAttendance(), this.loadActivities()]))
 	    },
 	    post(url, callback) { return api(url, { method: 'POST', body: {} }).then(() => callback && callback()) },
 	    remove(url, callback) {
 	      return ElMessageBox.confirm('确认删除？').then(() => api(url, { method: 'DELETE' }).then(() => callback && callback()))
 	    },
-    isPresent(eventId, userId) {
-      return this.attendanceRecords.some(r => r.event_id === eventId && r.user_id === userId && r.present)
+	    isPresent(eventId, userId) {
+      return this.attendanceRecords.some(r => Number(r.event_id) === Number(eventId) && Number(r.user_id) === Number(userId) && r.present)
+    },
+	    isEnrolled(eventId, userId) {
+      return this.attendanceEnrollments.some(r => Number(r.event_id) === Number(eventId) && Number(r.user_id) === Number(userId))
     },
 	    countPresent(userId) {
 	      return this.attendanceRecords.filter(r => r.user_id === userId && r.present).length

@@ -57,8 +57,7 @@
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
-            <img v-if="activity.banner_url" class="banner" :src="activity.banner_url" loading="lazy" decoding="async" />
-            <div v-else class="banner banner-placeholder">{{ activity.record_kind === 'plan' ? '活动策划' : '正式活动' }}</div>
+            <img class="banner" :src="activity.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
             <h3>{{ activity.name }}</h3>
             <div v-if="activity.record_kind === 'activity'" class="card-meta">
               <p>{{ formatTimeRange(activity.start_at, activity.end_at) }}</p>
@@ -90,6 +89,16 @@
           <h2>{{ selectedPlan.name }}</h2>
           <p class="muted">投票截止：{{ formatDateTime(selectedPlan.vote_deadline) }}</p>
           <p class="muted">发起人：{{ selectedPlan.creator_name || '未设置' }}</p>
+          <div class="vote-summary-line">
+            <span>总投票人数：{{ selectedPlan.voter_count || 0 }}</span>
+            <div class="voter-avatars" aria-label="已投票人员">
+              <template v-for="voter in selectedPlan.voters || []" :key="voter.id">
+                <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+                <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
+              </template>
+              <span v-if="!(selectedPlan.voters || []).length" class="muted">暂无投票</span>
+            </div>
+          </div>
         </div>
         <span class="status inline planning">策划中</span>
       </div>
@@ -136,15 +145,25 @@
       <button class="btn plan-vote-btn" :disabled="selectedPlan.voted" @click="submitPlanVote">
         {{ selectedPlan.voted ? '已投票' : '投票' }}
       </button>
+      <button class="btn secondary plan-vote-btn" @click="openShareDialog">分享策划</button>
     </div>
 
     <div v-if="tab === 'activities' && selectedActivity" class="page detail-page">
       <section class="detail-card">
-        <img v-if="detail.banner_url" class="detail-banner" :src="detail.banner_url" loading="lazy" decoding="async" />
-        <div v-else class="detail-banner banner-placeholder">正式活动</div>
+        <img class="detail-banner" :src="detail.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
         <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
+        <div class="vote-summary-line detail-vote-summary">
+          <span>总投票人数：{{ detail.voter_count || 0 }}</span>
+          <div class="voter-avatars" aria-label="已投票人员">
+            <template v-for="voter in detail.voters || []" :key="voter.id">
+              <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+              <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
+            </template>
+            <span v-if="!(detail.voters || []).length" class="muted">暂无投票</span>
+          </div>
+        </div>
         <p class="detail-copy">
           场地地址：
           <a :href="amapUrl(displayVenueAddress(detail) || displayVenueName(detail))" target="_blank" rel="noopener">
@@ -161,10 +180,12 @@
 
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
+          <button class="btn secondary detail-main-action" @click="openShareDialog">分享活动</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
-          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="checkin">
-            {{ checkinSubmitting ? '签到中…' : '签到' }}
+          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
+            签到
           </button>
+          <button v-if="detail.can_show_checkin_qr && canCheckinActivity(detail) && canUseQrCheckin(detail)" class="btn secondary detail-main-action" @click="showCheckinQr">签到二维码</button>
           <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
           <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
@@ -386,7 +407,16 @@
             <button class="btn secondary" @click="loadAttendanceMatrix">重新加载</button>
           </div>
           <div v-else-if="!attendanceMatrix.events.length" class="attendance-state">本年度暂无活动</div>
-          <div v-else class="attendance-table-scroll">
+          <div
+            v-else
+            class="attendance-table-scroll"
+            :class="{ dragging: attendanceDrag.active }"
+            @pointerdown="startAttendanceDrag"
+            @pointermove="moveAttendanceDrag"
+            @pointerup="stopAttendanceDrag"
+            @pointercancel="stopAttendanceDrag"
+            @pointerleave="stopAttendanceDrag"
+          >
             <table class="attendance-table">
               <thead>
                 <tr>
@@ -405,6 +435,7 @@
                   <td class="attendance-count sticky-count">{{ attendanceMatrix.present_count }}</td>
                   <td v-for="event in attendanceMatrix.events" :key="event.id" class="attendance-mark-cell">
                     <span v-if="Number(event.attended) === 1" class="attendance-dot" :aria-label="`${event.name} 已出勤`"></span>
+                    <span v-else-if="Number(event.enrolled) === 1" class="attendance-dot enrolled" :aria-label="`${event.name} 已报名未签到`"></span>
                   </td>
                 </tr>
               </tbody>
@@ -508,6 +539,70 @@
       </div>
     </div>
 
+    <div v-if="checkinDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="活动签到">
+      <div class="modal-backdrop" @click="closeCheckinDialog"></div>
+      <div class="modal-panel confirm-panel checkin-modal-panel">
+        <template v-if="checkinDialog.mode === 'choice'">
+          <h2>选择签到方式</h2>
+          <p>{{ checkinChoiceHint }}</p>
+          <p class="muted">场地地址：{{ displayVenueAddress(detail) || '地址待配置' }}</p>
+          <div class="checkin-choice-actions">
+            <button v-if="canUseLocationCheckin(detail)" class="btn" :disabled="checkinSubmitting" @click="startLocationCheckin">自主定位签到</button>
+            <button v-if="canUseQrCheckin(detail)" class="btn secondary" :disabled="checkinSubmitting" @click="startQrScanner">扫描签到二维码</button>
+          </div>
+          <button class="btn secondary" :disabled="checkinSubmitting" @click="closeCheckinDialog">取消</button>
+        </template>
+        <template v-else-if="checkinDialog.mode === 'scanner'">
+          <h2>扫描签到二维码</h2>
+          <p class="muted">请将活动发起者展示的二维码放入取景框。</p>
+          <div id="checkin-qr-reader" class="checkin-qr-reader"></div>
+          <button class="btn secondary" @click="closeCheckinDialog">取消扫码</button>
+        </template>
+        <template v-else>
+          <h2>扫码签到</h2>
+          <p>二维码已识别，可直接完成签到，无需获取当前位置。</p>
+          <p class="muted">场地地址：{{ displayVenueAddress(detail) || '地址待配置' }}</p>
+          <div class="confirm-actions">
+            <button class="btn secondary" :disabled="checkinSubmitting" @click="closeCheckinDialog">取消</button>
+            <button class="btn" :disabled="checkinSubmitting" @click="checkin">{{ checkinSubmitting ? '签到中…' : '确认签到' }}</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div v-if="checkinQrDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="活动签到二维码">
+      <div class="modal-backdrop" @click="checkinQrDialog.show = false"></div>
+      <div class="modal-panel confirm-panel checkin-modal-panel">
+        <h2>活动签到二维码</h2>
+        <img v-if="checkinQrDialog.dataUrl" class="checkin-qr-image" :src="checkinQrDialog.dataUrl" alt="活动签到二维码" />
+        <p>请参与者扫码登录，识别有效二维码后即可签到。</p>
+        <p class="muted">有效至：{{ formatDateTime(checkinQrDialog.expiresAt) }}</p>
+        <button class="btn secondary" @click="checkinQrDialog.show = false">关闭</button>
+      </div>
+    </div>
+
+    <div v-if="shareDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="微信分享活动">
+      <div class="modal-backdrop" @click="shareDialog.show = false"></div>
+      <div class="modal-panel confirm-panel share-modal-panel">
+        <h2>分享活动</h2>
+        <div class="share-preview-card">
+          <img :src="shareDialog.image" alt="活动分享图" />
+          <div>
+            <strong>{{ shareDialog.title }}</strong>
+            <span>{{ shareDialog.time }}</span>
+            <span>{{ shareDialog.location }}</span>
+          </div>
+        </div>
+        <p class="muted">微信内可点击右上角分享给好友或朋友圈；也可以复制链接发送。</p>
+        <div class="share-link-box">{{ shareDialog.url }}</div>
+        <div class="confirm-actions">
+          <button class="btn secondary" @click="shareDialog.show = false">关闭</button>
+          <button class="btn secondary" @click="copyShareLink">复制链接</button>
+          <button class="btn" @click="nativeShareActivity">系统分享</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="confirmDialog.show" class="modal">
       <div class="modal-backdrop" @click="resolveConfirm(false)"></div>
       <div class="modal-panel confirm-panel">
@@ -542,7 +637,9 @@
 <script>
 import { api, setErrorHandler, setToken, token } from './api'
 import logoUrl from './assets/nbys-logo.png'
+import defaultActivityBanner from './assets/activity-default.jpg'
 import QRCode from 'qrcode'
+import { Html5Qrcode } from 'html5-qrcode'
 
 export default {
   emits: ['loading-start', 'ready'],
@@ -555,17 +652,23 @@ export default {
       loginForm: {},
       loginSubmitting: false,
       logoUrl,
+      defaultActivityBanner,
       registerForm: { invite_code: new URLSearchParams(location.search).get('invite') || '' },
       activities: [],
       attendanceSummary: { present_count: 0, activity_total: 0 },
       attendanceMatrix: { year: new Date().getFullYear(), username: '', present_count: 0, events: [] },
       attendanceMatrixLoading: false,
       attendanceMatrixError: '',
+      attendanceDrag: { active: false, pointerId: null, startX: 0, scrollLeft: 0 },
       selectedActivity: null,
       selectedPlan: null,
       planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
       checkinSubmitting: false,
+      checkinDialog: { show: false, qrToken: '', mode: 'choice' },
+      checkinQrScanner: null,
+      checkinQrDialog: { show: false, dataUrl: '', expiresAt: '' },
+      shareDialog: { show: false, title: '', time: '', location: '', image: '', url: '' },
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
       squadEdits: {},
@@ -639,6 +742,12 @@ export default {
     authPageStyle() {
       const url = this.systemImages.login_background_url
       return url ? { backgroundImage: `linear-gradient(rgba(2, 6, 23, .34), rgba(2, 6, 23, .7)), url("${url}")` } : {}
+    },
+    checkinChoiceHint() {
+      const methods = this.checkinMethods(this.detail)
+      if (methods.length === 1 && methods[0] === 'location') return '本活动仅开放自主定位签到，需验证活动场地 1 公里范围。'
+      if (methods.length === 1 && methods[0] === 'qr') return '本活动仅开放扫描现场二维码签到，无需定位。'
+      return '自主签到需验证活动场地 1 公里范围；扫描现场二维码无需定位。'
     }
   },
   async mounted() {
@@ -658,9 +767,12 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('nbys-auth-expired', this.expireSession)
+    this.stopQrScanner()
   },
   methods: {
     expireSession() {
+      if (this.selectedActivity) this.replaceActivityUrl(this.selectedActivity)
+      if (this.selectedPlan) this.replacePlanUrl(this.selectedPlan.id)
       setToken('')
       this.view = 'login'
       this.tab = 'activities'
@@ -744,7 +856,7 @@ export default {
     },
     applyDashboard(dashboard = {}) {
       const activeActivities = (dashboard.activities || [])
-        .filter(activity => ['报名中', '活动开始', '进行中'].includes(activity.display_status))
+        .filter(activity => ['报名中', '活动进行中', '活动开始', '进行中'].includes(activity.display_status))
         .map(activity => ({ ...activity, record_kind: 'activity' }))
       const planning = (dashboard.plans || [])
         .map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
@@ -773,7 +885,7 @@ export default {
     loadActivities() {
       return Promise.all([api('/api/h5/activities'), api('/api/h5/activity-plans')]).then(([activities, plans]) => {
         const activeActivities = activities
-          .filter(activity => ['报名中', '活动开始', '进行中'].includes(activity.display_status))
+          .filter(activity => ['报名中', '活动进行中', '活动开始', '进行中'].includes(activity.display_status))
           .map(activity => ({ ...activity, record_kind: 'activity' }))
         const planning = plans.map(plan => ({ ...plan, record_kind: 'plan', display_status: '策划中' }))
         this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
@@ -790,6 +902,7 @@ export default {
         this.tab = 'activities'
         this.selectedActivity = null
         this.selectedPlan = null
+        this.clearDetailUrl()
         this.loadActivities()
       }
     },
@@ -803,10 +916,18 @@ export default {
       window.location.href = `${base}?${params.toString()}`
     },
     async openRequestedActivity() {
-      const id = Number(new URLSearchParams(location.search).get('activityId'))
+      const params = new URLSearchParams(location.search)
+      const id = Number(params.get('activityId'))
       if (this.view === 'app' && Number.isInteger(id) && id > 0 && Number(this.selectedActivity) !== id) {
         await this.openActivity(id)
+        return
       }
+      const planId = Number(params.get('planId'))
+      if (this.view === 'app' && Number.isInteger(planId) && planId > 0 && Number(this.selectedPlan?.id) !== planId) {
+        await this.openPlanById(planId)
+      }
+      const qrToken = params.get('checkinToken') || ''
+      if (this.view === 'app' && this.selectedActivity && qrToken && !this.detail.checkin?.present) this.openCheckinDialog(qrToken)
     },
     redirectAfterLogin() {
       const target = new URLSearchParams(location.search).get('returnTo')
@@ -826,19 +947,34 @@ export default {
       return false
     },
     statusLabel(status) {
-      return status === '活动开始' ? '进行中' : status
+      return status === '活动开始' || status === '活动进行中' ? '进行中' : status
     },
     statusClass(status) {
       if (status === '报名中') return 'signup'
-      if (status === '活动开始' || status === '进行中') return 'running'
+      if (status === '活动开始' || status === '活动进行中' || status === '进行中') return 'running'
       if (status === '策划中') return 'planning'
       return ''
     },
     openHomeCard(item) {
       if (item.record_kind === 'activity') return this.openActivity(item.id)
+      return this.openPlan(item)
+    },
+    openPlan(item) {
       this.selectedActivity = null
+      this.detail = {}
       this.selectedPlan = item
       this.planVoteForm = this.planVoteFormFromPlan(item)
+      this.replacePlanUrl(item.id)
+      this.updatePlanShareMeta()
+    },
+    async openPlanById(id) {
+      let plan = this.activities.find(item => item.record_kind === 'plan' && Number(item.id) === Number(id))
+      if (!plan) {
+        await this.loadActivities()
+        plan = this.activities.find(item => item.record_kind === 'plan' && Number(item.id) === Number(id))
+      }
+      if (!plan) throw new Error('策划不存在或不可见')
+      this.openPlan(plan)
     },
     planVoteFormFromPlan(plan) {
       return {
@@ -864,6 +1000,21 @@ export default {
     displayVenueAddress(item) {
       return item?.venue_address || item?.location || ''
     },
+    shortName(value) {
+      return String(value || '甬').trim().slice(0, 2) || '甬'
+    },
+    checkinMethods(activity) {
+      const raw = activity?.checkin_methods
+      const values = Array.isArray(raw) ? raw : String(raw || '').split(',')
+      const methods = values.map(item => String(item).trim()).filter(item => ['location', 'qr'].includes(item))
+      return methods.length ? [...new Set(methods)] : ['location', 'qr']
+    },
+    canUseLocationCheckin(activity) {
+      return this.checkinMethods(activity).includes('location')
+    },
+    canUseQrCheckin(activity) {
+      return this.checkinMethods(activity).includes('qr')
+    },
     amapUrl(keyword) {
       return `https://uri.amap.com/search?keyword=${encodeURIComponent(keyword || '')}`
     },
@@ -876,26 +1027,171 @@ export default {
       return String(value).replace('T', ' ').slice(0, 16)
     },
     canCheckinActivity(activity) {
-      if (!activity?.start_at) return false
+      if (typeof activity?.checkin_open === 'boolean') return activity.checkin_open
+      if (!activity?.start_at || !activity?.end_at) return false
       const start = new Date(String(activity.start_at).replace(' ', 'T'))
+      const end = new Date(String(activity.end_at).replace(' ', 'T'))
       if (Number.isNaN(start.getTime())) return false
       const now = new Date()
-      const sameDay = now.getFullYear() === start.getFullYear()
-        && now.getMonth() === start.getMonth()
-        && now.getDate() === start.getDate()
-      return sameDay && now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000
+      return now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000 && now.getTime() <= end.getTime()
     },
     formatAttendanceDate(value) {
       if (!value) return '时间待定'
       return String(value).replace('T', ' ').slice(0, 10)
     },
+    startAttendanceDrag(event) {
+      if (event.pointerType !== 'mouse' || event.button !== 0) return
+      const scroller = event.currentTarget
+      this.attendanceDrag = {
+        active: true,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        scrollLeft: scroller.scrollLeft
+      }
+      scroller.setPointerCapture?.(event.pointerId)
+    },
+    moveAttendanceDrag(event) {
+      if (!this.attendanceDrag.active || this.attendanceDrag.pointerId !== event.pointerId) return
+      event.preventDefault()
+      event.currentTarget.scrollLeft = this.attendanceDrag.scrollLeft + this.attendanceDrag.startX - event.clientX
+    },
+    stopAttendanceDrag(event) {
+      if (!this.attendanceDrag.active || this.attendanceDrag.pointerId !== event.pointerId) return
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      this.attendanceDrag.active = false
+      this.attendanceDrag.pointerId = null
+    },
     async openActivity(id) {
       this.selectedPlan = null
       this.selectedActivity = id
+      this.replaceActivityUrl(id)
       this.detail = await api(`/api/h5/activities/${id}`)
       this.prepareJoinJobs()
       this.prepareSquadEdits()
       this.prepareMemberAssignments()
+      this.updateActivityShareMeta()
+    },
+    activityShareUrl(id = this.selectedActivity) {
+      const url = new URL(location.href)
+      url.search = ''
+      url.searchParams.set('activityId', String(id))
+      url.hash = '#/app'
+      return url.href
+    },
+    replaceActivityUrl(id) {
+      if (!id || this.view !== 'app') return
+      const next = this.activityShareUrl(id)
+      if (next !== location.href) history.replaceState(null, '', next)
+    },
+    planShareUrl(id = this.selectedPlan?.id) {
+      const url = new URL(location.href)
+      url.search = ''
+      url.searchParams.set('planId', String(id))
+      url.hash = '#/app'
+      return url.href
+    },
+    replacePlanUrl(id) {
+      if (!id || this.view !== 'app') return
+      const next = this.planShareUrl(id)
+      if (next !== location.href) history.replaceState(null, '', next)
+    },
+    clearDetailUrl() {
+      const url = new URL(location.href)
+      if (!url.searchParams.has('activityId') && !url.searchParams.has('planId') && !url.searchParams.has('checkinToken')) return
+      url.searchParams.delete('activityId')
+      url.searchParams.delete('planId')
+      url.searchParams.delete('checkinToken')
+      url.hash = '#/app'
+      history.replaceState(null, '', url.href)
+    },
+    absoluteUrl(value) {
+      return new URL(value || this.defaultActivityBanner, location.origin).href
+    },
+    shareTitle() {
+      if (this.selectedPlan) return this.selectedPlan.name || '宁波甬士活动策划'
+      return this.detail.name || '宁波甬士活动'
+    },
+    shareDescription() {
+      if (this.selectedPlan) return `发起人：${this.selectedPlan.creator_name || '未设置'}`
+      const time = this.formatTimeRange(this.detail.start_at, this.detail.end_at)
+      const venue = this.displayVenueAddress(this.detail) || this.displayVenueName(this.detail)
+      return [time, venue].filter(Boolean).join(' · ')
+    },
+    updateActivityShareMeta() {
+      const title = this.shareTitle()
+      const description = this.shareDescription()
+      const image = this.absoluteUrl(this.detail.banner_url || this.defaultActivityBanner)
+      document.title = title
+      this.setMeta('description', description)
+      this.setMeta('og:title', title, 'property')
+      this.setMeta('og:description', description, 'property')
+      this.setMeta('og:image', image, 'property')
+      this.setMeta('og:url', this.activityShareUrl(), 'property')
+    },
+    updatePlanShareMeta() {
+      const title = this.shareTitle()
+      const description = this.shareDescription()
+      const image = this.absoluteUrl(this.selectedPlan?.banner_url || this.defaultActivityBanner)
+      document.title = title
+      this.setMeta('description', description)
+      this.setMeta('og:title', title, 'property')
+      this.setMeta('og:description', description, 'property')
+      this.setMeta('og:image', image, 'property')
+      this.setMeta('og:url', this.planShareUrl(), 'property')
+    },
+    setMeta(name, content, attr = 'name') {
+      if (!content) return
+      let el = document.head.querySelector(`meta[${attr}="${name}"]`)
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, name)
+        document.head.appendChild(el)
+      }
+      el.setAttribute('content', content)
+    },
+    openShareDialog() {
+      const isPlan = !!this.selectedPlan
+      const url = isPlan ? this.planShareUrl() : this.activityShareUrl()
+      this.shareDialog = {
+        show: true,
+        title: this.shareTitle(),
+        time: isPlan ? `发起人：${this.selectedPlan.creator_name || '未设置'}` : (this.formatTimeRange(this.detail.start_at, this.detail.end_at) || '时间待定'),
+        location: isPlan ? `投票截止：${this.formatDateTime(this.selectedPlan.vote_deadline) || '待定'}` : (this.displayVenueAddress(this.detail) || this.displayVenueName(this.detail) || '地点待定'),
+        image: this.absoluteUrl((isPlan ? this.selectedPlan.banner_url : this.detail.banner_url) || this.defaultActivityBanner),
+        url
+      }
+      isPlan ? this.updatePlanShareMeta() : this.updateActivityShareMeta()
+    },
+    async copyShareLink() {
+      const url = this.shareDialog.url || this.activityShareUrl()
+      try {
+        await navigator.clipboard.writeText(url)
+      } catch {
+        const input = document.createElement('textarea')
+        input.value = url
+        input.setAttribute('readonly', 'readonly')
+        input.style.position = 'fixed'
+        input.style.left = '-9999px'
+        document.body.appendChild(input)
+        input.select()
+        document.execCommand('copy')
+        document.body.removeChild(input)
+      }
+      this.showToast('活动链接已复制')
+    },
+    async nativeShareActivity() {
+      const data = {
+        title: this.shareDialog.title || this.shareTitle(),
+        text: `${this.shareDialog.time || ''} ${this.shareDialog.location || ''}`.trim(),
+        url: this.shareDialog.url || this.activityShareUrl()
+      }
+      if (!navigator.share) {
+        await this.copyShareLink()
+        return
+      }
+      try {
+        await navigator.share(data)
+      } catch {}
     },
     async submitPlanVote() {
       const body = this.planVoteForm
@@ -915,14 +1211,119 @@ export default {
     cancelEnroll() {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
     },
+    openCheckinDialog(qrToken = '') {
+      if (qrToken) {
+        if (!this.canUseQrCheckin(this.detail)) return this.showToast('该活动未开放二维码签到')
+        this.checkinDialog = { show: true, qrToken, mode: 'confirm' }
+        return
+      }
+      const methods = this.checkinMethods(this.detail)
+      if (methods.length === 1 && methods[0] === 'location') {
+        this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
+        return this.startLocationCheckin()
+      }
+      if (methods.length === 1 && methods[0] === 'qr') {
+        this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
+        return this.startQrScanner()
+      }
+      this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
+    },
+    async closeCheckinDialog() {
+      if (this.checkinSubmitting) return
+      await this.stopQrScanner()
+      this.checkinDialog = { show: false, qrToken: '', mode: 'choice' }
+    },
+    startLocationCheckin() {
+      if (!this.canUseLocationCheckin(this.detail)) return this.showToast('该活动未开放定位签到')
+      this.checkinDialog.qrToken = ''
+      return this.checkin()
+    },
+    async startQrScanner() {
+      if (!this.canUseQrCheckin(this.detail)) return this.showToast('该活动未开放二维码签到')
+      this.checkinDialog.mode = 'scanner'
+      await this.$nextTick()
+      try {
+        await this.stopQrScanner()
+        this.checkinQrScanner = new Html5Qrcode('checkin-qr-reader')
+        await this.checkinQrScanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+          decodedText => this.handleScannedCheckin(decodedText),
+          () => {}
+        )
+      } catch (error) {
+        await this.stopQrScanner()
+        this.checkinDialog.mode = 'choice'
+        this.showToast('无法打开摄像头，请允许相机权限后重试')
+      }
+    },
+    async stopQrScanner() {
+      const scanner = this.checkinQrScanner
+      this.checkinQrScanner = null
+      if (!scanner) return
+      try {
+        if (scanner.isScanning) await scanner.stop()
+        scanner.clear()
+      } catch {}
+    },
+    async handleScannedCheckin(decodedText) {
+      if (this.checkinDialog.mode !== 'scanner') return
+      try {
+        const url = new URL(decodedText, location.origin)
+        const activityId = Number(url.searchParams.get('activityId'))
+        const qrToken = url.searchParams.get('checkinToken') || ''
+        if (activityId !== Number(this.selectedActivity) || !qrToken) throw new Error('请扫描当前活动的签到二维码')
+        this.checkinDialog.mode = 'confirm'
+        await this.stopQrScanner()
+        this.checkinDialog = { show: true, qrToken, mode: 'confirm' }
+        this.showToast('二维码识别成功')
+      } catch (error) {
+        this.showToast(error.message || '签到二维码无效')
+      }
+    },
+    currentPosition() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) return reject(new Error('当前浏览器不支持定位，请使用手机浏览器打开'))
+        navigator.geolocation.getCurrentPosition(resolve, error => {
+          const messages = { 1: '定位权限被拒绝，请在浏览器设置中允许定位', 2: '暂时无法获取位置，请到开阔处重试', 3: '获取位置超时，请重试' }
+          reject(new Error(messages[error.code] || '获取位置失败，请重试'))
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 })
+      })
+    },
     async checkin() {
       if (this.checkinSubmitting) return
       this.checkinSubmitting = true
       try {
-        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, { method: 'POST' })
+        const qrToken = this.checkinDialog.qrToken
+        const position = qrToken ? null : await this.currentPosition()
+        await api(`/api/h5/activities/${this.selectedActivity}/checkin`, {
+          method: 'POST',
+          body: {
+            latitude: position?.coords.latitude,
+            longitude: position?.coords.longitude,
+            accuracy: position?.coords.accuracy,
+            source: qrToken ? 'qr' : 'location',
+            qr_token: qrToken || undefined
+          }
+        })
+        this.checkinDialog = { show: false, qrToken: '', mode: 'choice' }
+        this.showToast('签到成功')
         await this.openActivity(this.selectedActivity)
+      } catch (error) {
+        this.showToast(error.message || '签到失败')
       } finally {
         this.checkinSubmitting = false
+      }
+    },
+    async showCheckinQr() {
+      try {
+        const result = await api(`/api/h5/activities/${this.selectedActivity}/checkin-qr`)
+        const params = new URLSearchParams({ activityId: String(this.selectedActivity), checkinToken: result.token })
+        const url = `${location.origin}${location.pathname}?${params.toString()}#/app`
+        const dataUrl = await QRCode.toDataURL(url, { width: 320, margin: 2, errorCorrectionLevel: 'M' })
+        this.checkinQrDialog = { show: true, dataUrl, expiresAt: result.expires_at }
+      } catch (error) {
+        this.showToast(error.message || '二维码生成失败')
       }
     },
     squadsByCamp(camp) {

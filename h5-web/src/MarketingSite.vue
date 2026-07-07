@@ -402,7 +402,6 @@ import haiyingcheng01 from './assets/site/haiyingcheng-jujie-01.jpg'
 import haiyingcheng02 from './assets/site/haiyingcheng-jujie-02.jpg'
 import haiyingcheng03 from './assets/site/haiyingcheng-jujie-03.jpg'
 import haiyingcheng04 from './assets/site/haiyingcheng-jujie-04.jpg'
-import haiyingcheng05 from './assets/site/haiyingcheng-jujie-05.jpg'
 import yingmengli01 from './assets/site/yingmengli-01.jpg'
 import yingmengli02 from './assets/site/yingmengli-02.jpg'
 import yingmengliDate01 from './assets/site/yingmengli-20231022-01.jpg'
@@ -417,7 +416,6 @@ import siteModern03 from './assets/site/site-modern-3.jpg'
 import xiaojiuzhaiTraining01 from './assets/site/xiaojiuzhai-training-01.jpg'
 import xiaojiuzhaiTraining02 from './assets/site/xiaojiuzhai-training-02.jpg'
 import xiaojiuzhaiTraining03 from './assets/site/xiaojiuzhai-training-03.jpg'
-import xiaojiuzhaiEscape01 from './assets/site/xiaojiuzhai-escape-20211031-01.jpg'
 import xiaojiuzhaiEscape02 from './assets/site/xiaojiuzhai-escape-20211031-02.jpg'
 import xiaojiuzhaiEscape03 from './assets/site/xiaojiuzhai-escape-20211031-03.jpg'
 import esaTraining01 from './assets/site/esa-urban-training-01.jpg'
@@ -445,11 +443,8 @@ import biliYangzhouPoster from './assets/site/bili-yangzhou-20210327.png'
 import biliJujieFieldFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-field_frame01.jpg'
 import biliJujieFinalFrame from './assets/site/external/2024-06_bilibili_xiangshan-jujie-final_frame01.jpg'
 import xhsHengdianTeam from './assets/site/external/2026-03-15_xhs_hengdian-expedition_team.jpg'
-import xhsHengdianStreet from './assets/site/external/2026-03-15_xhs_hengdian-expedition_street.jpg'
 import xhsFieldGrass from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_grass.jpg'
-import xhsFieldTeam from './assets/site/external/2026-05-30_xhs_ningbo-yongshi_field-day_team.jpg'
 import xhsWargameCover from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-cover.jpg'
-import xhsWargameFrame from './assets/site/external/2026-06-22_xhs_ningbo-yongshi_wargame-frame01.jpg'
 import contactDouyin from './assets/site/contact-douyin.jpg'
 import contactWechatYouzi from './assets/site/contact-wechat-youzi.jpg'
 import contactWechatWeijing from './assets/site/contact-wechat-weijing.jpg'
@@ -619,11 +614,11 @@ export default {
         }
       ],
       activityTypes: [
-        { code: '周常', title: '周常活动', text: '固定下场，熟悉规则和安全距离。' },
-        { code: '剧本', title: '主题剧本', text: '阵营、任务点、行动区域和撤离条件。' },
-        { code: '山地', title: '山地徒步', text: '路线、体力、通讯和天气。' },
-        { code: '远征', title: '外地交流', text: '去外地场地，按对方规则进场。' },
-        { code: '试场', title: '试场体验', text: '短流程、低强度、小规模。' }
+        { code: '周常', title: '周常', text: '固定下场，熟悉规则和安全距离。' },
+        { code: '剧本', title: '剧本', text: '阵营、任务点、行动区域和撤离条件。' },
+        { code: '山地', title: '山地', text: '路线、体力、通讯和天气。' },
+        { code: '远征', title: '远征', text: '去外地场地，按对方规则进场。' },
+        { code: '试场', title: '试场', text: '短流程、低强度、小规模。' }
       ],
       opFlow: [
         { title: '集合', text: '点人数、看装备、分组，确认场地边界。' },
