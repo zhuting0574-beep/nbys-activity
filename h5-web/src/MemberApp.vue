@@ -89,6 +89,16 @@
           <h2>{{ selectedPlan.name }}</h2>
           <p class="muted">投票截止：{{ formatDateTime(selectedPlan.vote_deadline) }}</p>
           <p class="muted">发起人：{{ selectedPlan.creator_name || '未设置' }}</p>
+          <div class="vote-summary-line">
+            <span>总投票人数：{{ selectedPlan.voter_count || 0 }}</span>
+            <div class="voter-avatars" aria-label="已投票人员">
+              <template v-for="voter in selectedPlan.voters || []" :key="voter.id">
+                <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+                <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
+              </template>
+              <span v-if="!(selectedPlan.voters || []).length" class="muted">暂无投票</span>
+            </div>
+          </div>
         </div>
         <span class="status inline planning">策划中</span>
       </div>
@@ -143,6 +153,16 @@
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
         <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
+        <div class="vote-summary-line detail-vote-summary">
+          <span>总投票人数：{{ detail.voter_count || 0 }}</span>
+          <div class="voter-avatars" aria-label="已投票人员">
+            <template v-for="voter in detail.voters || []" :key="voter.id">
+              <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+              <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
+            </template>
+            <span v-if="!(detail.voters || []).length" class="muted">暂无投票</span>
+          </div>
+        </div>
         <p class="detail-copy">
           场地地址：
           <a :href="amapUrl(displayVenueAddress(detail) || displayVenueName(detail))" target="_blank" rel="noopener">
@@ -163,7 +183,7 @@
           <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
             签到
           </button>
-          <button v-if="detail.can_show_checkin_qr && canCheckinActivity(detail)" class="btn secondary detail-main-action" @click="showCheckinQr">签到二维码</button>
+          <button v-if="detail.can_show_checkin_qr && canCheckinActivity(detail) && canUseQrCheckin(detail)" class="btn secondary detail-main-action" @click="showCheckinQr">签到二维码</button>
           <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
           <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
@@ -522,11 +542,11 @@
       <div class="modal-panel confirm-panel checkin-modal-panel">
         <template v-if="checkinDialog.mode === 'choice'">
           <h2>选择签到方式</h2>
-          <p>自主签到需验证活动场地 1 公里范围；扫描现场二维码无需定位。</p>
+          <p>{{ checkinChoiceHint }}</p>
           <p class="muted">场地地址：{{ displayVenueAddress(detail) || '地址待配置' }}</p>
           <div class="checkin-choice-actions">
-            <button class="btn" :disabled="checkinSubmitting" @click="startLocationCheckin">自主定位签到</button>
-            <button class="btn secondary" :disabled="checkinSubmitting" @click="startQrScanner">扫描签到二维码</button>
+            <button v-if="canUseLocationCheckin(detail)" class="btn" :disabled="checkinSubmitting" @click="startLocationCheckin">自主定位签到</button>
+            <button v-if="canUseQrCheckin(detail)" class="btn secondary" :disabled="checkinSubmitting" @click="startQrScanner">扫描签到二维码</button>
           </div>
           <button class="btn secondary" :disabled="checkinSubmitting" @click="closeCheckinDialog">取消</button>
         </template>
@@ -697,6 +717,12 @@ export default {
     authPageStyle() {
       const url = this.systemImages.login_background_url
       return url ? { backgroundImage: `linear-gradient(rgba(2, 6, 23, .34), rgba(2, 6, 23, .7)), url("${url}")` } : {}
+    },
+    checkinChoiceHint() {
+      const methods = this.checkinMethods(this.detail)
+      if (methods.length === 1 && methods[0] === 'location') return '本活动仅开放自主定位签到，需验证活动场地 1 公里范围。'
+      if (methods.length === 1 && methods[0] === 'qr') return '本活动仅开放扫描现场二维码签到，无需定位。'
+      return '自主签到需验证活动场地 1 公里范围；扫描现场二维码无需定位。'
     }
   },
   async mounted() {
@@ -925,6 +951,21 @@ export default {
     displayVenueAddress(item) {
       return item?.venue_address || item?.location || ''
     },
+    shortName(value) {
+      return String(value || '甬').trim().slice(0, 2) || '甬'
+    },
+    checkinMethods(activity) {
+      const raw = activity?.checkin_methods
+      const values = Array.isArray(raw) ? raw : String(raw || '').split(',')
+      const methods = values.map(item => String(item).trim()).filter(item => ['location', 'qr'].includes(item))
+      return methods.length ? [...new Set(methods)] : ['location', 'qr']
+    },
+    canUseLocationCheckin(activity) {
+      return this.checkinMethods(activity).includes('location')
+    },
+    canUseQrCheckin(activity) {
+      return this.checkinMethods(activity).includes('qr')
+    },
     amapUrl(keyword) {
       return `https://uri.amap.com/search?keyword=${encodeURIComponent(keyword || '')}`
     },
@@ -998,7 +1039,21 @@ export default {
       return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
     },
     openCheckinDialog(qrToken = '') {
-      this.checkinDialog = { show: true, qrToken, mode: qrToken ? 'confirm' : 'choice' }
+      if (qrToken) {
+        if (!this.canUseQrCheckin(this.detail)) return this.showToast('该活动未开放二维码签到')
+        this.checkinDialog = { show: true, qrToken, mode: 'confirm' }
+        return
+      }
+      const methods = this.checkinMethods(this.detail)
+      if (methods.length === 1 && methods[0] === 'location') {
+        this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
+        return this.startLocationCheckin()
+      }
+      if (methods.length === 1 && methods[0] === 'qr') {
+        this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
+        return this.startQrScanner()
+      }
+      this.checkinDialog = { show: true, qrToken: '', mode: 'choice' }
     },
     async closeCheckinDialog() {
       if (this.checkinSubmitting) return
@@ -1006,10 +1061,12 @@ export default {
       this.checkinDialog = { show: false, qrToken: '', mode: 'choice' }
     },
     startLocationCheckin() {
+      if (!this.canUseLocationCheckin(this.detail)) return this.showToast('该活动未开放定位签到')
       this.checkinDialog.qrToken = ''
       return this.checkin()
     },
     async startQrScanner() {
+      if (!this.canUseQrCheckin(this.detail)) return this.showToast('该活动未开放二维码签到')
       this.checkinDialog.mode = 'scanner'
       await this.$nextTick()
       try {

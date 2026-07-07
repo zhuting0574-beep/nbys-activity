@@ -78,6 +78,8 @@ public class H5Controller {
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
         row.put("enroll_count", enrolledUserCount(id));
+        row.put("checkin_methods", checkinMethods(row));
+        applyActivityVoteSummary(row);
         boolean activityManager = isCreator(row, userId);
         row.put("is_activity_creator", activityManager);
         row.put("is_activity_organizer", activityManager);
@@ -264,6 +266,7 @@ public class H5Controller {
         requireCheckinWindow(a, now);
         String source = text(body.get("source"));
         if (!"location".equals(source) && !"qr".equals(source)) throw new IllegalArgumentException("签到方式不合法");
+        if (!checkinMethods(a).contains(source)) throw new IllegalArgumentException("该活动未开放此签到方式");
         if ("qr".equals(source)) {
             verifyCheckinQrToken(id, text(body.get("qr_token")), now);
         } else {
@@ -286,6 +289,7 @@ public class H5Controller {
         Map<String, Object> me = auth.current(req);
         Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? and deleted_at is null", id);
         if (activity == null) throw new IllegalArgumentException("活动不存在");
+        if (!checkinMethods(activity).contains("qr")) throw new IllegalArgumentException("该活动未开放二维码签到");
         int userId = ((Number) me.get("id")).intValue();
         if (!isCreator(activity, userId) && !hasPermission(me, "activity:update")) throw new SecurityException("没有展示签到二维码的权限");
         LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
@@ -405,6 +409,7 @@ public class H5Controller {
                 row.put("my_date_option_ids", myVotes.getOrDefault("date", Collections.emptyList()));
                 row.put("my_venue_ids", myVotes.getOrDefault("venue", Collections.emptyList()));
                 row.put("my_game_mode_ids", myVotes.getOrDefault("game_mode", Collections.emptyList()));
+                applyPlanVoteSummary(row);
                 result.add(row);
             }
         }
@@ -699,6 +704,40 @@ public class H5Controller {
 
     private void applyDefaultPlanBanner(Map<String, Object> row) {
         if (text(row.get("banner_url")).isEmpty()) row.put("banner_url", DEFAULT_PLAN_BANNER);
+    }
+
+    private Set<String> checkinMethods(Map<String, Object> activity) {
+        LinkedHashSet<String> methods = new LinkedHashSet<String>(Rows.csv(text(activity.get("checkin_methods"))));
+        methods.removeIf(method -> !"location".equals(method) && !"qr".equals(method));
+        if (methods.isEmpty()) methods.addAll(Arrays.asList("location", "qr"));
+        return methods;
+    }
+
+    private void applyPlanVoteSummary(Map<String, Object> plan) {
+        int planId = num(plan.get("id"), 0);
+        Map<String, Object> count = Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", planId);
+        plan.put("voter_count", count == null ? 0 : count.get("total"));
+        plan.put("voters", Rows.list(jdbc,
+                "select u.id,u.username,u.callsign,u.avatar_url,max(v.created_at) voted_at from plan_votes v join users u on u.id=v.user_id " +
+                        "where v.plan_id=? group by u.id,u.username,u.callsign,u.avatar_url order by voted_at desc,u.id desc limit 12",
+                planId));
+    }
+
+    private void applyActivityVoteSummary(Map<String, Object> activity) {
+        int activityId = num(activity.get("id"), 0);
+        Map<String, Object> plan = Rows.one(jdbc, "select id from activity_plans where converted_activity_id=? limit 1", activityId);
+        if (plan == null) {
+            activity.put("voter_count", 0);
+            activity.put("voters", Collections.emptyList());
+            return;
+        }
+        int planId = num(plan.get("id"), 0);
+        Map<String, Object> count = Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", planId);
+        activity.put("voter_count", count == null ? 0 : count.get("total"));
+        activity.put("voters", Rows.list(jdbc,
+                "select u.id,u.username,u.callsign,u.avatar_url,max(v.created_at) voted_at from plan_votes v join users u on u.id=v.user_id " +
+                        "where v.plan_id=? group by u.id,u.username,u.callsign,u.avatar_url order by voted_at desc,u.id desc limit 12",
+                planId));
     }
 
     private Map<Integer, List<Map<String, Object>>> groupByPlan(List<Map<String, Object>> rows) {

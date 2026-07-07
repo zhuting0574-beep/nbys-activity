@@ -485,6 +485,13 @@
         </el-select>
       </el-form-item>
       <el-form-item label="地点"><el-input v-model="activityForm.location" placeholder="选择场地后自动填入，也可手动修改" /></el-form-item>
+      <el-form-item label="签到方式">
+        <el-checkbox-group v-model="activityForm.checkin_methods">
+          <el-checkbox label="location">定位签到</el-checkbox>
+          <el-checkbox label="qr">二维码签到</el-checkbox>
+        </el-checkbox-group>
+        <p class="muted">至少选择一种；H5 签到入口会按这里的配置展示。</p>
+      </el-form-item>
       <el-form-item label="时间">
         <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
         <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
@@ -1137,13 +1144,14 @@ export default {
 	    async openActivity(row) {
 	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activities/${row.id}`)
 	      this.activityForm = {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
+	        checkin_methods: this.parseCheckinMethods(detail.checkin_methods),
 	        banner_source: detail.banner_source || 'venue',
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        launcher_ids: this.parseIds(detail.launcher_ids),
@@ -1197,6 +1205,8 @@ export default {
 	    saveActivity() {
 	      this.activityForm.invitee_ids = this.normalizedInviteeIds(this.activityForm)
 	      this.activityForm.launcher_ids = this.normalizedLauncherIds(this.activityForm)
+	      this.activityForm.checkin_methods = this.parseCheckinMethods(this.activityForm.checkin_methods)
+	      if (!this.activityForm.checkin_methods.length) return ElMessage.warning('请至少选择一种签到方式')
 	      const method = this.activityForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activities${this.activityForm.id ? `/${this.activityForm.id}` : ''}`
 	      return api(url, { method, body: this.activityForm }).then(() => { this.activityForm = null; this.loadActivities() })
@@ -1211,6 +1221,10 @@ export default {
 	    parseIds(value) {
 	      if (Array.isArray(value)) return value.map(item => String(item)).filter(Boolean)
 	      return String(value || '').split(',').map(item => item.trim()).filter(Boolean)
+	    },
+	    parseCheckinMethods(value) {
+	      const methods = this.parseIds(value).filter(item => ['location', 'qr'].includes(item))
+	      return methods.length ? [...new Set(methods)] : ['location', 'qr']
 	    },
 	    normalizedInviteeIds(form) {
 	      if (!form) return []

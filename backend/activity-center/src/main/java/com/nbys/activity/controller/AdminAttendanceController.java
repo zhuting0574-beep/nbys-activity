@@ -129,6 +129,28 @@ public class AdminAttendanceController {
         auth.require(req, "attendance:update");
         int eventId = ((Number) body.get("event_id")).intValue();
         int userId = ((Number) body.get("user_id")).intValue();
+        Map<String, Object> event = Rows.one(jdbc, "select id,source_activity_id from attendance_events where id=?", eventId);
+        if (event == null) throw new IllegalArgumentException("出勤活动不存在");
+        if (event.get("source_activity_id") != null) {
+            int activityId = ((Number) event.get("source_activity_id")).intValue();
+            boolean enrolled = Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", activityId, userId) != null;
+            Map<String, Object> record = Rows.one(jdbc, "select id,present from attendance_records where event_id=? and user_id=?", eventId, userId);
+            boolean present = record != null && truthy(record.get("present"));
+            if (!enrolled) {
+                jdbc.update("insert into enrollments(activity_id,user_id,rent_launcher,created_at,updated_at) values(?,?,0,now(),now())", activityId, userId);
+                if (record != null) jdbc.update("update attendance_records set present=0, updated_by_id=?, updated_at=now() where event_id=? and user_id=?", auth.currentUserId(req), eventId, userId);
+            } else if (!present) {
+                if (record == null) {
+                    jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now())", eventId, userId, auth.currentUserId(req));
+                } else {
+                    jdbc.update("update attendance_records set present=1, updated_by_id=?, updated_at=now() where event_id=? and user_id=?", auth.currentUserId(req), eventId, userId);
+                }
+            } else {
+                jdbc.update("delete from attendance_records where event_id=? and user_id=?", eventId, userId);
+                jdbc.update("delete from enrollments where activity_id=? and user_id=?", activityId, userId);
+            }
+            return ApiResponse.ok(null);
+        }
         int present = Boolean.TRUE.equals(body.get("present")) || "1".equals(String.valueOf(body.get("present"))) ? 1 : 0;
         if (Rows.one(jdbc, "select id from attendance_records where event_id=? and user_id=?", eventId, userId) == null) {
             jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,?,?,now())", eventId, userId, present, auth.currentUserId(req));
@@ -136,5 +158,11 @@ public class AdminAttendanceController {
             jdbc.update("update attendance_records set present=?, updated_by_id=?, updated_at=now() where event_id=? and user_id=?", present, auth.currentUserId(req), eventId, userId);
         }
         return ApiResponse.ok(null);
+    }
+
+    private boolean truthy(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 }

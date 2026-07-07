@@ -123,8 +123,9 @@ public class AdminActivityController {
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
-        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
+        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), bannerUrl, bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
+                checkinMethods(body.get("checkin_methods")),
                 num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
                 Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
         jdbc.update("update attendance_events set organizer=?,organizer_ids=? where source_activity_id=?", organizers.get("names"), organizers.get("ids"), id);
@@ -312,7 +313,7 @@ public class AdminActivityController {
         String bannerSource = activityBannerSource(body);
         Map<String, String> organizers = organizers(body.get("organizer_ids"), userId);
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, bannerUrl);
             ps.setObject(3, bannerSource);
@@ -321,21 +322,29 @@ public class AdminActivityController {
             ps.setObject(6, body.get("end_at"));
             ps.setObject(7, location);
             ps.setObject(8, venueId);
-            ps.setObject(9, num(body.get("open_min"), 0));
-            ps.setObject(10, num(body.get("camp_count"), 2));
-            ps.setObject(11, num(body.get("camp_limit"), 0));
-            ps.setObject(12, num(body.get("squad_count"), 1));
-            ps.setObject(13, num(body.get("squad_limit"), 0));
-            ps.setObject(14, Rows.joinValue(body.get("allowed_jobs")));
-            ps.setObject(15, Rows.joinValue(body.get("game_modes")));
-            ps.setObject(16, body.get("activity_region"));
-            ps.setObject(17, body.get("visibility_type"));
-            ps.setObject(18, Rows.joinValue(body.get("invitee_ids")));
-            ps.setObject(19, userId);
-            ps.setObject(20, organizers.get("ids"));
+            ps.setObject(9, checkinMethods(body.get("checkin_methods")));
+            ps.setObject(10, num(body.get("open_min"), 0));
+            ps.setObject(11, num(body.get("camp_count"), 2));
+            ps.setObject(12, num(body.get("camp_limit"), 0));
+            ps.setObject(13, num(body.get("squad_count"), 1));
+            ps.setObject(14, num(body.get("squad_limit"), 0));
+            ps.setObject(15, Rows.joinValue(body.get("allowed_jobs")));
+            ps.setObject(16, Rows.joinValue(body.get("game_modes")));
+            ps.setObject(17, body.get("activity_region"));
+            ps.setObject(18, body.get("visibility_type"));
+            ps.setObject(19, Rows.joinValue(body.get("invitee_ids")));
+            ps.setObject(20, userId);
+            ps.setObject(21, organizers.get("ids"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
+    }
+
+    private String checkinMethods(Object value) {
+        LinkedHashSet<String> methods = new LinkedHashSet<String>(Rows.csv(Rows.joinValue(value)));
+        methods.removeIf(method -> !"location".equals(method) && !"qr".equals(method));
+        if (methods.isEmpty()) methods.addAll(Arrays.asList("location", "qr"));
+        return Rows.join(methods);
     }
 
     private Map<String, String> organizers(Object value, Integer defaultUserId) {
