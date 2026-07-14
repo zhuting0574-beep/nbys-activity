@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -621,16 +622,7 @@ public class AdminActivityController {
     }
 
     private int signupLimit(Map<String, Object> row, Map<String, Integer> modeLimits) {
-        int modeMax = 0;
-        for (String mode : Rows.csv(String.valueOf(row.get("game_modes")))) {
-            modeMax = Math.max(modeMax, modeLimits.getOrDefault(mode, 0));
-        }
-        int campLimit = num(row.get("camp_count"), 0) * num(row.get("camp_limit"), 0);
-        int squadLimit = num(row.get("camp_count"), 0) * num(row.get("squad_count"), 0) * num(row.get("squad_limit"), 0);
-        int limit = modeMax == 0 ? Integer.MAX_VALUE : modeMax;
-        if (campLimit > 0) limit = Math.min(limit, campLimit);
-        if (squadLimit > 0) limit = Math.min(limit, squadLimit);
-        return limit == Integer.MAX_VALUE ? 0 : limit;
+        return ActivityLimitCalculator.signupLimit(row, modeLimits);
     }
 
     private void applyDefaultVenueBanner(Map<String, Object> row) {

@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -682,17 +683,12 @@ public class H5Controller {
     }
 
     private int signupLimit(Map<String, Object> row) {
-        int modeMax = 0;
+        Map<String, Integer> modeLimits = new HashMap<String, Integer>();
         for (String mode : Rows.csv(String.valueOf(row.get("game_modes")))) {
             Map<String, Object> m = Rows.one(jdbc, "select suitable_people from game_modes where name=?", mode);
-            if (m != null) modeMax = Math.max(modeMax, num(m.get("suitable_people"), 0));
+            if (m != null) modeLimits.put(mode, num(m.get("suitable_people"), 0));
         }
-        int campLimit = num(row.get("camp_count"), 0) * num(row.get("camp_limit"), 0);
-        int squadLimit = num(row.get("camp_count"), 0) * num(row.get("squad_count"), 0) * num(row.get("squad_limit"), 0);
-        int limit = modeMax == 0 ? Integer.MAX_VALUE : modeMax;
-        if (campLimit > 0) limit = Math.min(limit, campLimit);
-        if (squadLimit > 0) limit = Math.min(limit, squadLimit);
-        return limit == Integer.MAX_VALUE ? 0 : limit;
+        return ActivityLimitCalculator.signupLimit(row, modeLimits);
     }
 
     private void enrichVenue(Map<String, Object> row) {
