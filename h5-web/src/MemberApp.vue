@@ -1032,8 +1032,12 @@ export default {
       const start = new Date(String(activity.start_at).replace(' ', 'T'))
       const end = new Date(String(activity.end_at).replace(' ', 'T'))
       if (Number.isNaN(start.getTime())) return false
+      const configuredValue = Number(activity.checkin_open_value ?? 3)
+      const value = Number.isFinite(configuredValue) ? Math.max(0, Math.floor(configuredValue)) : 3
+      const unit = activity.checkin_open_unit === 'day' ? 'day' : 'hour'
+      const offset = value * (unit === 'day' ? 24 : 1) * 60 * 60 * 1000
       const now = new Date()
-      return now.getTime() >= start.getTime() - 3 * 60 * 60 * 1000 && now.getTime() <= end.getTime()
+      return now.getTime() >= start.getTime() - offset && now.getTime() <= end.getTime()
     },
     formatAttendanceDate(value) {
       if (!value) return '时间待定'

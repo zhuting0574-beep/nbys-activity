@@ -12,11 +12,19 @@ class H5ControllerTest {
 
     @Test
     void checkinWindowIncludesBothBoundaries() {
-        assertFalse(H5Controller.isWithinCheckinWindow(start.minusHours(3).minusNanos(1), start, end));
-        assertTrue(H5Controller.isWithinCheckinWindow(start.minusHours(3), start, end));
-        assertTrue(H5Controller.isWithinCheckinWindow(start, start, end));
-        assertTrue(H5Controller.isWithinCheckinWindow(end, start, end));
-        assertFalse(H5Controller.isWithinCheckinWindow(end.plusNanos(1), start, end));
+        assertFalse(H5Controller.isWithinCheckinWindow(start.minusHours(3).minusNanos(1), start, end, 3, "hour"));
+        assertTrue(H5Controller.isWithinCheckinWindow(start.minusHours(3), start, end, 3, "hour"));
+        assertTrue(H5Controller.isWithinCheckinWindow(start, start, end, 3, "hour"));
+        assertTrue(H5Controller.isWithinCheckinWindow(end, start, end, 3, "hour"));
+        assertFalse(H5Controller.isWithinCheckinWindow(end.plusNanos(1), start, end, 3, "hour"));
+    }
+
+    @Test
+    void checkinWindowSupportsDayAndZeroConfig() {
+        assertTrue(H5Controller.isWithinCheckinWindow(start.minusDays(1), start, end, 1, "day"));
+        assertFalse(H5Controller.isWithinCheckinWindow(start.minusDays(1).minusNanos(1), start, end, 1, "day"));
+        assertFalse(H5Controller.isWithinCheckinWindow(start.minusNanos(1), start, end, 0, "hour"));
+        assertTrue(H5Controller.isWithinCheckinWindow(start, start, end, 0, "hour"));
     }
 
     @Test

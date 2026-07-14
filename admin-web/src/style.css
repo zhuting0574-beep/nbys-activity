@@ -404,6 +404,18 @@ body {
   width: 100%;
 }
 
+.checkin-open-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+}
+
+.checkin-open-row .el-input-number {
+  width: 150px;
+}
+
 .plan-date-list,
 .invitee-panel {
   display: grid;

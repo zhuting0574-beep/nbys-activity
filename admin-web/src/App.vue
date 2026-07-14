@@ -498,6 +498,16 @@
         </el-checkbox-group>
         <p class="muted">至少选择一种；H5 签到入口会按这里的配置展示。</p>
       </el-form-item>
+      <el-form-item label="提前签到">
+        <div class="checkin-open-row">
+          <el-input-number v-model="activityForm.checkin_open_value" :min="0" :step="1" step-strictly />
+          <el-select v-model="activityForm.checkin_open_unit" style="width: 110px">
+            <el-option label="小时" value="hour" />
+            <el-option label="天" value="day" />
+          </el-select>
+          <span class="muted">0 表示活动开始时开放签到</span>
+        </div>
+      </el-form-item>
       <el-form-item label="时间">
         <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
         <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
@@ -1211,7 +1221,7 @@ export default {
 	    async openActivity(row) {
 	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activities/${row.id}`)
@@ -1219,6 +1229,8 @@ export default {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        checkin_methods: this.parseCheckinMethods(detail.checkin_methods),
+	        checkin_open_value: this.normalizeCheckinOpenValue(detail.checkin_open_value),
+	        checkin_open_unit: this.normalizeCheckinOpenUnit(detail.checkin_open_unit),
 	        banner_source: detail.banner_source || 'venue',
 	        invitee_ids: this.parseIds(detail.invitee_ids),
 	        launcher_ids: this.parseIds(detail.launcher_ids),
@@ -1273,6 +1285,8 @@ export default {
 	      this.activityForm.invitee_ids = this.normalizedInviteeIds(this.activityForm)
 	      this.activityForm.launcher_ids = this.normalizedLauncherIds(this.activityForm)
 	      this.activityForm.checkin_methods = this.parseCheckinMethods(this.activityForm.checkin_methods)
+	      this.activityForm.checkin_open_value = this.normalizeCheckinOpenValue(this.activityForm.checkin_open_value)
+	      this.activityForm.checkin_open_unit = this.normalizeCheckinOpenUnit(this.activityForm.checkin_open_unit)
 	      if (!this.activityForm.checkin_methods.length) return ElMessage.warning('请至少选择一种签到方式')
 	      const method = this.activityForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activities${this.activityForm.id ? `/${this.activityForm.id}` : ''}`
@@ -1292,6 +1306,13 @@ export default {
 	    parseCheckinMethods(value) {
 	      const methods = this.parseIds(value).filter(item => ['location', 'qr'].includes(item))
 	      return methods.length ? [...new Set(methods)] : ['location', 'qr']
+	    },
+	    normalizeCheckinOpenValue(value) {
+	      const number = Number(value)
+	      return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 3
+	    },
+	    normalizeCheckinOpenUnit(value) {
+	      return value === 'day' ? 'day' : 'hour'
 	    },
 	    normalizedInviteeIds(form) {
 	      if (!form) return []
@@ -1361,6 +1382,7 @@ export default {
       return item ? `${item.name || `ID ${id}`} / ${item.owner_callsign || item.owner_name || '-'}` : `ID ${id}`
     },
     async convertPlan(row) {
+      await this.loadFormalUsers()
       const preview = await api(`/api/admin/activity-plans/${row.id}/convert-preview`)
       let dateOption = null
       let venueOption = null
@@ -1379,6 +1401,7 @@ export default {
       const plan = preview.plan || row
       const date = (dateOption && dateOption.date) || this.datePart(plan.vote_deadline)
       const modeNames = (preview.game_modes || []).map(mode => mode.name).filter(Boolean)
+      const organizerIds = this.planOrganizerIds(plan)
       this.activityForm = {
         source_plan_id: plan.id,
         banner_url: '',
@@ -1389,13 +1412,16 @@ export default {
         start_at: date ? `${date} 10:00:00` : '',
         end_at: date ? `${date} 17:00:00` : '',
         location: venueOption ? (venueOption.address || venueOption.name || '') : '',
+        checkin_methods: ['location', 'qr'],
+        checkin_open_value: 3,
+        checkin_open_unit: 'hour',
         open_min: 0,
         camp_count: 2,
         camp_limit: 0,
         squad_count: 1,
         squad_limit: 0,
         activity_region: '宁波',
-        organizer_ids: this.parseIds(plan.organizer_ids).map(Number),
+        organizer_ids: organizerIds,
         visibility_type: plan.visibility_type || 'all',
         invitee_ids: this.parseIds(plan.invitee_ids),
         launcher_ids: [],
@@ -1403,6 +1429,12 @@ export default {
         game_modes: modeNames
       }
       if (this.activityForm.invitee_ids.length) await this.loadNonFormalUsers()
+    },
+    planOrganizerIds(plan) {
+      const organizerIds = this.parseIds(plan?.organizer_ids).map(Number).filter(Number.isFinite)
+      if (organizerIds.length) return organizerIds
+      const creatorId = Number(plan?.created_by_id)
+      return Number.isFinite(creatorId) ? [creatorId] : []
     },
     async pickConvertOption(name, options, labeler) {
       if (!options.length) return null
