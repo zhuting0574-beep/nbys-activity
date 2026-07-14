@@ -90,8 +90,8 @@ public class AdminDashboardController {
                         "(select count(*) from users where disabled=0 and is_regular_member=1) formal_member_total," +
                         "(select count(*) from activities where record_type='activity' and deleted_at is null and start_at>=? and start_at<?) activity_total," +
                         "(select count(*) from activities where record_type='activity' and deleted_at is null and start_at>=greatest(now(),?) and start_at<?) upcoming_activity_total," +
-                        "(select count(*) from enrollments e join activities a on a.id=e.activity_id where a.record_type='activity' and a.deleted_at is null and a.start_at>=? and a.start_at<?) enroll_total," +
-                        "(select count(*) from attendance_records ar join attendance_events ev on ev.id=ar.event_id where ar.present=1 and ev.event_date>=? and ev.event_date<?) checkin_total",
+                        "(select coalesce(sum(1+coalesce(e.extra_count,0)),0) from enrollments e join activities a on a.id=e.activity_id where a.record_type='activity' and a.deleted_at is null and a.start_at>=? and a.start_at<?) enroll_total," +
+                        "(select count(*) from attendance_records ar join attendance_events ev on ev.id=ar.event_id left join activities aa on aa.id=ev.source_activity_id where ar.present=1 and ev.event_date>=? and ev.event_date<? and (ev.source_activity_id is null or coalesce(aa.attendance_enabled,1)=1)) checkin_total",
                 start, end, start, end, start, end, start, end);
         long enrollTotal = number(totals.get("enroll_total"));
         long checkinTotal = number(totals.get("checkin_total"));
@@ -118,10 +118,10 @@ public class AdminDashboardController {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select 'activities' series,month(start_at) month,count(*) count from activities " +
                         "where record_type='activity' and deleted_at is null and start_at>=? and start_at<? group by month(start_at) " +
-                        "union all select 'enrollments' series,month(a.start_at) month,count(*) count from enrollments e join activities a on a.id=e.activity_id " +
+                        "union all select 'enrollments' series,month(a.start_at) month,coalesce(sum(1+coalesce(e.extra_count,0)),0) count from enrollments e join activities a on a.id=e.activity_id " +
                         "where a.record_type='activity' and a.deleted_at is null and a.start_at>=? and a.start_at<? group by month(a.start_at) " +
-                        "union all select 'checkins' series,month(ev.event_date) month,count(*) count from attendance_records ar join attendance_events ev on ev.id=ar.event_id " +
-                        "where ar.present=1 and ev.event_date>=? and ev.event_date<? group by month(ev.event_date)",
+                        "union all select 'checkins' series,month(ev.event_date) month,count(*) count from attendance_records ar join attendance_events ev on ev.id=ar.event_id left join activities aa on aa.id=ev.source_activity_id " +
+                        "where ar.present=1 and ev.event_date>=? and ev.event_date<? and (ev.source_activity_id is null or coalesce(aa.attendance_enabled,1)=1) group by month(ev.event_date)",
                 start, end, start, end, start, end);
         for (Map<String, Object> row : rows) {
             String series = String.valueOf(row.get("series"));
@@ -139,8 +139,8 @@ public class AdminDashboardController {
 
     private List<Map<String, Object>> popularActivities(int year) {
         return Rows.list(jdbc,
-                "select a.id,a.name,count(e.id) enroll_count," +
-                        "(select count(*) from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=a.id and ar.present=1) checkin_count " +
+                "select a.id,a.name,coalesce(sum(case when e.id is null then 0 else 1+coalesce(e.extra_count,0) end),0) enroll_count," +
+                        "(select count(*) from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=a.id and ar.present=1 and coalesce(a.attendance_enabled,1)=1) checkin_count " +
                         "from activities a left join enrollments e on e.activity_id=a.id " +
                         "where a.record_type='activity' and a.deleted_at is null and year(a.start_at)=? " +
                         "group by a.id,a.name order by enroll_count desc,checkin_count desc,a.start_at desc limit 5",
@@ -149,23 +149,23 @@ public class AdminDashboardController {
 
     private List<Map<String, Object>> popularVenues(int year) {
         return Rows.list(jdbc,
-                "select ev.location name,count(ar.id) count from attendance_events ev left join attendance_records ar on ar.event_id=ev.id and ar.present=1 " +
-                        "where year(ev.event_date)=? and coalesce(ev.location,'')<>'' group by ev.location order by count desc limit 5",
+                "select ev.location name,count(ar.id) count from attendance_events ev left join activities a on a.id=ev.source_activity_id left join attendance_records ar on ar.event_id=ev.id and ar.present=1 " +
+                        "where year(ev.event_date)=? and coalesce(ev.location,'')<>'' and (ev.source_activity_id is null or coalesce(a.attendance_enabled,1)=1) group by ev.location order by count desc limit 5",
                 year);
     }
 
     private List<Map<String, Object>> activeMembers(int year) {
         return Rows.list(jdbc,
-                "select u.id,u.username,u.callsign,count(*) count from attendance_records ar join attendance_events ev on ev.id=ar.event_id join users u on u.id=ar.user_id " +
-                        "where ar.present=1 and year(ev.event_date)=? group by u.id,u.username,u.callsign order by count desc limit 5",
+                "select u.id,u.username,u.callsign,count(*) count from attendance_records ar join attendance_events ev on ev.id=ar.event_id left join activities a on a.id=ev.source_activity_id join users u on u.id=ar.user_id " +
+                        "where ar.present=1 and year(ev.event_date)=? and (ev.source_activity_id is null or coalesce(a.attendance_enabled,1)=1) group by u.id,u.username,u.callsign order by count desc limit 5",
                 year);
     }
 
     private List<Map<String, Object>> recentActivities(int year) {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select a.id,a.name,a.start_at,a.location,a.deleted_at," +
-                        "(select count(*) from enrollments e where e.activity_id=a.id) enroll_count," +
-                        "(select count(*) from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=a.id and ar.present=1) checkin_count " +
+                        "(select coalesce(sum(1+coalesce(e.extra_count,0)),0) from enrollments e where e.activity_id=a.id) enroll_count," +
+                        "(select count(*) from attendance_events ev join attendance_records ar on ar.event_id=ev.id where ev.source_activity_id=a.id and ar.present=1 and coalesce(a.attendance_enabled,1)=1) checkin_count " +
                         "from activities a where a.record_type='activity' and year(a.start_at)=? order by a.start_at desc,a.id desc limit 8",
                 year);
         for (Map<String, Object> row : rows) row.put("status", displayStatus(row));

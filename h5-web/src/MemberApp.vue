@@ -154,7 +154,7 @@
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
         <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
-        <div class="vote-summary-line detail-vote-summary">
+        <div v-if="hasActivityVoteSummary(detail)" class="vote-summary-line detail-vote-summary">
           <span>总投票人数：{{ detail.voter_count || 0 }}</span>
           <div class="voter-avatars" aria-label="已投票人员">
             <template v-for="voter in detail.voters || []" :key="voter.id">
@@ -181,7 +181,8 @@
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
           <button class="btn secondary detail-main-action" @click="openShareDialog">分享活动</button>
-          <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="enroll">报名</button>
+          <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="startEnroll">报名</button>
+          <button v-if="detail.display_status === '报名中' && detail.my_enrollment && isWeeklyActivity(detail)" class="btn secondary detail-main-action" @click="openEnrollmentDialog">修改人数</button>
           <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
             签到
           </button>
@@ -192,21 +193,24 @@
         </div>
       </section>
 
-      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && detail.activity_type === '周常'" class="squad-panel">
+      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && isWeeklyActivity(detail)" class="squad-panel">
         <h3>已报名人员</h3>
-        <p class="muted">共 {{ detail.members?.length || 0 }} 人报名</p>
+        <p class="muted">共 {{ detail.enroll_count || 0 }} 人报名</p>
         <div class="weekly-member-list">
           <div v-for="member in detail.members" :key="member.id" class="weekly-member">
             <strong>{{ member.callsign || member.username }}</strong>
-            <span class="weekly-member-status" :class="{ checked: member.checked_in }">
-              {{ member.checked_in ? '已签到' : '已报名' }}
-            </span>
+            <div class="weekly-member-meta">
+              <span class="weekly-member-status" :class="{ checked: member.checked_in }">
+                {{ member.checked_in ? '已签到' : '已报名' }}
+              </span>
+              <span class="weekly-member-count">共 {{ participantCount(member) }} 人</span>
+            </div>
           </div>
           <div v-if="!detail.members?.length" class="muted">暂无报名人员</div>
         </div>
       </section>
 
-      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && detail.activity_type !== '周常'" class="squad-panel">
+      <section v-if="(detail.my_enrollment || detail.is_activity_creator) && !isWeeklyActivity(detail)" class="squad-panel">
         <h3>阵营 / 小队 / 人员列表</h3>
         <p class="muted">发起人管理全部小队；队长管理本队；普通成员只能在未锁定时修改自己或更换小队。</p>
         <div v-for="camp in camps" :key="camp" class="camp-block">
@@ -272,7 +276,7 @@
         </div>
       </section>
 
-      <section v-if="detail.activity_type !== '周常' && (detail.my_enrollment || detail.is_activity_creator) && unassignedMembers.length" class="squad-panel">
+      <section v-if="!isWeeklyActivity(detail) && (detail.my_enrollment || detail.is_activity_creator) && unassignedMembers.length" class="squad-panel">
         <h3>未分配阵营 / 小队</h3>
         <p class="muted">这些人员已报名，但还没有进入阵营和小队。</p>
         <div class="unassigned-list">
@@ -302,7 +306,7 @@
         </div>
       </section>
 
-      <section v-if="detail.is_activity_creator" class="squad-panel activity-stats-panel">
+      <section v-if="showActivityStats(detail)" class="squad-panel activity-stats-panel">
         <h3>活动统计</h3>
         <p class="muted">按当前人员列表自动统计。</p>
         <div class="stat-box">
@@ -581,6 +585,23 @@
       </div>
     </div>
 
+    <div v-if="enrollmentDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="活动报名人数">
+      <div class="modal-backdrop" @click="closeEnrollmentDialog"></div>
+      <div class="modal-panel confirm-panel enrollment-modal-panel">
+        <h2>{{ detail.my_enrollment ? '修改报名人数' : '活动报名' }}</h2>
+        <p>额外同行人数不包含你本人；填 0 表示仅自己 1 人报名。</p>
+        <label class="enrollment-count-field">
+          <span>额外人数</span>
+          <input v-model.number="enrollmentDialog.extra_count" type="number" min="0" step="1" inputmode="numeric" />
+        </label>
+        <p class="muted">本次合计：{{ 1 + normalizedExtraCount(enrollmentDialog.extra_count) }} 人</p>
+        <div class="confirm-actions">
+          <button class="btn secondary" :disabled="enrollmentDialog.submitting" @click="closeEnrollmentDialog">取消</button>
+          <button class="btn" :disabled="enrollmentDialog.submitting" @click="submitEnrollment">{{ enrollmentDialog.submitting ? '提交中…' : '确认' }}</button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="shareDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="微信分享活动">
       <div class="modal-backdrop" @click="shareDialog.show = false"></div>
       <div class="modal-panel confirm-panel share-modal-panel">
@@ -668,6 +689,7 @@ export default {
       checkinDialog: { show: false, qrToken: '', mode: 'choice' },
       checkinQrScanner: null,
       checkinQrDialog: { show: false, dataUrl: '', expiresAt: '' },
+      enrollmentDialog: { show: false, extra_count: 0, submitting: false },
       shareDialog: { show: false, title: '', time: '', location: '', image: '', url: '' },
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
@@ -1000,6 +1022,23 @@ export default {
     displayVenueAddress(item) {
       return item?.venue_address || item?.location || ''
     },
+    isWeeklyActivity(activity) {
+      return activity?.activity_type === '周常' || activity?.activity_type === '接龙'
+    },
+    hasActivityVoteSummary(activity) {
+      return activity?.converted_from_plan === true || activity?.converted_from_plan === 1 || activity?.converted_from_plan === '1'
+    },
+    showActivityStats(activity) {
+      return !!activity?.is_activity_creator && !this.isWeeklyActivity(activity) && !this.hasActivityVoteSummary(activity)
+    },
+    normalizedExtraCount(value) {
+      const count = Number.parseInt(value, 10)
+      return Number.isFinite(count) && count > 0 ? count : 0
+    },
+    participantCount(member) {
+      const count = Number(member?.participant_count)
+      return Number.isFinite(count) && count > 0 ? count : 1 + this.normalizedExtraCount(member?.extra_count)
+    },
     shortName(value) {
       return String(value || '甬').trim().slice(0, 2) || '甬'
     },
@@ -1209,11 +1248,41 @@ export default {
       this.planVoteForm = this.planVoteFormFromPlan(this.selectedPlan)
       this.showToast('已投票')
     },
-    enroll() {
-      return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'POST' }).then(() => this.openActivity(this.selectedActivity))
+    startEnroll() {
+      if (this.isWeeklyActivity(this.detail)) return this.openEnrollmentDialog()
+      return this.enroll()
+    },
+    openEnrollmentDialog() {
+      const currentExtra = this.detail.my_enrollment ? this.normalizedExtraCount(this.detail.my_enrollment.extra_count) : 0
+      this.enrollmentDialog = { show: true, extra_count: currentExtra, submitting: false }
+    },
+    closeEnrollmentDialog() {
+      if (this.enrollmentDialog.submitting) return
+      this.enrollmentDialog = { show: false, extra_count: 0, submitting: false }
+    },
+    async submitEnrollment() {
+      if (this.enrollmentDialog.submitting) return
+      const extraCount = this.normalizedExtraCount(this.enrollmentDialog.extra_count)
+      this.enrollmentDialog.submitting = true
+      try {
+        await this.enroll({ extra_count: extraCount })
+        this.enrollmentDialog = { show: false, extra_count: 0, submitting: false }
+        this.showToast('报名人数已更新')
+      } catch (error) {
+        this.enrollmentDialog.submitting = false
+        throw error
+      }
+    },
+    async enroll(body = {}) {
+      await api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'POST', body })
+      await this.openActivity(this.selectedActivity)
+      await this.loadActivities()
     },
     cancelEnroll() {
-      return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(() => this.openActivity(this.selectedActivity))
+      return api(`/api/h5/activities/${this.selectedActivity}/enroll`, { method: 'DELETE' }).then(async () => {
+        await this.openActivity(this.selectedActivity)
+        await this.loadActivities()
+      })
     },
     openCheckinDialog(qrToken = '') {
       if (qrToken) {

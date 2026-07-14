@@ -51,7 +51,7 @@ public class AdminActivityController {
                 "select a.*, " +
                         "coalesce(e.enroll_count,0) enroll_count,coalesce(c.checkin_count,0) checkin_count " +
                         "from activities a " +
-                        "left join (select activity_id,count(*) enroll_count from enrollments group by activity_id) e on e.activity_id=a.id " +
+                        "left join (select activity_id,coalesce(sum(1+coalesce(extra_count,0)),0) enroll_count from enrollments group by activity_id) e on e.activity_id=a.id " +
                         "left join (select ev.source_activity_id,count(*) checkin_count from attendance_events ev " +
                         "join attendance_records ar on ar.event_id=ev.id and ar.present=1 " +
                         "where ev.source_activity_id is not null group by ev.source_activity_id) c on c.source_activity_id=a.id " +
@@ -100,8 +100,9 @@ public class AdminActivityController {
         enrichVenueFields(row);
         row.put("display_status", displayStatus(row));
         row.put("signup_limit", signupLimit(row));
+        row.put("enroll_count", enrolledCount(id));
         row.put("enrollments", Rows.list(jdbc,
-                "select e.*, u.username, u.callsign, u.is_regular_member from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id", id));
+                "select e.*, u.username, u.callsign, u.is_regular_member, coalesce(e.extra_count,0) extra_count, 1+coalesce(e.extra_count,0) participant_count from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id", id));
         row.put("squads", Rows.list(jdbc, "select * from squad_settings where activity_id=? order by camp_no,squad_no", id));
         row.put("launcher_ids", launcherIds(id));
         return ApiResponse.ok(row);
@@ -127,11 +128,11 @@ public class AdminActivityController {
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
-        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
+        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, attendance_enabled=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), bannerUrl, bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
                 checkinMethods(body.get("checkin_methods")), checkinOpenValue(body.get("checkin_open_value")), checkinOpenUnit(body.get("checkin_open_unit")),
                 num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
-                Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
+                Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), attendanceEnabled(body), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
         jdbc.update("update attendance_events set organizer=?,organizer_ids=? where source_activity_id=?", organizers.get("names"), organizers.get("ids"), id);
         replaceLauncherOptions(id, body.get("launcher_ids"));
         return ApiResponse.ok(null);
@@ -188,16 +189,17 @@ public class AdminActivityController {
     public void exportEnrollments(@PathVariable int id, HttpServletRequest req, HttpServletResponse response) throws IOException {
         auth.require(req, "activity:view");
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select u.username from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id",
+                "select u.username,1+coalesce(e.extra_count,0) participant_count from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id",
                 id);
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("报名表");
-        writeHeader(sheet, "序号", "名字");
+        writeHeader(sheet, "序号", "名字", "报名人数");
         int i = 1;
         for (Map<String, Object> item : rows) {
             Row row = sheet.createRow(i);
             row.createCell(0).setCellValue(i);
             row.createCell(1).setCellValue(text(item.get("username")));
+            row.createCell(2).setCellValue(num(item.get("participant_count"), 1));
             i++;
         }
         writeWorkbook(response, workbook, "活动报名表.xlsx");
@@ -339,7 +341,7 @@ public class AdminActivityController {
         String bannerSource = activityBannerSource(body);
         Map<String, String> organizers = organizers(body.get("organizer_ids"), userId);
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,checkin_open_value,checkin_open_unit,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,checkin_open_value,checkin_open_unit,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, bannerUrl);
             ps.setObject(3, bannerSource);
@@ -358,11 +360,12 @@ public class AdminActivityController {
             ps.setObject(16, num(body.get("squad_limit"), 0));
             ps.setObject(17, Rows.joinValue(body.get("allowed_jobs")));
             ps.setObject(18, Rows.joinValue(body.get("game_modes")));
-            ps.setObject(19, body.get("activity_region"));
-            ps.setObject(20, body.get("visibility_type"));
-            ps.setObject(21, Rows.joinValue(body.get("invitee_ids")));
-            ps.setObject(22, userId);
-            ps.setObject(23, organizers.get("ids"));
+            ps.setObject(19, attendanceEnabled(body));
+            ps.setObject(20, body.get("activity_region"));
+            ps.setObject(21, body.get("visibility_type"));
+            ps.setObject(22, Rows.joinValue(body.get("invitee_ids")));
+            ps.setObject(23, userId);
+            ps.setObject(24, organizers.get("ids"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
@@ -381,6 +384,10 @@ public class AdminActivityController {
     private String checkinOpenUnit(Object value) {
         String unit = text(value);
         return "day".equals(unit) ? "day" : "hour";
+    }
+
+    private int attendanceEnabled(Map<String, Object> activity) {
+        return "接龙".equals(text(activity.get("activity_type"))) ? 0 : 1;
     }
 
     private String checkinMethods(Object value) {
@@ -623,6 +630,14 @@ public class AdminActivityController {
 
     private int signupLimit(Map<String, Object> row, Map<String, Integer> modeLimits) {
         return ActivityLimitCalculator.signupLimit(row, modeLimits);
+    }
+
+    private int enrolledCount(int activityId) {
+        Integer count = jdbc.queryForObject(
+                "select coalesce(sum(1+coalesce(extra_count,0)),0) from enrollments where activity_id=?",
+                Integer.class,
+                activityId);
+        return count == null ? 0 : count;
     }
 
     private void applyDefaultVenueBanner(Map<String, Object> row) {

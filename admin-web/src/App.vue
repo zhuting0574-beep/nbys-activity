@@ -484,7 +484,7 @@
           <el-option v-for="user in formalUsers" :key="user.id" :label="user.callsign || user.username" :value="Number(user.id)" />
         </el-select>
       </el-form-item>
-      <el-form-item label="活动类型"><el-select v-model="activityForm.activity_type"><el-option label="周常" value="周常" /><el-option label="本地活动" value="本地活动" /><el-option label="外地活动" value="外地活动" /></el-select></el-form-item>
+      <el-form-item label="活动类型"><el-select v-model="activityForm.activity_type"><el-option label="周常" value="周常" /><el-option label="接龙" value="接龙" /><el-option label="本地活动" value="本地活动" /><el-option label="外地活动" value="外地活动" /></el-select></el-form-item>
       <el-form-item label="场地">
         <el-select v-model="activityForm.venue_id" clearable filterable placeholder="选择场地" @change="setActivityVenue">
           <el-option v-for="venue in venues" :key="venue.id" :label="venueLabel(venue)" :value="venue.id" />
@@ -733,7 +733,7 @@ const ActivityForm = {
       <div v-else class="banner-empty">建议上传活动横幅图，将展示在 H5 首页和活动详情页</div>
     </el-form-item>
     <el-form-item label="活动名称"><el-input v-model="form.name"/></el-form-item>
-    <el-form-item label="活动类型"><el-select v-model="form.activity_type"><el-option label="周常" value="周常"/><el-option label="本地活动" value="本地活动"/><el-option label="外地活动" value="外地活动"/></el-select></el-form-item>
+    <el-form-item label="活动类型"><el-select v-model="form.activity_type"><el-option label="周常" value="周常"/><el-option label="接龙" value="接龙"/><el-option label="本地活动" value="本地活动"/><el-option label="外地活动" value="外地活动"/></el-select></el-form-item>
     <el-form-item label="地点"><el-input v-model="form.location"/></el-form-item>
     <el-form-item label="时间"><el-date-picker v-model="form.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss"/><el-date-picker v-model="form.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss"/></el-form-item>
     <el-form-item label="人数配置"><div class="number-config-grid"><label><span>开启人数</span><el-input-number v-model="form.open_min" :min="0"/></label><label><span>阵营数</span><el-input-number v-model="form.camp_count" :min="1"/></label><label><span>阵营人数上限</span><el-input-number v-model="form.camp_limit" :min="0"/></label><label><span>每阵营小队数</span><el-input-number v-model="form.squad_count" :min="1"/></label><label><span>小队人数上限</span><el-input-number v-model="form.squad_limit" :min="0"/></label></div></el-form-item>

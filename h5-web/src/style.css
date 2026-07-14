@@ -1112,6 +1112,13 @@ select {
   white-space: nowrap;
 }
 
+.weekly-member-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .weekly-member-status {
   flex: 0 0 auto;
   padding: 4px 8px;
@@ -1125,6 +1132,12 @@ select {
 .weekly-member-status.checked {
   color: #bbf7d0;
   background: rgba(34, 197, 94, .16);
+}
+
+.weekly-member-count {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .rental-renter {
@@ -1505,6 +1518,22 @@ select {
 .confirm-panel p {
   color: #cbd5e1;
   line-height: 1.6;
+}
+
+.enrollment-modal-panel {
+  gap: 16px;
+}
+
+.enrollment-count-field {
+  display: grid;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.enrollment-count-field input {
+  min-height: 46px;
 }
 
 .confirm-actions {
