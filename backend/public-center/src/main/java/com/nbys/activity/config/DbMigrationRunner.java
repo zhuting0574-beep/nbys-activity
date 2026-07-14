@@ -22,6 +22,8 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activities", "banner_source", "varchar(20) NOT NULL DEFAULT 'venue' COMMENT 'custom=用户上传, venue=跟随场地默认图'", "banner_url");
             addColumn("activities", "venue_id", "int DEFAULT NULL COMMENT '关联场地ID'", "location");
             addColumn("activities", "checkin_methods", "varchar(30) NOT NULL DEFAULT 'location,qr' COMMENT '签到方式：location,qr'", "venue_id");
+            addColumn("activities", "checkin_open_value", "int NOT NULL DEFAULT 3 COMMENT '签到提前开放数值，0=活动开始时开放'", "checkin_methods");
+            addColumn("activities", "checkin_open_unit", "varchar(10) NOT NULL DEFAULT 'hour' COMMENT '签到提前开放单位：hour/day'", "checkin_open_value");
             addColumn("activities", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");
             addColumn("activity_plans", "banner_url", "varchar(500) DEFAULT NULL COMMENT '策划banner图'", "name");
             addColumn("activity_plans", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "created_by_id");

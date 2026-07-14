@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -586,7 +587,8 @@ public class H5Controller {
 
     private boolean isCheckinOpen(Map<String, Object> activity, LocalDateTime now) {
         try {
-            return isWithinCheckinWindow(now, dateTime(activity.get("start_at")), dateTime(activity.get("end_at")));
+            return isWithinCheckinWindow(now, dateTime(activity.get("start_at")), dateTime(activity.get("end_at")),
+                    num(activity.get("checkin_open_value"), 3), text(activity.get("checkin_open_unit")));
         } catch (RuntimeException e) {
             return false;
         }
@@ -594,14 +596,28 @@ public class H5Controller {
 
     private void requireCheckinWindow(Map<String, Object> activity, LocalDateTime now) {
         LocalDateTime activityStart = dateTime(activity.get("start_at"));
-        LocalDateTime start = activityStart.minusHours(3);
+        int value = num(activity.get("checkin_open_value"), 3);
+        String unit = text(activity.get("checkin_open_unit"));
+        LocalDateTime start = checkinOpenAt(activityStart, value, unit);
         LocalDateTime end = dateTime(activity.get("end_at"));
-        if (now.isBefore(start)) throw new IllegalArgumentException("活动开始前3小时开放签到");
+        if (now.isBefore(start)) throw new IllegalArgumentException(checkinOpenMessage(value, unit));
         if (now.isAfter(end)) throw new IllegalArgumentException("活动已结束，签到已关闭");
     }
 
-    static boolean isWithinCheckinWindow(LocalDateTime now, LocalDateTime start, LocalDateTime end) {
-        return !now.isBefore(start.minusHours(3)) && !now.isAfter(end);
+    static boolean isWithinCheckinWindow(LocalDateTime now, LocalDateTime start, LocalDateTime end, int value, String unit) {
+        return !now.isBefore(checkinOpenAt(start, value, unit)) && !now.isAfter(end);
+    }
+
+    private static LocalDateTime checkinOpenAt(LocalDateTime activityStart, int value, String unit) {
+        int safeValue = Math.max(0, value);
+        if ("day".equals(unit)) return activityStart.minusDays(safeValue);
+        return activityStart.minusHours(safeValue);
+    }
+
+    private String checkinOpenMessage(int value, String unit) {
+        int safeValue = Math.max(0, value);
+        if (safeValue == 0) return "活动开始时开放签到";
+        return "day".equals(unit) ? "活动开始前" + safeValue + "天开放签到" : "活动开始前" + safeValue + "小时开放签到";
     }
 
     private Map<String, Object> checkinVenue(Map<String, Object> activity) {
@@ -667,17 +683,12 @@ public class H5Controller {
     }
 
     private int signupLimit(Map<String, Object> row) {
-        int modeMax = 0;
+        Map<String, Integer> modeLimits = new HashMap<String, Integer>();
         for (String mode : Rows.csv(String.valueOf(row.get("game_modes")))) {
             Map<String, Object> m = Rows.one(jdbc, "select suitable_people from game_modes where name=?", mode);
-            if (m != null) modeMax = Math.max(modeMax, num(m.get("suitable_people"), 0));
+            if (m != null) modeLimits.put(mode, num(m.get("suitable_people"), 0));
         }
-        int campLimit = num(row.get("camp_count"), 0) * num(row.get("camp_limit"), 0);
-        int squadLimit = num(row.get("camp_count"), 0) * num(row.get("squad_count"), 0) * num(row.get("squad_limit"), 0);
-        int limit = modeMax == 0 ? Integer.MAX_VALUE : modeMax;
-        if (campLimit > 0) limit = Math.min(limit, campLimit);
-        if (squadLimit > 0) limit = Math.min(limit, squadLimit);
-        return limit == Integer.MAX_VALUE ? 0 : limit;
+        return ActivityLimitCalculator.signupLimit(row, modeLimits);
     }
 
     private void enrichVenue(Map<String, Object> row) {

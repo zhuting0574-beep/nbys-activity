@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
@@ -126,9 +127,9 @@ public class AdminActivityController {
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
-        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
+        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), bannerUrl, bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
-                checkinMethods(body.get("checkin_methods")),
+                checkinMethods(body.get("checkin_methods")), checkinOpenValue(body.get("checkin_open_value")), checkinOpenUnit(body.get("checkin_open_unit")),
                 num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
                 Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
         jdbc.update("update attendance_events set organizer=?,organizer_ids=? where source_activity_id=?", organizers.get("names"), organizers.get("ids"), id);
@@ -338,7 +339,7 @@ public class AdminActivityController {
         String bannerSource = activityBannerSource(body);
         Map<String, String> organizers = organizers(body.get("organizer_ids"), userId);
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,checkin_open_value,checkin_open_unit,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, bannerUrl);
             ps.setObject(3, bannerSource);
@@ -348,21 +349,38 @@ public class AdminActivityController {
             ps.setObject(7, location);
             ps.setObject(8, venueId);
             ps.setObject(9, checkinMethods(body.get("checkin_methods")));
-            ps.setObject(10, num(body.get("open_min"), 0));
-            ps.setObject(11, num(body.get("camp_count"), 2));
-            ps.setObject(12, num(body.get("camp_limit"), 0));
-            ps.setObject(13, num(body.get("squad_count"), 1));
-            ps.setObject(14, num(body.get("squad_limit"), 0));
-            ps.setObject(15, Rows.joinValue(body.get("allowed_jobs")));
-            ps.setObject(16, Rows.joinValue(body.get("game_modes")));
-            ps.setObject(17, body.get("activity_region"));
-            ps.setObject(18, body.get("visibility_type"));
-            ps.setObject(19, Rows.joinValue(body.get("invitee_ids")));
-            ps.setObject(20, userId);
-            ps.setObject(21, organizers.get("ids"));
+            ps.setObject(10, checkinOpenValue(body.get("checkin_open_value")));
+            ps.setObject(11, checkinOpenUnit(body.get("checkin_open_unit")));
+            ps.setObject(12, num(body.get("open_min"), 0));
+            ps.setObject(13, num(body.get("camp_count"), 2));
+            ps.setObject(14, num(body.get("camp_limit"), 0));
+            ps.setObject(15, num(body.get("squad_count"), 1));
+            ps.setObject(16, num(body.get("squad_limit"), 0));
+            ps.setObject(17, Rows.joinValue(body.get("allowed_jobs")));
+            ps.setObject(18, Rows.joinValue(body.get("game_modes")));
+            ps.setObject(19, body.get("activity_region"));
+            ps.setObject(20, body.get("visibility_type"));
+            ps.setObject(21, Rows.joinValue(body.get("invitee_ids")));
+            ps.setObject(22, userId);
+            ps.setObject(23, organizers.get("ids"));
             return ps;
         }, kh);
         return kh.getKey().intValue();
+    }
+
+    private int checkinOpenValue(Object value) {
+        if (value == null) return 3;
+        if (value instanceof Number) return Math.max(0, ((Number) value).intValue());
+        try {
+            return Math.max(0, Integer.parseInt(String.valueOf(value).trim()));
+        } catch (Exception e) {
+            return 3;
+        }
+    }
+
+    private String checkinOpenUnit(Object value) {
+        String unit = text(value);
+        return "day".equals(unit) ? "day" : "hour";
     }
 
     private String checkinMethods(Object value) {
@@ -604,16 +622,7 @@ public class AdminActivityController {
     }
 
     private int signupLimit(Map<String, Object> row, Map<String, Integer> modeLimits) {
-        int modeMax = 0;
-        for (String mode : Rows.csv(String.valueOf(row.get("game_modes")))) {
-            modeMax = Math.max(modeMax, modeLimits.getOrDefault(mode, 0));
-        }
-        int campLimit = num(row.get("camp_count"), 0) * num(row.get("camp_limit"), 0);
-        int squadLimit = num(row.get("camp_count"), 0) * num(row.get("squad_count"), 0) * num(row.get("squad_limit"), 0);
-        int limit = modeMax == 0 ? Integer.MAX_VALUE : modeMax;
-        if (campLimit > 0) limit = Math.min(limit, campLimit);
-        if (squadLimit > 0) limit = Math.min(limit, squadLimit);
-        return limit == Integer.MAX_VALUE ? 0 : limit;
+        return ActivityLimitCalculator.signupLimit(row, modeLimits);
     }
 
     private void applyDefaultVenueBanner(Map<String, Object> row) {
