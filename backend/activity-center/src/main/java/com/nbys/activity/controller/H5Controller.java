@@ -266,7 +266,10 @@ public class H5Controller {
         if (member != null && activity != null && isManagedActivity(activity)) {
             Map<String, Object> squad = memberSquadForUpdate(id, member);
             if (squad != null && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法取消报名");
-            if (squad != null && sameId(squad.get("leader_user_id"), userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
+            if (squad != null && sameId(squad.get("leader_user_id"), userId)) {
+                if (hasOtherSquadMembers(id, squad, userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
+                jdbc.update("update squad_settings set leader_user_id=null where id=?", squad.get("id"));
+            }
         }
         jdbc.update("delete from enrollments where activity_id=? and user_id=?", id, userId);
         return ApiResponse.ok(null);
@@ -522,6 +525,13 @@ public class H5Controller {
     private Map<String, Object> memberSquadForUpdate(int activityId, Map<String, Object> member) {
         if (member == null || member.get("camp_no") == null || member.get("squad_no") == null) return null;
         return squadForUpdate(activityId, num(member.get("camp_no"), 0), num(member.get("squad_no"), 0));
+    }
+
+    private boolean hasOtherSquadMembers(int activityId, Map<String, Object> squad, int userId) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?",
+                Integer.class, activityId, squad.get("camp_no"), squad.get("squad_no"), userId);
+        return count != null && count > 0;
     }
 
     private boolean sameSquad(Map<String, Object> member, int campNo, int squadNo) {
