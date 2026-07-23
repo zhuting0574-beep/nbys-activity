@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.ActivityEnrollmentCalculator;
 import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -50,7 +51,7 @@ public class H5Controller {
     private List<Map<String, Object>> activityRows(Map<String, Object> me) {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select a.*, coalesce(nullif(u.callsign,''),u.username) creator_name, " +
-                        "(select count(distinct e.user_id) from enrollments e where e.activity_id=a.id) enroll_count " +
+                        "(select coalesce(sum(1+coalesce(e.extra_count,0)),0) from enrollments e where e.activity_id=a.id) enroll_count " +
                         "from activities a left join users u on u.id=a.created_by_id " +
                         "where a.record_type='activity' and a.deleted_at is null and a.end_at>=now() " +
                         "order by a.created_at desc, a.id desc");
@@ -102,6 +103,7 @@ public class H5Controller {
         row.put("squads", squads);
         row.put("members", Rows.list(jdbc,
                 "select e.*, u.username, u.callsign, u.is_regular_member, " +
+                        "coalesce(e.extra_count,0) extra_count, 1+coalesce(e.extra_count,0) participant_count, " +
                         "case when exists(select 1 from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
                         "where ev.source_activity_id=e.activity_id and ar.user_id=e.user_id and ar.present=1) then 1 else 0 end checked_in " +
                         "from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id", id));
@@ -179,7 +181,7 @@ public class H5Controller {
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         if (auth.isGuest(user)) {
             String visibleToGuest = " and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id " +
-                    "and (coalesce(a.visibility_type,'all') not in ('official','official_plus_invite') " +
+                    "and coalesce(a.attendance_enabled,1)=1 and (coalesce(a.visibility_type,'all') not in ('official','official_plus_invite') " +
                     "or (a.visibility_type='official_plus_invite' and find_in_set(?,coalesce(a.invitee_ids,''))>0))))";
             out.put("present_count", Rows.one(jdbc,
                     "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
@@ -189,12 +191,13 @@ public class H5Controller {
                     "select count(*) total from attendance_events ev where ev.event_date>=? and ev.event_date<?" + visibleToGuest,
                     start, end, userId).get("total"));
         } else {
+            String enabledAttendance = " and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id and coalesce(a.attendance_enabled,1)=1))";
             out.put("present_count", Rows.one(jdbc,
                     "select count(distinct ev.id) total from attendance_events ev join attendance_records ar on ar.event_id=ev.id " +
-                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?",
+                            "where ar.user_id=? and ar.present=1 and ev.event_date>=? and ev.event_date<?" + enabledAttendance,
                     userId, start, end).get("total"));
             out.put("activity_total", Rows.one(jdbc,
-                    "select count(*) total from attendance_events where event_date>=? and event_date<?", start, end).get("total"));
+                    "select count(*) total from attendance_events ev where ev.event_date>=? and ev.event_date<?" + enabledAttendance, start, end).get("total"));
         }
         return out;
     }
@@ -211,7 +214,9 @@ public class H5Controller {
                 "select ev.id,ev.name,ev.event_date,ev.location,ev.organizer,ev.activity_region," +
                         "case when exists(select 1 from attendance_records ar where ar.event_id=ev.id and ar.user_id=? and ar.present=1) then 1 else 0 end attended," +
                         "case when ev.source_activity_id is not null and exists(select 1 from enrollments e where e.activity_id=ev.source_activity_id and e.user_id=?) then 1 else 0 end enrolled " +
-                        "from attendance_events ev where ev.event_date>=? and ev.event_date<? order by ev.event_date asc,ev.id asc",
+                        "from attendance_events ev where ev.event_date>=? and ev.event_date<? " +
+                        "and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id and coalesce(a.attendance_enabled,1)=1)) " +
+                        "order by ev.event_date asc,ev.id asc",
                 userId, userId, targetYear + "-01-01", (targetYear + 1) + "-01-01");
         int presentCount = 0;
         for (Map<String, Object> event : events) {
@@ -227,15 +232,25 @@ public class H5Controller {
     }
 
     @PostMapping("/activities/{id}/enroll")
-    public ApiResponse<Void> enroll(@PathVariable int id, HttpServletRequest req) {
+    @Transactional
+    public ApiResponse<Void> enroll(@PathVariable int id, @RequestBody(required = false) Map<String, Object> body, HttpServletRequest req) {
         Map<String, Object> me = auth.current(req);
         int userId = ((Number) me.get("id")).intValue();
-        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=?", id);
+        Map<String, Object> activity = Rows.one(jdbc, "select * from activities where id=? for update", id);
         if (activity == null || !"报名中".equals(displayStatus(activity))) throw new IllegalArgumentException("当前活动不可报名");
-        if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, userId) != null) return ApiResponse.ok(null);
+        boolean weekly = isWeeklyActivity(activity);
+        int extraCount = weekly ? ActivityEnrollmentCalculator.extraCount(body == null ? null : body.get("extra_count")) : 0;
+        int newParticipants = 1 + extraCount;
+        Map<String, Object> existing = Rows.one(jdbc, "select * from enrollments where activity_id=? and user_id=? for update", id, userId);
+        if (existing != null && !weekly) return ApiResponse.ok(null);
         int count = enrolledUserCount(id);
-        if (count >= signupLimit(activity)) throw new IllegalArgumentException("活动名额已满");
-        jdbc.update("insert into enrollments(activity_id,user_id,rent_launcher,created_at,updated_at) values(?,?,0,now(),now())", id, userId);
+        int oldParticipants = ActivityEnrollmentCalculator.participantCount(existing);
+        if (ActivityEnrollmentCalculator.exceedsLimit(count, oldParticipants, newParticipants, signupLimit(activity))) throw new IllegalArgumentException("活动名额已满");
+        if (existing != null) {
+            jdbc.update("update enrollments set extra_count=?,updated_at=now() where activity_id=? and user_id=?", extraCount, id, userId);
+            return ApiResponse.ok(null);
+        }
+        jdbc.update("insert into enrollments(activity_id,user_id,rent_launcher,extra_count,created_at,updated_at) values(?,?,0,?,now(),now())", id, userId, extraCount);
         return ApiResponse.ok(null);
     }
 
@@ -251,7 +266,10 @@ public class H5Controller {
         if (member != null && activity != null && isManagedActivity(activity)) {
             Map<String, Object> squad = memberSquadForUpdate(id, member);
             if (squad != null && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法取消报名");
-            if (squad != null && sameId(squad.get("leader_user_id"), userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
+            if (squad != null && sameId(squad.get("leader_user_id"), userId)) {
+                if (hasOtherSquadMembers(id, squad, userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
+                jdbc.update("update squad_settings set leader_user_id=null where id=?", squad.get("id"));
+            }
         }
         jdbc.update("delete from enrollments where activity_id=? and user_id=?", id, userId);
         return ApiResponse.ok(null);
@@ -509,6 +527,13 @@ public class H5Controller {
         return squadForUpdate(activityId, num(member.get("camp_no"), 0), num(member.get("squad_no"), 0));
     }
 
+    private boolean hasOtherSquadMembers(int activityId, Map<String, Object> squad, int userId) {
+        Integer count = jdbc.queryForObject(
+                "select count(*) from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?",
+                Integer.class, activityId, squad.get("camp_no"), squad.get("squad_no"), userId);
+        return count != null && count > 0;
+    }
+
     private boolean sameSquad(Map<String, Object> member, int campNo, int squadNo) {
         return member != null && member.get("camp_no") != null && member.get("squad_no") != null
                 && num(member.get("camp_no"), -1) == campNo && num(member.get("squad_no"), -1) == squadNo;
@@ -738,11 +763,14 @@ public class H5Controller {
         int activityId = num(activity.get("id"), 0);
         Map<String, Object> plan = Rows.one(jdbc, "select id from activity_plans where converted_activity_id=? limit 1", activityId);
         if (plan == null) {
+            activity.put("converted_from_plan", false);
             activity.put("voter_count", 0);
             activity.put("voters", Collections.emptyList());
             return;
         }
         int planId = num(plan.get("id"), 0);
+        activity.put("converted_from_plan", true);
+        activity.put("source_plan_id", planId);
         Map<String, Object> count = Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", planId);
         activity.put("voter_count", count == null ? 0 : count.get("total"));
         activity.put("voters", Rows.list(jdbc,
@@ -776,10 +804,15 @@ public class H5Controller {
 
     private int enrolledUserCount(int activityId) {
         Integer count = jdbc.queryForObject(
-                "select count(distinct user_id) from enrollments where activity_id=?",
+                "select coalesce(sum(1+coalesce(extra_count,0)),0) from enrollments where activity_id=?",
                 Integer.class,
                 activityId);
         return count == null ? 0 : count;
+    }
+
+    private boolean isWeeklyActivity(Map<String, Object> activity) {
+        String type = text(activity.get("activity_type"));
+        return "周常".equals(type) || "接龙".equals(type);
     }
 
     private boolean bool(Object v) {

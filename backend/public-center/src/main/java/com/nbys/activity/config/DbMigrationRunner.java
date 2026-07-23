@@ -38,6 +38,7 @@ public class DbMigrationRunner implements ApplicationRunner {
             dropColumn("users", "id_card");
             addColumn("users", "must_change_password", "tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否必须修改临时密码'", "password_hash");
             addColumn("users", "temp_password_expires_at", "datetime DEFAULT NULL COMMENT '临时密码过期时间'", "must_change_password");
+            addColumn("enrollments", "extra_count", "int NOT NULL DEFAULT 0 COMMENT '周常报名额外同行人数，不含本人'", "rent_launcher");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
             addColumn("attendance_events", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "organizer");

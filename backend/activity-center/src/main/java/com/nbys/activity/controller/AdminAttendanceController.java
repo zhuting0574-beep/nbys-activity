@@ -27,18 +27,19 @@ public class AdminAttendanceController {
         String r = region == null ? "" : region;
         String start = year == null ? null : year + "-01-01";
         String end = year == null ? null : (year + 1) + "-01-01";
+        String enabledAttendance = enabledAttendanceSql();
         Map<String, Object> out = new LinkedHashMap<String, Object>();
-        out.put("activity_total", Rows.one(jdbc, "select count(*) total from attendance_events where (? is null or (event_date>=? and event_date<?)) and (?='' or activity_region=?)", year, start, end, r, r).get("total"));
+        out.put("activity_total", Rows.one(jdbc, "select count(*) total from attendance_events ev where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance, year, start, end, r, r).get("total"));
         out.put("top_formal_members", Rows.list(jdbc,
                 "select u.id,u.username,u.callsign,count(*) count from attendance_records ar join attendance_events ev on ev.id=ar.event_id join users u on u.id=ar.user_id " +
-                        "where ar.present=1 and u.is_regular_member=1 and (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?) group by u.id order by count desc limit 3", year, start, end, r, r));
+                        "where ar.present=1 and u.is_regular_member=1 and (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance + " group by u.id order by count desc limit 3", year, start, end, r, r));
         List<Map<String, Object>> topOrganizers = Rows.list(jdbc,
                 "select u.id,coalesce(nullif(u.callsign,''),u.username) organizer,count(*) count " +
                         "from attendance_events ev join users u on find_in_set(cast(u.id as char),coalesce(ev.organizer_ids,''))>0 " +
-                        "where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?) " +
+                        "where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance + " " +
                         "group by u.id,u.username,u.callsign order by count desc,organizer limit 3", year, start, end, r, r);
         List<Map<String, Object>> popularVenues = Rows.list(jdbc,
-                "select ev.location,count(ar.id) count from attendance_events ev left join attendance_records ar on ar.event_id=ev.id and ar.present=1 where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?) and coalesce(ev.location,'')<>'' group by ev.location order by count desc limit 3", year, start, end, r, r);
+                "select ev.location,count(ar.id) count from attendance_events ev left join attendance_records ar on ar.event_id=ev.id and ar.present=1 where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?) and coalesce(ev.location,'')<>''" + enabledAttendance + " group by ev.location order by count desc limit 3", year, start, end, r, r);
         out.put("top_organizers", topOrganizers);
         out.put("popular_venues", popularVenues);
         out.put("top_organizer", topOrganizers.isEmpty() ? null : topOrganizers.get(0));
@@ -53,14 +54,15 @@ public class AdminAttendanceController {
         String r = region == null ? "" : region;
         String start = year == null ? null : year + "-01-01";
         String end = year == null ? null : (year + 1) + "-01-01";
-        List<Map<String, Object>> events = Rows.list(jdbc, "select * from attendance_events where (? is null or (event_date>=? and event_date<?)) and (?='' or activity_region=?) order by event_date", year, start, end, r, r);
+        String enabledAttendance = enabledAttendanceSql();
+        List<Map<String, Object>> events = Rows.list(jdbc, "select * from attendance_events ev where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance + " order by ev.event_date", year, start, end, r, r);
         int formal = formalOnly ? 1 : 0;
         List<Map<String, Object>> users = Rows.list(jdbc, "select id,username,callsign,is_regular_member from users where disabled=0 and (?=0 or is_regular_member=1) order by is_regular_member desc,callsign,username", formal);
         List<Map<String, Object>> records = Rows.list(jdbc,
-                "select ar.* from attendance_records ar join attendance_events ev on ev.id=ar.event_id where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)", year, start, end, r, r);
+                "select ar.* from attendance_records ar join attendance_events ev on ev.id=ar.event_id where (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance, year, start, end, r, r);
         List<Map<String, Object>> enrollments = Rows.list(jdbc,
                 "select ev.id event_id,e.user_id from attendance_events ev join enrollments e on e.activity_id=ev.source_activity_id " +
-                        "where ev.source_activity_id is not null and (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)",
+                        "where ev.source_activity_id is not null and (? is null or (ev.event_date>=? and ev.event_date<?)) and (?='' or ev.activity_region=?)" + enabledAttendance,
                 year, start, end, r, r);
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("events", events);
@@ -164,5 +166,9 @@ public class AdminAttendanceController {
         if (value instanceof Boolean) return (Boolean) value;
         if (value instanceof Number) return ((Number) value).intValue() != 0;
         return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
+    }
+
+    private String enabledAttendanceSql() {
+        return " and (ev.source_activity_id is null or exists (select 1 from activities a where a.id=ev.source_activity_id and coalesce(a.attendance_enabled,1)=1))";
     }
 }
