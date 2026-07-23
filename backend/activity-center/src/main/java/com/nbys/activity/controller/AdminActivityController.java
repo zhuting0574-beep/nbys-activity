@@ -4,10 +4,9 @@ import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
 import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -22,6 +21,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @RestController
@@ -188,21 +188,160 @@ public class AdminActivityController {
     @GetMapping("/activities/{id}/enrollments/export")
     public void exportEnrollments(@PathVariable int id, HttpServletRequest req, HttpServletResponse response) throws IOException {
         auth.require(req, "activity:view");
+        Map<String, Object> activity = Rows.one(jdbc, "select name from activities where id=?", id);
+        if (activity == null) throw new IllegalArgumentException("活动不存在");
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select u.username,1+coalesce(e.extra_count,0) participant_count from enrollments e join users u on u.id=e.user_id where e.activity_id=? order by u.is_regular_member desc,e.id",
+                "select u.id user_id,u.username,coalesce(u.callsign,'') callsign," +
+                        "coalesce(nullif(trim(u.callsign),''),u.username) display_name," +
+                        "1+coalesce(e.extra_count,0) participant_count " +
+                        "from enrollments e join users u on u.id=e.user_id where e.activity_id=? " +
+                        "order by u.is_regular_member desc,e.id",
                 id);
+        String activityName = text(activity.get("name"));
+        writeWorkbook(response, buildEnrollmentWorkbook(activityName, rows), enrollmentExportFilename(activityName));
+    }
+
+    Workbook buildEnrollmentWorkbook(String activityName, List<Map<String, Object>> rows) {
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("报名表");
-        writeHeader(sheet, "序号", "名字", "报名人数");
-        int i = 1;
-        for (Map<String, Object> item : rows) {
-            Row row = sheet.createRow(i);
-            row.createCell(0).setCellValue(i);
-            row.createCell(1).setCellValue(text(item.get("username")));
-            row.createCell(2).setCellValue(num(item.get("participant_count"), 1));
-            i++;
+        sheet.setDisplayGridlines(false);
+        sheet.createFreezePane(0, 6);
+
+        CellStyle titleStyle = solidStyle(workbook, IndexedColors.DARK_BLUE, IndexedColors.WHITE, true, 16);
+        titleStyle.setAlignment(HorizontalAlignment.CENTER);
+        titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        CellStyle labelStyle = solidStyle(workbook, IndexedColors.PALE_BLUE, IndexedColors.DARK_BLUE, true, 11);
+        labelStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        CellStyle headerStyle = solidStyle(workbook, IndexedColors.ROYAL_BLUE, IndexedColors.WHITE, true, 11);
+        headerStyle.setAlignment(HorizontalAlignment.CENTER);
+        headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        applyBorders(headerStyle, BorderStyle.THIN, IndexedColors.DARK_BLUE.getIndex());
+        CellStyle bodyStyle = workbook.createCellStyle();
+        bodyStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+        bodyStyle.setBorderBottom(BorderStyle.THIN);
+        bodyStyle.setBottomBorderColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        CellStyle bandedStyle = workbook.createCellStyle();
+        bandedStyle.cloneStyleFrom(bodyStyle);
+        bandedStyle.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+        bandedStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        CellStyle centeredBodyStyle = workbook.createCellStyle();
+        centeredBodyStyle.cloneStyleFrom(bodyStyle);
+        centeredBodyStyle.setAlignment(HorizontalAlignment.CENTER);
+        CellStyle centeredBandedStyle = workbook.createCellStyle();
+        centeredBandedStyle.cloneStyleFrom(bandedStyle);
+        centeredBandedStyle.setAlignment(HorizontalAlignment.CENTER);
+        CellStyle numericBodyStyle = workbook.createCellStyle();
+        numericBodyStyle.cloneStyleFrom(bodyStyle);
+        numericBodyStyle.setAlignment(HorizontalAlignment.RIGHT);
+        CellStyle numericBandedStyle = workbook.createCellStyle();
+        numericBandedStyle.cloneStyleFrom(bandedStyle);
+        numericBandedStyle.setAlignment(HorizontalAlignment.RIGHT);
+
+        Row title = sheet.createRow(0);
+        title.setHeightInPoints(34);
+        Cell titleCell = title.createCell(0);
+        titleCell.setCellValue(activityName + "｜报名表");
+        titleCell.setCellStyle(titleStyle);
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 5));
+
+        writeMergedMetadata(sheet, 1, "活动名称", activityName, labelStyle);
+        writeMergedMetadata(sheet, 2, "显示规则", "呼号不为空时使用呼号；呼号为空时使用用户名", labelStyle);
+
+        int participantTotal = 0;
+        for (Map<String, Object> item : rows) participantTotal += num(item.get("participant_count"), 1);
+        Row summary = sheet.createRow(3);
+        summary.setHeightInPoints(24);
+        writeSummaryCell(summary, 0, "报名账号", labelStyle);
+        writeSummaryCell(summary, 1, rows.size(), null);
+        writeSummaryCell(summary, 2, "报名人数", labelStyle);
+        writeSummaryCell(summary, 3, participantTotal, null);
+        writeSummaryCell(summary, 4, "导出时间", labelStyle);
+        writeSummaryCell(summary, 5, LocalDateTime.now(BUSINESS_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), null);
+
+        Row header = sheet.createRow(5);
+        header.setHeightInPoints(26);
+        String[] headers = {"序号", "用户ID", "用户名", "呼号", "显示名称", "报名人数"};
+        for (int i = 0; i < headers.length; i++) {
+            Cell cell = header.createCell(i);
+            cell.setCellValue(headers[i]);
+            cell.setCellStyle(headerStyle);
         }
-        writeWorkbook(response, workbook, "活动报名表.xlsx");
+
+        for (int index = 0; index < rows.size(); index++) {
+            Map<String, Object> item = rows.get(index);
+            Row row = sheet.createRow(index + 6);
+            row.setHeightInPoints(22);
+            boolean banded = index % 2 == 0;
+            writeNumericCell(row, 0, index + 1, banded ? centeredBandedStyle : centeredBodyStyle);
+            writeNumericCell(row, 1, num(item.get("user_id"), 0), banded ? centeredBandedStyle : centeredBodyStyle);
+            writeTextCell(row, 2, text(item.get("username")), banded ? bandedStyle : bodyStyle);
+            writeTextCell(row, 3, text(item.get("callsign")), banded ? bandedStyle : bodyStyle);
+            writeTextCell(row, 4, text(item.get("display_name")), banded ? bandedStyle : bodyStyle);
+            writeNumericCell(row, 5, num(item.get("participant_count"), 1), banded ? numericBandedStyle : numericBodyStyle);
+        }
+
+        int[] widths = {9, 11, 20, 20, 20, 12};
+        for (int i = 0; i < widths.length; i++) sheet.setColumnWidth(i, widths[i] * 256);
+        sheet.setAutoFilter(new CellRangeAddress(5, Math.max(5, rows.size() + 5), 0, 5));
+        return workbook;
+    }
+
+    String enrollmentExportFilename(String activityName) {
+        String safe = text(activityName).replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+        safe = safe.replaceAll("[. ]+$", "").trim();
+        if (safe.isEmpty()) safe = "活动报名表";
+        if (safe.length() > 120) safe = safe.substring(0, 120).trim();
+        return safe + ".xlsx";
+    }
+
+    private CellStyle solidStyle(Workbook workbook, IndexedColors fill, IndexedColors fontColor, boolean bold, int fontSize) {
+        CellStyle style = workbook.createCellStyle();
+        style.setFillForegroundColor(fill.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        Font font = workbook.createFont();
+        font.setBold(bold);
+        font.setColor(fontColor.getIndex());
+        font.setFontHeightInPoints((short) fontSize);
+        style.setFont(font);
+        return style;
+    }
+
+    private void applyBorders(CellStyle style, BorderStyle borderStyle, short color) {
+        style.setBorderTop(borderStyle);
+        style.setBorderBottom(borderStyle);
+        style.setBorderLeft(borderStyle);
+        style.setBorderRight(borderStyle);
+        style.setTopBorderColor(color);
+        style.setBottomBorderColor(color);
+        style.setLeftBorderColor(color);
+        style.setRightBorderColor(color);
+    }
+
+    private void writeMergedMetadata(Sheet sheet, int rowIndex, String label, String value, CellStyle labelStyle) {
+        Row row = sheet.createRow(rowIndex);
+        row.setHeightInPoints(24);
+        writeTextCell(row, 0, label, labelStyle);
+        writeTextCell(row, 1, value, null);
+        sheet.addMergedRegion(new CellRangeAddress(rowIndex, rowIndex, 1, 5));
+    }
+
+    private void writeSummaryCell(Row row, int column, Object value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        if (value instanceof Number) cell.setCellValue(((Number) value).doubleValue());
+        else cell.setCellValue(text(value));
+        if (style != null) cell.setCellStyle(style);
+    }
+
+    private void writeTextCell(Row row, int column, String value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value);
+        if (style != null) cell.setCellStyle(style);
+    }
+
+    private void writeNumericCell(Row row, int column, int value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value);
+        if (style != null) cell.setCellStyle(style);
     }
 
     @GetMapping("/activities/{id}/launcher-rentals/export")
