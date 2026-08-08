@@ -70,6 +70,7 @@ public class RentalController {
         Map<String, Object> item = Rows.one(jdbc, "select id from launcher_rental_items where id=? and created_by_id=?", id, userId);
         if (item == null) throw new IllegalArgumentException("发射器不存在或无权删除");
         jdbc.update("delete n from user_notifications n join activity_launcher_rentals r on r.id=n.related_id where n.type='launcher_rental' and r.launcher_id=?", id);
+        jdbc.update("delete from activity_launcher_options where launcher_id=?", id);
         jdbc.update("delete from activity_launcher_rentals where launcher_id=?", id);
         jdbc.update("delete from launcher_rental_items where id=? and created_by_id=?", id, userId);
         return ApiResponse.ok(null);

@@ -1,0 +1,191 @@
+.escape-admin {
+  min-width: 920px;
+}
+
+.escape-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin: 8px 0 18px;
+}
+
+.escape-heading h1 {
+  margin: 5px 0 3px;
+  color: #0f172a;
+  font-size: 28px;
+}
+
+.escape-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.escape-kicker,
+.escape-panel-title span {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+
+.escape-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 5px;
+  overflow-x: auto;
+  background: #e9eef7;
+  border-radius: 9px;
+}
+
+.escape-tabs button {
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  color: #475569;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.escape-tabs button.active {
+  color: #1d4ed8;
+  font-weight: 700;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .12);
+}
+
+.escape-state,
+.escape-panel {
+  padding: 18px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .06);
+}
+
+.escape-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.escape-metrics article {
+  padding: 18px;
+  background: #fff;
+  border-top: 3px solid #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .06);
+}
+
+.escape-metrics span,
+.escape-metrics small {
+  display: block;
+  color: #64748b;
+}
+
+.escape-metrics strong {
+  display: block;
+  margin: 10px 0 5px;
+  color: #0f172a;
+  font-size: 25px;
+}
+
+.escape-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 14px;
+}
+
+.escape-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.escape-panel-title h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.escape-economy {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.escape-economy div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.escape-economy dt {
+  color: #64748b;
+}
+
+.escape-economy dd {
+  margin: 0;
+  color: #15803d;
+  font-weight: 700;
+}
+
+.escape-economy dd.danger {
+  color: #dc2626;
+}
+
+.escape-filterbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 14px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .06);
+}
+
+.escape-filter-spacer {
+  flex: 1;
+}
+
+.escape-settlement-form {
+  margin-top: 20px;
+}
+
+.escape-admin .el-tag.escape-rarity-超凡 {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.escape-admin .el-tag.escape-rarity-史诗 {
+  color: #c2410c;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.escape-admin .el-tag.escape-rarity-精品 {
+  color: #7e22ce;
+  background: #faf5ff;
+  border-color: #e9d5ff;
+}
+
+.escape-admin .el-tag.escape-rarity-普通 {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+@media (max-width: 1180px) {
+  .escape-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .escape-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

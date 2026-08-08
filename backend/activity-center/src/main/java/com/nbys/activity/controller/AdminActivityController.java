@@ -3,6 +3,7 @@ package com.nbys.activity.controller;
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
 import com.nbys.activity.service.ActivityLimitCalculator;
+import com.nbys.activity.service.PlanOptionSynchronizer;
 import com.nbys.activity.service.Rows;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -32,10 +33,12 @@ public class AdminActivityController {
 
     private final JdbcTemplate jdbc;
     private final AuthService auth;
+    private final PlanOptionSynchronizer planOptionSynchronizer;
 
-    public AdminActivityController(JdbcTemplate jdbc, AuthService auth) {
+    public AdminActivityController(JdbcTemplate jdbc, AuthService auth, PlanOptionSynchronizer planOptionSynchronizer) {
         this.jdbc = jdbc;
         this.auth = auth;
+        this.planOptionSynchronizer = planOptionSynchronizer;
     }
 
     @GetMapping("/activities")
@@ -385,7 +388,7 @@ public class AdminActivityController {
             return ps;
         }, kh);
         int id = kh.getKey().intValue();
-        replacePlanOptions(id, body);
+        planOptionSynchronizer.sync(id, body);
         return ApiResponse.ok(Collections.<String, Object>singletonMap("id", id));
     }
 
@@ -445,12 +448,13 @@ public class AdminActivityController {
     }
 
     @PutMapping("/activity-plans/{id}")
+    @Transactional
     public ApiResponse<Void> updatePlan(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "plan:update");
         Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         jdbc.update("update activity_plans set name=?, banner_url=?, vote_deadline=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), planBanner(body.get("banner_url")), body.get("vote_deadline"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
-        replacePlanOptions(id, body);
+        planOptionSynchronizer.sync(id, body);
         return ApiResponse.ok(null);
     }
 
@@ -705,18 +709,6 @@ public class AdminActivityController {
     private String venueLocation(Map<String, Object> venue) {
         String address = text(venue.get("address"));
         return address.isEmpty() ? text(venue.get("name")) : address;
-    }
-
-    private void replacePlanOptions(int id, Map<String, Object> body) {
-        jdbc.update("delete from plan_date_options where plan_id=?", id);
-        jdbc.update("delete from plan_venue_options where plan_id=?", id);
-        jdbc.update("delete from plan_game_mode_options where plan_id=?", id);
-        for (Object date : list(body.get("dates"))) {
-            String value = dateValue(date);
-            if (!value.isEmpty()) jdbc.update("insert into plan_date_options(plan_id,date,remark) values(?,?,?)", id, value, dateRemark(date));
-        }
-        for (Object venueId : list(body.get("venue_ids"))) jdbc.update("insert into plan_venue_options(plan_id,venue_id) values(?,?)", id, venueId);
-        for (Object modeId : list(body.get("game_mode_ids"))) jdbc.update("insert into plan_game_mode_options(plan_id,game_mode_id) values(?,?)", id, modeId);
     }
 
     private List<Integer> launcherIds(int activityId) {
