@@ -419,7 +419,6 @@ export default {
         this.control.match = { ...this.control.match, status: 'settled' }
         await this.loadProfile()
         this.$emit('notify', '对局结算完成')
-        this.control.open = false
       } catch (error) {
         this.control.submitError = error.message || '对局结算失败'
         this.$emit('notify', this.control.submitError)

@@ -1,6 +1,6 @@
 <template>
   <div v-if="open" class="escape-modal">
-    <button class="escape-modal-backdrop" type="button" aria-label="关闭战局控制" :disabled="saving" @click="requestClose"></button>
+    <button v-if="!isFinalized" class="escape-modal-backdrop" type="button" aria-label="关闭战局控制" :disabled="saving" @click="requestClose"></button>
     <section class="escape-control-dialog" role="dialog" aria-modal="true" aria-labelledby="escape-control-title">
       <header>
         <div>
@@ -8,7 +8,7 @@
           <h2 id="escape-control-title">战局控制</h2>
           <p>{{ match?.name || '当前战局' }}</p>
         </div>
-        <button class="escape-icon-button" type="button" aria-label="关闭" :disabled="saving" @click="requestClose">×</button>
+        <button v-if="!isFinalized" class="escape-icon-button" type="button" aria-label="关闭" :disabled="saving" @click="requestClose">×</button>
       </header>
 
       <EscapeState
@@ -51,6 +51,16 @@
           </button>
         </div>
 
+        <section v-else-if="isFinalized" class="escape-state escape-control-complete">
+          <div class="escape-state-icon">✓</div>
+          <h3>战局结算完成</h3>
+          <p>本场参与人员的现金、物品和特殊武器状态已更新。</p>
+          <div class="escape-control-summary">
+            <span>已完成最终结算</span>
+            <strong>{{ participants.length }} 人</strong>
+            <small>{{ data?.settlement?.settled_at ? formatDate(data.settlement.settled_at) : '数据已同步' }}</small>
+          </div>
+        </section>
         <form v-else class="escape-control-settlement" @submit.prevent="submitSettlement">
           <label>
             <span>结算说明</span>
@@ -150,6 +160,9 @@ export default {
     isPreparing() {
       return this.match.status === 'preparing'
     },
+    isFinalized() {
+      return this.match.status === 'settled'
+    },
     statusText() {
       return this.isPreparing ? '整备中' : this.match.status === 'in_progress' ? '进行中' : '已结算'
     },
@@ -198,6 +211,10 @@ export default {
     },
     money(value) {
       return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(Number(value || 0))
+    },
+    formatDate(value) {
+      if (!value) return ''
+      return new Date(value).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })
     },
     itemName(itemId) {
       return this.matchItems.find(item => Number(item.item_id) === Number(itemId))?.name || `物品 ${itemId}`

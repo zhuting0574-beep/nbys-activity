@@ -396,7 +396,6 @@ export default {
         this.control.match = { ...this.control.match, status: 'settled' }
         await this.load()
         this.$emit('notify', '对局结算完成')
-        this.control.open = false
         this.$emit('updated')
       } catch (error) {
         this.control.submitError = error.message || '对局结算失败'
