@@ -137,6 +137,7 @@
       :error="control.error"
       :submit-error="control.submitError"
       :data="control.data"
+      @close="control.open = false"
       @retry="loadControl"
       @start="startMatch"
       @settle="settleMatch"

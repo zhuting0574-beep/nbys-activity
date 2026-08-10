@@ -1,6 +1,6 @@
 <template>
   <div v-if="open" class="escape-modal">
-    <div class="escape-modal-backdrop"></div>
+    <button class="escape-modal-backdrop" type="button" aria-label="关闭战局控制" :disabled="saving" @click="requestClose"></button>
     <section class="escape-control-dialog" role="dialog" aria-modal="true" aria-labelledby="escape-control-title">
       <header>
         <div>
@@ -8,6 +8,7 @@
           <h2 id="escape-control-title">战局控制</h2>
           <p>{{ match?.name || '当前战局' }}</p>
         </div>
+        <button class="escape-icon-button" type="button" aria-label="关闭" :disabled="saving" @click="requestClose">×</button>
       </header>
 
       <EscapeState
@@ -132,7 +133,7 @@ export default {
     submitError: { type: String, default: '' },
     data: { type: Object, default: () => ({}) }
   },
-  emits: ['retry', 'start', 'settle'],
+  emits: ['close', 'retry', 'start', 'settle'],
   data() {
     return {
       note: '', drafts: [], formError: '', qrScanner: null,
@@ -190,6 +191,11 @@ export default {
     this.stopScanner()
   },
   methods: {
+    requestClose() {
+      if (this.saving) return
+      this.closeScanner()
+      this.$emit('close')
+    },
     money(value) {
       return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(Number(value || 0))
     },
