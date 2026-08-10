@@ -1,6 +1,6 @@
 <template>
   <div v-if="open" class="escape-modal">
-    <button class="escape-modal-backdrop" type="button" aria-label="关闭战局控制" @click="requestClose"></button>
+    <div class="escape-modal-backdrop"></div>
     <section class="escape-control-dialog" role="dialog" aria-modal="true" aria-labelledby="escape-control-title">
       <header>
         <div>
@@ -8,7 +8,6 @@
           <h2 id="escape-control-title">战局控制</h2>
           <p>{{ match?.name || '当前战局' }}</p>
         </div>
-        <button class="escape-icon-button" type="button" aria-label="关闭" :disabled="saving" @click="requestClose">×</button>
       </header>
 
       <EscapeState
@@ -133,7 +132,7 @@ export default {
     submitError: { type: String, default: '' },
     data: { type: Object, default: () => ({}) }
   },
-  emits: ['close', 'retry', 'start', 'settle'],
+  emits: ['retry', 'start', 'settle'],
   data() {
     return {
       note: '', drafts: [], formError: '', qrScanner: null,
@@ -217,11 +216,6 @@ export default {
       if (!itemId || this.itemAlreadySelected(participant, itemId) || this.poolRemaining(itemId) <= 0) return
       participant.items.push({ item_id: itemId, quantity: 1 })
       participant.pending_item_id = ''
-    },
-    async requestClose() {
-      if (this.saving) return
-      await this.stopScanner()
-      this.$emit('close')
     },
     async openScanner(participant) {
       await this.stopScanner()

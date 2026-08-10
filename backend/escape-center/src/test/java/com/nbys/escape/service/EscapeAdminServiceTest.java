@@ -47,6 +47,13 @@ class EscapeAdminServiceTest {
         assertTrue(error.getMessage().contains("数量"));
     }
 
+    @Test
+    void settlementReturnsOnlyUnconsumedMatchItemQuantity() {
+        assertEquals(7, EscapeAdminService.unconsumedQuantity(10, 3, 0));
+        assertEquals(4, EscapeAdminService.unconsumedQuantity(10, 3, 3));
+        assertEquals(0, EscapeAdminService.unconsumedQuantity(3, 3, 0));
+    }
+
     private Map<String, Object> input(long participantId) {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("participant_id", participantId);

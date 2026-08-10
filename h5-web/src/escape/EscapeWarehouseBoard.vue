@@ -51,6 +51,7 @@
             <b v-else>{{ symbol(item) }}</b>
             <em>{{ item.width || 1 }}×{{ item.height || 1 }}</em>
             <small>{{ item.name }}</small>
+            <strong v-if="Number(item.quantity || 1) > 1" class="escape-storage-quantity">×{{ item.quantity }}</strong>
           </button>
           <div
             v-if="preview?.warehouse === type"
@@ -69,7 +70,7 @@
 
     <aside v-if="selectedItem" class="escape-selected-item">
       <div>
-        <span>{{ rarityText(selectedItem.rarity) }} · {{ selectedItem.width || 1 }} × {{ selectedItem.height || 1 }}</span>
+        <span>{{ rarityText(selectedItem.rarity) }} · {{ selectedItem.width || 1 }} × {{ selectedItem.height || 1 }}<template v-if="Number(selectedItem.quantity || 1) > 1"> · 共 {{ selectedItem.quantity }} 件</template></span>
         <strong>{{ selectedItem.name }}</strong>
       </div>
       <div><small>今日估值</small><b>¥{{ money(selectedItem.current_price) }}</b></div>

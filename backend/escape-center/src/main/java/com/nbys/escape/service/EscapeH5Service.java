@@ -283,14 +283,40 @@ public class EscapeH5Service {
         result.put("type", type);
         result.put("width", asset.get(type + "_width"));
         result.put("height", asset.get(type + "_height"));
-        result.put("items", Rows.list(jdbc,
+        List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select inv.id inventory_id,inv.pos_x,inv.pos_y,inv.durability_percent,inv.status," +
                         "i.id item_id,i.name,i.rarity,i.category,i.current_price,i.previous_price,i.width,i.height,i.image_url," +
                         "w.weapon_type from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
                         "left join escape_weapons w on w.item_id=i.id and w.enabled=1 " +
                         "where inv.user_id=? and inv.warehouse_type=? order by inv.pos_y,inv.pos_x,inv.id",
-                userId, type));
+                userId, type);
+        result.put("items", stackWarehouseItems(rows));
         return result;
+    }
+
+    private List<Map<String, Object>> stackWarehouseItems(List<Map<String, Object>> rows) {
+        Map<String, Map<String, Object>> stacks = new LinkedHashMap<String, Map<String, Object>>();
+        for (Map<String, Object> row : rows) {
+            boolean stackable = row.get("durability_percent") == null;
+            String key = stackable
+                    ? String.valueOf(row.get("item_id")) + "|" + String.valueOf(row.get("status"))
+                    : "inventory|" + String.valueOf(row.get("inventory_id"));
+            Map<String, Object> stack = stacks.get(key);
+            if (stack == null) {
+                stack = new LinkedHashMap<String, Object>(row);
+                stack.put("quantity", 1);
+                List<Long> ids = new ArrayList<Long>();
+                ids.add(((Number) row.get("inventory_id")).longValue());
+                stack.put("inventory_ids", ids);
+                stacks.put(key, stack);
+            } else {
+                @SuppressWarnings("unchecked")
+                List<Long> ids = (List<Long>) stack.get("inventory_ids");
+                ids.add(((Number) row.get("inventory_id")).longValue());
+                stack.put("quantity", ((Number) stack.get("quantity")).intValue() + 1);
+            }
+        }
+        return new ArrayList<Map<String, Object>>(stacks.values());
     }
 
     @Transactional
@@ -309,16 +335,27 @@ public class EscapeH5Service {
         String sourceType = String.valueOf(item.get("warehouse_type"));
         Integer requestedX = nullableInt(body.get("pos_x"));
         Integer requestedY = nullableInt(body.get("pos_y"));
-        Placement placement = findPlacement(userId, targetType, ((Number) item.get("width")).intValue(),
-                ((Number) item.get("height")).intValue(), inventoryId, requestedX, requestedY);
+        List<Long> movingIds = stackInventoryIds(item, userId);
+        Map<String, Object> targetStack = item.get("durability_percent") == null && !sourceType.equals(targetType)
+                ? Rows.one(jdbc, "select pos_x,pos_y from escape_inventory_instances where user_id=? " +
+                        "and warehouse_type=? and item_id=? and status=? and durability_percent is null " +
+                        "order by id limit 1 for update", userId, targetType, item.get("item_id"), item.get("status"))
+                : null;
+        Placement placement = targetStack == null
+                ? findPlacement(userId, targetType, ((Number) item.get("width")).intValue(),
+                        ((Number) item.get("height")).intValue(), movingIds, requestedX, requestedY)
+                : new Placement(((Number) targetStack.get("pos_x")).intValue(),
+                        ((Number) targetStack.get("pos_y")).intValue());
         if (sourceType.equals(targetType)
                 && placement.x == ((Number) item.get("pos_x")).intValue()
                 && placement.y == ((Number) item.get("pos_y")).intValue()) {
             completeOperation(userId, operationType, idempotencyKey, String.valueOf(inventoryId));
             return inventory(inventoryId, userId);
         }
-        jdbc.update("update escape_inventory_instances set warehouse_type=?,pos_x=?,pos_y=?,version=version+1 where id=? and user_id=?",
-                targetType, placement.x, placement.y, inventoryId, userId);
+        for (Long movingId : movingIds) {
+            jdbc.update("update escape_inventory_instances set warehouse_type=?,pos_x=?,pos_y=?,version=version+1 where id=? and user_id=?",
+                    targetType, placement.x, placement.y, movingId, userId);
+        }
         completeOperation(userId, operationType, idempotencyKey, String.valueOf(inventoryId));
         return inventory(inventoryId, userId);
     }
@@ -425,7 +462,8 @@ public class EscapeH5Service {
             if (product.get("item_id") == null) throw new IllegalArgumentException("商品未关联物品");
             placements = findPlacements(userId, "buffer",
                     ((Number) product.get("item_width")).intValue(),
-                    ((Number) product.get("item_height")).intValue(), quantity);
+                    ((Number) product.get("item_height")).intValue(), quantity,
+                    "weapon".equals(product.get("item_category")) ? null : ((Number) product.get("item_id")).longValue());
         }
         BigDecimal after = before.subtract(total);
         int stockUpdated = jdbc.update(
@@ -539,14 +577,14 @@ public class EscapeH5Service {
     }
 
     private Placement findPlacement(int userId, String warehouseType, int itemWidth, int itemHeight,
-                                    Long ignoredId, Integer requestedX, Integer requestedY) {
+                                    List<Long> ignoredIds, Integer requestedX, Integer requestedY) {
         ensureAsset(userId);
         Map<String, Object> asset = requiredOne(
                 "select personal_width,personal_height,buffer_width,buffer_height from escape_user_assets where user_id=? for update",
                 userId);
         int gridWidth = ((Number) asset.get(warehouseType + "_width")).intValue();
         int gridHeight = ((Number) asset.get(warehouseType + "_height")).intValue();
-        List<GridPacking.Rect> occupied = occupied(userId, warehouseType, ignoredId);
+        List<GridPacking.Rect> occupied = occupied(userId, warehouseType, ignoredIds);
         GridPacking.Position found;
         if (requestedX != null || requestedY != null) {
             if (requestedX == null || requestedY == null
@@ -561,7 +599,8 @@ public class EscapeH5Service {
         return new Placement(found.x, found.y);
     }
 
-    private List<Placement> findPlacements(int userId, String warehouseType, int itemWidth, int itemHeight, int quantity) {
+    private List<Placement> findPlacements(int userId, String warehouseType, int itemWidth, int itemHeight,
+                                           int quantity, Long stackItemId) {
         ensureAsset(userId);
         Map<String, Object> asset = requiredOne(
                 "select personal_width,personal_height,buffer_width,buffer_height from escape_user_assets where user_id=? for update",
@@ -570,6 +609,18 @@ public class EscapeH5Service {
         int gridHeight = ((Number) asset.get(warehouseType + "_height")).intValue();
         List<GridPacking.Rect> occupied = occupied(userId, warehouseType, null);
         List<Placement> result = new ArrayList<Placement>();
+        if (stackItemId != null) {
+            Map<String, Object> existing = Rows.one(jdbc,
+                    "select pos_x,pos_y from escape_inventory_instances where user_id=? and warehouse_type=? " +
+                            "and item_id=? and durability_percent is null and status='available' order by id limit 1 for update",
+                    userId, warehouseType, stackItemId);
+            if (existing != null) {
+                Placement stack = new Placement(((Number) existing.get("pos_x")).intValue(),
+                        ((Number) existing.get("pos_y")).intValue());
+                for (int i = 0; i < quantity; i++) result.add(stack);
+                return result;
+            }
+        }
         for (int i = 0; i < quantity; i++) {
             GridPacking.Position position = GridPacking.firstFit(gridWidth, gridHeight, itemWidth, itemHeight, occupied);
             if (position == null) throw new IllegalArgumentException("缓冲区仓库空间不足");
@@ -579,14 +630,21 @@ public class EscapeH5Service {
         return result;
     }
 
-    private List<GridPacking.Rect> occupied(int userId, String warehouseType, Long ignoredId) {
+    private List<GridPacking.Rect> occupied(int userId, String warehouseType, List<Long> ignoredIds) {
         List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select inv.id,inv.pos_x,inv.pos_y,i.width,i.height from escape_inventory_instances inv " +
-                        "join escape_items i on i.id=inv.item_id where inv.user_id=? and inv.warehouse_type=? " +
-                        "and (? is null or inv.id<>?) for update",
-                userId, warehouseType, ignoredId, ignoredId);
+                "select inv.id,inv.item_id,inv.pos_x,inv.pos_y,inv.durability_percent,inv.status,i.width,i.height " +
+                        "from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
+                        "where inv.user_id=? and inv.warehouse_type=? for update",
+                userId, warehouseType);
         List<GridPacking.Rect> result = new ArrayList<GridPacking.Rect>();
+        Set<String> stacked = new HashSet<String>();
         for (Map<String, Object> row : rows) {
+            Long id = ((Number) row.get("id")).longValue();
+            if (ignoredIds != null && ignoredIds.contains(id)) continue;
+            if (row.get("durability_percent") == null) {
+                String key = String.valueOf(row.get("item_id")) + "|" + String.valueOf(row.get("status"));
+                if (!stacked.add(key)) continue;
+            }
             result.add(new GridPacking.Rect(((Number) row.get("id")).longValue(),
                     ((Number) row.get("pos_x")).intValue(), ((Number) row.get("pos_y")).intValue(),
                     ((Number) row.get("width")).intValue(), ((Number) row.get("height")).intValue()));
@@ -601,6 +659,19 @@ public class EscapeH5Service {
                 throw new IllegalArgumentException("扩充尺寸不能容纳现有物品布局");
             }
         }
+    }
+
+    private List<Long> stackInventoryIds(Map<String, Object> item, int userId) {
+        if (item.get("durability_percent") != null) {
+            return Collections.singletonList(((Number) item.get("id")).longValue());
+        }
+        List<Map<String, Object>> rows = Rows.list(jdbc,
+                "select id from escape_inventory_instances where user_id=? and warehouse_type=? and item_id=? " +
+                        "and status=? and durability_percent is null for update",
+                userId, item.get("warehouse_type"), item.get("item_id"), item.get("status"));
+        List<Long> ids = new ArrayList<Long>();
+        for (Map<String, Object> row : rows) ids.add(((Number) row.get("id")).longValue());
+        return ids;
     }
 
     private boolean claimOperation(int userId, String operationType, String key) {

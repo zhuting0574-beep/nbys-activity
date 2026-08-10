@@ -335,6 +335,7 @@ public class EscapeAdminService {
             jdbc.update("update escape_match_items set consumed_quantity=consumed_quantity+?,updated_at=now() " +
                     "where match_id=? and item_id=?", item.getValue(), matchId, item.getKey());
         }
+        returnUnusedMatchItems(matchId);
         jdbc.update("update escape_matches set status='settled',settled_at=now(),version=version+1 where id=?", matchId);
         audit(actor, "escape:settle", "settle", "match", matchId, body);
         return settlement(matchId);
@@ -700,7 +701,8 @@ public class EscapeAdminService {
     private void returnUnusedMatchItems(long matchId) {
         List<Map<String, Object>> rows = matchItems(matchId, true);
         for (Map<String, Object> row : rows) {
-            int remaining = number(row.get("remaining_quantity"));
+            int remaining = unconsumedQuantity(number(row.get("allocated_quantity")),
+                    number(row.get("consumed_quantity")), number(row.get("returned_quantity")));
             if (remaining <= 0) continue;
             int itemId = number(row.get("item_id"));
             requiredOne("select id from escape_items where id=? for update", itemId);
@@ -709,6 +711,10 @@ public class EscapeAdminService {
             jdbc.update("update escape_match_items set returned_quantity=returned_quantity+?,updated_at=now() " +
                     "where match_id=? and item_id=?", remaining, matchId, itemId);
         }
+    }
+
+    static int unconsumedQuantity(int allocated, int consumed, int returned) {
+        return Math.max(0, allocated - consumed - returned);
     }
 
     private void validateSettlementItemTotals(long matchId, Map<Integer, Integer> requested) {
