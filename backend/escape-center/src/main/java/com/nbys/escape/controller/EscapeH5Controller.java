@@ -37,7 +37,9 @@ public class EscapeH5Controller {
     @GetMapping("/managed-matches")
     public ApiResponse<List<Map<String, Object>>> managedMatches(HttpServletRequest request) {
         EscapeAccessService.UserContext actor = access.requireMatchManager(request);
-        return ApiResponse.ok(adminService.managedMatches(actor));
+        String rawSeasonId = request.getParameter("season_id");
+        Integer seasonId = rawSeasonId == null || rawSeasonId.trim().isEmpty() ? null : Integer.valueOf(rawSeasonId);
+        return ApiResponse.ok(adminService.managedMatches(actor, seasonId));
     }
 
     @GetMapping("/managed-matches/{matchId}")

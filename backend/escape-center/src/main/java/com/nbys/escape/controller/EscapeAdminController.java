@@ -95,6 +95,15 @@ public class EscapeAdminController {
         return listCatalog("items", "escape:item:view", request);
     }
 
+    @GetMapping("/items/options")
+    public ApiResponse<List<Map<String, Object>>> itemOptions(
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(value = "include_id", required = false) Integer includeId,
+            HttpServletRequest request) {
+        access.requireAdmin(request, "escape:item:view");
+        return ApiResponse.ok(service.itemOptions(category, includeId));
+    }
+
     @PostMapping("/items")
     public ApiResponse<Map<String, Object>> createItem(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         return createCatalog("items", "escape:item:create", body, request);
@@ -247,13 +256,15 @@ public class EscapeAdminController {
     private ApiResponse<Map<String, Object>> createCatalog(String type, String permission, Map<String, Object> body,
                                                            HttpServletRequest request) {
         EscapeAccessService.UserContext actor = access.requireAdmin(request, permission);
-        return ApiResponse.ok(service.createCatalog(type, body, actor));
+        return ApiResponse.ok("products".equals(type)
+                ? service.createProduct(body, actor) : service.createCatalog(type, body, actor));
     }
 
     private ApiResponse<Map<String, Object>> updateCatalog(String type, String permission, long id,
                                                            Map<String, Object> body, HttpServletRequest request) {
         EscapeAccessService.UserContext actor = access.requireAdmin(request, permission);
-        return ApiResponse.ok(service.updateCatalog(type, id, body, actor));
+        return ApiResponse.ok("products".equals(type)
+                ? service.updateProduct(id, body, actor) : service.updateCatalog(type, id, body, actor));
     }
 
     private ApiResponse<Void> deleteCatalog(String type, String permission, long id, HttpServletRequest request) {

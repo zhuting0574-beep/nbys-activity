@@ -80,6 +80,8 @@
                 <span v-else-if="column.kind === 'money'">{{ money(row[column.prop]) }}</span>
                 <span v-else-if="column.kind === 'date'">{{ formatDate(row[column.prop]) }}</span>
                 <span v-else-if="column.kind === 'boolean'">{{ row[column.prop] ? '启用' : '停用' }}</span>
+                <span v-else-if="column.kind === 'category'">{{ categoryLabel(row[column.prop]) }}</span>
+                <span v-else-if="column.kind === 'product-type'">{{ productTypeLabel(row[column.prop]) }}</span>
                 <span v-else>{{ displayValue(row, column) }}</span>
               </template>
             </el-table-column>
@@ -107,8 +109,9 @@
     <el-dialog v-model="editorVisible" :title="`${editing?.id ? '编辑' : '新增'}${resourceConfig?.singular || ''}`" width="620px" destroy-on-close>
       <el-form v-if="editing" label-width="120px">
         <template v-for="field in resourceConfig.fields" :key="field.prop">
+          <template v-if="shouldShowField(field)">
           <el-form-item :label="field.label" :required="field.required">
-            <el-input v-if="field.type === 'text'" v-model="editing[field.prop]" :placeholder="field.placeholder" />
+            <el-input v-if="field.type === 'text'" v-model="editing[field.prop]" :placeholder="field.placeholder" :disabled="activeTab === 'products' && field.prop === 'name' && Boolean(editing.item_id)" />
             <el-input v-else-if="field.type === 'textarea'" v-model="editing[field.prop]" type="textarea" :rows="3" />
             <el-input-number v-else-if="field.type === 'number'" v-model="editing[field.prop]" :min="field.min ?? 0" :precision="field.precision" style="width: 100%" />
             <el-date-picker v-else-if="field.type === 'datetime'" v-model="editing[field.prop]" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
@@ -126,16 +129,52 @@
               <span class="escape-item-image-hint">图片会自动压缩到 100KB 以内</span>
               <img v-if="editing[field.prop]" :src="editing[field.prop]" alt="物品图片预览" />
             </div>
-            <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable style="width: 100%">
+            <div v-else-if="field.type === 'item-picker'" class="escape-product-item-picker">
+              <div v-if="selectedItem" class="escape-product-item-selected">
+                <img v-if="selectedItem.image_url" :src="selectedItem.image_url" :alt="selectedItem.name" />
+                <span>{{ selectedItem.name }}</span>
+                <small>{{ selectedItem.enabled && !selectedItem.deleted_at ? `库存 ${selectedItem.stock_quantity}` : '物品已下架' }}</small>
+              </div>
+              <span v-else class="muted">未关联物品</span>
+              <div class="escape-product-item-actions">
+                <el-button type="primary" plain @click="openItemPicker">选择物品</el-button>
+                <el-button v-if="editing.item_id" @click="clearSelectedItem">清除关联</el-button>
+              </div>
+            </div>
+            <el-input-number v-else-if="field.type === 'product-price'" v-model="editing[field.prop]" :min="0" :disabled="Boolean(editing.item_id)" style="width: 100%" />
+            <el-input-number v-else-if="field.type === 'product-stock'" v-model="editing[field.prop]" :min="0" :max="productStockMax" :disabled="editing.product_type === 'expansion'" style="width: 100%" />
+            <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable style="width: 100%" @change="value => handleFieldChange(field.prop, value)">
               <el-option v-for="option in field.options || []" :key="option.value ?? option" :label="option.label ?? option" :value="option.value ?? option" />
             </el-select>
             <el-switch v-else-if="field.type === 'boolean'" v-model="editing[field.prop]" />
           </el-form-item>
+          </template>
         </template>
       </el-form>
       <template #footer>
         <el-button @click="editorVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="saveEditor">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="itemPickerVisible" title="选择关联物品" width="760px" destroy-on-close>
+      <div v-loading="itemOptionsLoading" class="escape-product-item-options">
+        <el-empty v-if="!itemOptionsLoading && !itemOptions.length" description="暂无符合条件的物品" />
+        <el-radio-group v-else v-model="pendingItemId" class="escape-product-item-grid">
+          <label v-for="item in itemOptions" :key="item.id" class="escape-product-item-option" :class="{ selected: pendingItemId === item.id, disabled: !item.enabled || item.deleted_at }">
+            <el-radio :value="item.id" :disabled="!item.enabled || item.deleted_at" />
+            <img v-if="item.image_url" :src="item.image_url" :alt="item.name" />
+            <div class="escape-product-item-option-body">
+              <strong>{{ item.name }}</strong>
+              <span>{{ item.rarity }} · {{ money(item.current_price) }}</span>
+              <small>库存 {{ item.stock_quantity }}</small>
+            </div>
+          </label>
+        </el-radio-group>
+      </div>
+      <template #footer>
+        <el-button @click="itemPickerVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!pendingItemId" @click="confirmItemSelection">确定</el-button>
       </template>
     </el-dialog>
 
@@ -167,9 +206,10 @@ const configs = {
     label: '物品配置', singular: '物品', path: '/items',
     viewPermission: 'escape:item:view', createPermission: 'escape:item:create', updatePermission: 'escape:item:update', deletePermission: 'escape:item:delete',
     columns: [
+      { prop: 'id', label: '商品 ID', width: 90 },
       { prop: 'name', label: '物品名称', width: 160 },
       { prop: 'rarity', label: '稀有度', width: 100, kind: 'rarity' },
-      { prop: 'category', label: '分类', width: 110 },
+      { prop: 'category', label: '分类', width: 110, kind: 'category' },
       { prop: 'size', label: '仓库尺寸', width: 100, derive: row => `${row.width || 1} × ${row.height || 1}` },
       { prop: 'stock_quantity', label: '数量', width: 90 },
       { prop: 'today_price', label: '今日价格', width: 110, kind: 'money' },
@@ -178,7 +218,10 @@ const configs = {
     fields: [
       { prop: 'name', label: '物品名称', type: 'text', required: true },
       { prop: 'rarity', label: '稀有度', type: 'select', options: rarities, required: true },
-      { prop: 'category', label: '分类', type: 'text', required: true },
+      { prop: 'category', label: '分类', type: 'select', options: [
+        { label: '普通物资', value: 'regular' },
+        { label: '武器', value: 'weapon' }
+      ], required: true },
       { prop: 'min_price', label: '最低价格', type: 'number', required: true },
       { prop: 'max_price', label: '最高价格', type: 'number', required: true },
       { prop: 'width', label: '宽度格数', type: 'number', min: 1, required: true },
@@ -193,7 +236,7 @@ const configs = {
     viewPermission: 'escape:shop:view', createPermission: 'escape:shop:create', updatePermission: 'escape:shop:update', deletePermission: 'escape:shop:delete',
     columns: [
       { prop: 'name', label: '商品名称', width: 180 },
-      { prop: 'product_type', label: '类型', width: 110 },
+      { prop: 'product_type', label: '类型', width: 110, kind: 'product-type' },
       { prop: 'price', label: '售价', width: 110, kind: 'money' },
       { prop: 'stock', label: '库存', width: 90 },
       { prop: 'offline_at', label: '下架时间', width: 160, kind: 'date' },
@@ -201,10 +244,25 @@ const configs = {
     ],
     fields: [
       { prop: 'name', label: '商品名称', type: 'text', required: true },
-      { prop: 'product_type', label: '商品类型', type: 'select', options: ['EXPANSION', 'ITEM', 'WEAPON'], required: true },
-      { prop: 'item_id', label: '关联物品 ID', type: 'number' },
-      { prop: 'price', label: '售价', type: 'number', required: true },
-      { prop: 'stock', label: '库存', type: 'number', required: true },
+      { prop: 'product_type', label: '商品类型', type: 'select', options: [
+        { label: '扩展仓库', value: 'expansion' },
+        { label: '普通物资', value: 'regular' },
+        { label: '武器', value: 'weapon' }
+      ], required: true },
+      { prop: 'item_id', label: '关联物品', type: 'item-picker' },
+      { prop: 'price', label: '售价', type: 'product-price', required: true },
+      { prop: 'stock', label: '库存', type: 'product-stock', required: true },
+      { prop: 'item_rarity', label: '物品稀有度', type: 'select', options: [
+        { label: '普通', value: 'normal' },
+        { label: '精品', value: 'fine' },
+        { label: '史诗', value: 'epic' },
+        { label: '超凡', value: 'extraordinary' }
+      ], required: true, productOnly: true },
+      { prop: 'item_width', label: '物品宽度', type: 'number', min: 1, required: true, productOnly: true },
+      { prop: 'item_height', label: '物品高度', type: 'number', min: 1, required: true, productOnly: true },
+      { prop: 'item_image_url', label: '物品图片', type: 'image', productOnly: true },
+      { prop: 'warehouse_width', label: '扩容后宽度', type: 'number', min: 1, required: true, expansionOnly: true },
+      { prop: 'warehouse_height', label: '扩容后高度', type: 'number', min: 1, required: true, expansionOnly: true },
       { prop: 'offline_at', label: '下架时间', type: 'datetime' },
       { prop: 'enabled', label: '上架', type: 'boolean' }
     ]
@@ -265,8 +323,8 @@ const configs = {
     label: '用户资产', singular: '用户资产', path: '/user-assets',
     viewPermission: 'escape:userAsset:view', updatePermission: 'escape:userAsset:adjust',
     columns: [
+      { prop: 'username', label: '用户姓名', width: 150 },
       { prop: 'callsign', label: '用户呼号', width: 150 },
-      { prop: 'mobile', label: '手机号', width: 130 },
       { prop: 'cash', label: '现金余额', width: 120, kind: 'money' },
       { prop: 'personal_usage', label: '个人仓库', width: 100 },
       { prop: 'buffer_usage', label: '暂存仓库', width: 100 },
@@ -326,6 +384,11 @@ const filters = reactive({ keyword: '', status: '', rarity: '' })
 const editorVisible = ref(false)
 const editing = ref(null)
 const imageUploading = ref(false)
+const itemPickerVisible = ref(false)
+const itemOptionsLoading = ref(false)
+const itemOptions = ref([])
+const pendingItemId = ref(null)
+const selectedItem = ref(null)
 
 const allowed = permission => !permission || props.can(permission)
 const visibleTabs = computed(() => tabs.filter(tab => allowed(tab.permission)))
@@ -380,6 +443,24 @@ function openEditor(type, row = null) {
   const config = configs[type]
   if (!config) return
   editing.value = row ? { ...row } : defaultValues(config)
+  if (type === 'products') {
+    editing.value.product_type = editing.value.product_type === 'item' ? 'regular' : String(editing.value.product_type || '').toLowerCase()
+    editing.value.item_rarity = editing.value.item_rarity || 'normal'
+    editing.value.item_width = editing.value.item_width || 1
+    editing.value.item_height = editing.value.item_height || 1
+    editing.value.warehouse_width = editing.value.warehouse_width || 16
+    editing.value.warehouse_height = editing.value.warehouse_height || 10
+    selectedItem.value = editing.value.item_id ? {
+      id: Number(editing.value.item_id),
+      name: editing.value.name,
+      current_price: editing.value.price,
+      stock_quantity: editing.value.stock,
+      enabled: Boolean(editing.value.enabled),
+      deleted_at: null
+    } : null
+  } else {
+    selectedItem.value = null
+  }
   editorVisible.value = true
 }
 
@@ -395,7 +476,18 @@ function defaultValues(config) {
 
 async function saveEditor() {
   const config = resourceConfig.value
-  const missing = config.fields.find(field => field.required && (editing.value[field.prop] === '' || editing.value[field.prop] === null || editing.value[field.prop] === undefined))
+  if (activeTab.value === 'products') {
+    if (editing.value.product_type === 'expansion') editing.value.stock = 999
+    if (editing.value.product_type === 'expansion' && (!editing.value.warehouse_width || !editing.value.warehouse_height)) {
+      ElMessage.warning('请填写扩容后的仓库尺寸')
+      return
+    }
+    if (editing.value.item_id && selectedItem.value && Number(editing.value.stock) > Number(selectedItem.value.stock_quantity)) {
+      ElMessage.warning('商品库存不能超过物品配置数量')
+      return
+    }
+  }
+  const missing = config.fields.find(field => shouldShowField(field) && field.required && (editing.value[field.prop] === '' || editing.value[field.prop] === null || editing.value[field.prop] === undefined))
   if (missing) {
     ElMessage.warning(`请填写${missing.label}`)
     return
@@ -423,6 +515,76 @@ async function saveEditor() {
   } finally {
     saving.value = false
   }
+}
+
+function shouldShowField(field) {
+  if (activeTab.value !== 'products') return true
+  if (field.productOnly) return !editing.value?.item_id && editing.value?.product_type !== 'expansion'
+  if (field.expansionOnly) return editing.value?.product_type === 'expansion'
+  if (field.prop === 'item_id') return editing.value?.product_type !== 'expansion'
+  return true
+}
+
+function handleFieldChange(prop) {
+  if (prop === 'product_type') handleProductTypeChange()
+}
+
+function handleProductTypeChange() {
+  if (!editing.value) return
+  editing.value.item_id = null
+  editing.value.price = 0
+  editing.value.stock = editing.value.product_type === 'expansion' ? 999 : 0
+  selectedItem.value = null
+  pendingItemId.value = null
+}
+
+const productStockMax = computed(() => {
+  if (editing.value?.product_type === 'expansion') return 999
+  return selectedItem.value ? Number(selectedItem.value.stock_quantity) : undefined
+})
+
+async function openItemPicker() {
+  if (!editing.value?.product_type) {
+    ElMessage.warning('请先选择商品类型')
+    return
+  }
+  if (editing.value.product_type === 'expansion') return
+  itemPickerVisible.value = true
+  itemOptionsLoading.value = true
+  pendingItemId.value = editing.value.item_id ? Number(editing.value.item_id) : null
+  try {
+    const category = editing.value.product_type === 'weapon' ? 'weapon' : 'regular'
+    itemOptions.value = rowsOf(await escapeGet('/items/options', {
+      category,
+      include_id: editing.value.item_id
+    }))
+    const current = itemOptions.value.find(option => Number(option.id) === Number(editing.value.item_id))
+    if (current) selectedItem.value = current
+  } catch (error) {
+    itemPickerVisible.value = false
+    ElMessage.error(error?.message || '物品加载失败')
+  } finally {
+    itemOptionsLoading.value = false
+  }
+}
+
+function confirmItemSelection() {
+  const item = itemOptions.value.find(option => Number(option.id) === Number(pendingItemId.value))
+  if (!item) return
+  selectedItem.value = item
+  editing.value.item_id = item.id
+  editing.value.name = item.name
+  editing.value.price = Number(item.current_price ?? item.today_price ?? 0)
+  editing.value.stock = Math.min(Number(editing.value.stock || item.stock_quantity), Number(item.stock_quantity))
+  if (!item.enabled || item.deleted_at) editing.value.enabled = false
+  itemPickerVisible.value = false
+}
+
+function clearSelectedItem() {
+  editing.value.item_id = null
+  selectedItem.value = null
+  editing.value.price = 0
+  editing.value.stock = editing.value.product_type === 'expansion' ? 999 : 0
 }
 
 async function uploadItemImage(options, field) {
@@ -482,6 +644,22 @@ function statusType(status) {
   if (['IN_PROGRESS', 'in_progress'].includes(status)) return 'success'
   if (['FINISHED', 'finished', 'SETTLED', 'settled'].includes(status)) return 'info'
   return 'warning'
+}
+
+function categoryLabel(category) {
+  return {
+    regular: '普通物资',
+    weapon: '武器'
+  }[category] || category || '-'
+}
+
+function productTypeLabel(type) {
+  return {
+    expansion: '扩展仓库',
+    regular: '普通物资',
+    weapon: '武器',
+    item: '普通物资'
+  }[String(type).toLowerCase()] || type || '-'
 }
 
 function money(value) {

@@ -68,19 +68,29 @@ public class EscapeAdminService {
         return matchRows("where m.status=?", new Object[]{normalizeStatus(status)});
     }
 
-    public List<Map<String, Object>> managedMatches(EscapeAccessService.UserContext actor) {
-        String currentSeason = "where m.season_id=(select id from escape_seasons " +
-                "where enabled=1 and current_date between start_date and end_date " +
-                "order by id desc limit 1)";
-        if ("superadmin".equals(actor.role)) return matchRows(currentSeason, new Object[0]);
-        return matchRows(currentSeason + " and m.created_by=?", new Object[]{actor.userId});
+    public List<Map<String, Object>> managedMatches(EscapeAccessService.UserContext actor, Integer seasonId) {
+        String seasonWhere;
+        Object[] seasonArgs;
+        if (seasonId == null) {
+            seasonWhere = "where m.season_id=(select id from escape_seasons " +
+                    "where enabled=1 and current_date between start_date and end_date " +
+                    "order by id desc limit 1)";
+            seasonArgs = new Object[0];
+        } else {
+            seasonWhere = "where m.season_id=?";
+            seasonArgs = new Object[]{seasonId};
+        }
+        if ("superadmin".equals(actor.role)) return matchRows(seasonWhere, seasonArgs);
+        Object[] args = Arrays.copyOf(seasonArgs, seasonArgs.length + 1);
+        args[args.length - 1] = actor.userId;
+        return matchRows(seasonWhere + " and m.created_by=?", args);
     }
 
     public Map<String, Object> matchOptions() {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("venues", Rows.list(jdbc, "select id,name,address from venues order by name,id"));
         result.put("seasons", Rows.list(jdbc, "select id,name,start_date,end_date from escape_seasons " +
-                "where enabled=1 order by start_date desc,id desc"));
+                "order by start_date desc,id desc"));
         result.put("items", Rows.list(jdbc, "select id,name,rarity,category,image_url,stock_quantity " +
                 "from escape_items where enabled=1 and deleted_at is null order by name,id"));
         return result;
@@ -88,7 +98,7 @@ public class EscapeAdminService {
 
     public Map<String, Object> match(long matchId) {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
-        result.put("match", requiredOne("select m.*,v.name venue_name,s.name season_name,s.kill_reward " +
+        result.put("match", requiredOne("select m.*,m.team_count*m.team_capacity capacity,v.name venue_name,s.name season_name,s.kill_reward " +
                 "from escape_matches m left join venues v on v.id=m.venue_id " +
                 "left join escape_seasons s on s.id=m.season_id where m.id=?", matchId));
         result.put("participants", Rows.list(jdbc, "select p.*,coalesce(nullif(u.callsign,''),u.username) callsign," +
@@ -97,6 +107,19 @@ public class EscapeAdminService {
                 "left join escape_professions pr on pr.id=p.profession_id " +
                 "left join escape_weapons w on w.id=p.weapon_id where p.match_id=? order by p.team_no,p.id", matchId));
         result.put("match_items", matchItems(matchId, false));
+        Map<String, Object> settlement = Rows.one(jdbc, "select s.*,coalesce(nullif(u.callsign,''),u.username) settled_by_name " +
+                "from escape_match_settlements s left join users u on u.id=s.settled_by " +
+                "where s.match_id=? order by s.id desc limit 1", matchId);
+        if (settlement != null) {
+            List<Map<String, Object>> details = Rows.list(jdbc, "select d.* from escape_match_settlement_details d " +
+                    "where d.settlement_id=? order by d.team_no,d.id", settlement.get("id"));
+            for (Map<String, Object> detail : details) {
+                detail.put("items", Rows.list(jdbc, "select item_id,item_name_snapshot,rarity_snapshot,price_snapshot,quantity " +
+                        "from escape_match_settlement_items where settlement_detail_id=? order by id", detail.get("id")));
+            }
+            settlement.put("participants", details);
+            result.put("settlement", settlement);
+        }
         return result;
     }
 
@@ -322,6 +345,28 @@ public class EscapeAdminService {
         return decorate(type, Rows.list(jdbc, "select * from " + c.table + " order by id desc"));
     }
 
+    public List<Map<String, Object>> itemOptions(String category, Integer includeId) {
+        String normalized = category == null ? "" : String.valueOf(category).toLowerCase(Locale.ROOT);
+        if (!normalized.isEmpty() && !Arrays.asList("regular", "weapon").contains(normalized)) {
+            throw new IllegalArgumentException("物品分类无效");
+        }
+        StringBuilder sql = new StringBuilder("select * from escape_items where ");
+        List<Object> args = new ArrayList<Object>();
+        if (normalized.isEmpty()) {
+            sql.append("1=1");
+        } else {
+            sql.append("category=?");
+            args.add(normalized);
+        }
+        sql.append(" and (enabled=1 and deleted_at is null");
+        if (includeId != null && includeId > 0) {
+            sql.append(" or id=?");
+            args.add(includeId);
+        }
+        sql.append(") order by name,id");
+        return decorate("items", Rows.list(jdbc, sql.toString(), args.toArray()));
+    }
+
     @Transactional
     public Map<String, Object> createCatalog(String type, Map<String, Object> body,
                                              EscapeAccessService.UserContext actor) {
@@ -334,6 +379,109 @@ public class EscapeAdminService {
         long id = insert(sql.toString(), values(fields, body).toArray());
         audit(actor, "escape:config", "create", type, id, body);
         return decorate(type, requiredOne("select * from " + c.table + " where id=?", id));
+    }
+
+    @Transactional
+    public Map<String, Object> createProduct(Map<String, Object> body, EscapeAccessService.UserContext actor) {
+        Map<String, Object> input = new LinkedHashMap<String, Object>(body);
+        normalizeCatalogInput("products", input);
+        Map<String, Object> prepared = prepareProduct(input);
+        long id = insertProduct(prepared);
+        audit(actor, "escape:config", "create", "products", id, body);
+        return decorate("products", requiredOne("select * from escape_shop_products where id=?", id));
+    }
+
+    @Transactional
+    public Map<String, Object> updateProduct(long id, Map<String, Object> body, EscapeAccessService.UserContext actor) {
+        requiredOne("select id from escape_shop_products where id=? for update", id);
+        Map<String, Object> input = new LinkedHashMap<String, Object>(body);
+        normalizeCatalogInput("products", input);
+        Map<String, Object> prepared = prepareProduct(input);
+        List<String> fields = presentFields(catalogDef("products"), prepared);
+        if (fields.isEmpty()) throw new IllegalArgumentException("没有可更新的字段");
+        List<String> assignments = new ArrayList<String>();
+        for (String field : fields) assignments.add(field + "=?");
+        List<Object> args = values(fields, prepared);
+        args.add(id);
+        jdbc.update("update escape_shop_products set " + String.join(",", assignments) + ",version=version+1 where id=?", args.toArray());
+        audit(actor, "escape:config", "update", "products", id, body);
+        return decorate("products", requiredOne("select * from escape_shop_products where id=?", id));
+    }
+
+    private Map<String, Object> prepareProduct(Map<String, Object> input) {
+        String type = String.valueOf(input.get("product_type")).toLowerCase(Locale.ROOT);
+        if (!Arrays.asList("expansion", "regular", "weapon").contains(type)) {
+            throw new IllegalArgumentException("商品类型无效");
+        }
+        BigDecimal price = nonNegativeDecimal(input.get("price"), "商品价格不能为负");
+        Map<String, Object> prepared = new LinkedHashMap<String, Object>();
+        prepared.put("name", text(input, "name", 100));
+        prepared.put("product_type", type);
+        prepared.put("off_shelf_at", input.get("off_shelf_at"));
+        if ("expansion".equals(type)) {
+            prepared.put("item_id", null);
+            prepared.put("price", price);
+            prepared.put("stock", 999);
+            prepared.put("warehouse_width", positive(input.get("warehouse_width"), "扩容宽度无效"));
+            prepared.put("warehouse_height", positive(input.get("warehouse_height"), "扩容高度无效"));
+            prepared.put("enabled", !input.containsKey("enabled") || bool(input.get("enabled")));
+            return prepared;
+        }
+        Integer itemId = input.get("item_id") == null || blank(input.get("item_id"))
+                ? null : positive(input.get("item_id"), "关联物品无效");
+        Map<String, Object> item;
+        if (itemId != null) {
+            item = requiredOne("select * from escape_items where id=? for update", itemId);
+            String expectedCategory = "weapon".equals(type) ? "weapon" : "regular";
+            if (!expectedCategory.equals(String.valueOf(item.get("category")))) {
+                throw new IllegalArgumentException("关联物品分类与商品类型不匹配");
+            }
+            int itemStock = number(item.get("stock_quantity"));
+            int stock = nonNegative(input.get("stock"), "商品库存不能为负");
+            if (stock > itemStock) throw new IllegalArgumentException("商品库存不能超过物品配置数量");
+            prepared.put("item_id", itemId);
+            prepared.put("name", item.get("name"));
+            prepared.put("price", decimal(item.get("current_price")));
+            prepared.put("stock", stock);
+            prepared.put("enabled", bool(item.get("enabled")) && item.get("deleted_at") == null
+                    && (!input.containsKey("enabled") || bool(input.get("enabled"))));
+        } else {
+            int stock = nonNegative(input.get("stock"), "商品库存不能为负");
+            int width = positive(input.get("item_width"), "物品宽度无效");
+            int height = positive(input.get("item_height"), "物品高度无效");
+            String rarity = input.containsKey("item_rarity") && !blank(input.get("item_rarity"))
+                    ? String.valueOf(input.get("item_rarity")) : "normal";
+            if (Arrays.asList("普通", "精品", "史诗", "超凡").contains(rarity)) {
+                Map<String, String> labels = new HashMap<String, String>();
+                labels.put("普通", "normal"); labels.put("精品", "fine"); labels.put("史诗", "epic"); labels.put("超凡", "extraordinary");
+                rarity = labels.get(rarity);
+            }
+            oneOf(rarity, "物品品质无效", "extraordinary", "epic", "fine", "normal");
+            Map<String, Object> itemBody = new LinkedHashMap<String, Object>();
+            itemBody.put("name", text(input, "name", 100));
+            itemBody.put("rarity", rarity);
+            itemBody.put("category", "weapon".equals(type) ? "weapon" : "regular");
+            itemBody.put("min_price", price); itemBody.put("max_price", price); itemBody.put("current_price", price);
+            itemBody.put("width", width); itemBody.put("height", height); itemBody.put("stock_quantity", stock);
+            itemBody.put("image_url", input.get("item_image_url")); itemBody.put("enabled", true);
+            validateCatalog("items", itemBody, false);
+            long createdId = insertCatalogRow(catalogDef("items"), itemBody);
+            prepared.put("item_id", createdId);
+            prepared.put("name", itemBody.get("name")); prepared.put("price", price); prepared.put("stock", stock);
+            prepared.put("enabled", !input.containsKey("enabled") || bool(input.get("enabled")));
+        }
+        return prepared;
+    }
+
+    private long insertProduct(Map<String, Object> body) {
+        return insertCatalogRow(catalogDef("products"), body);
+    }
+
+    private long insertCatalogRow(Catalog c, Map<String, Object> body) {
+        List<String> fields = presentFields(c, body);
+        if (fields.isEmpty()) throw new IllegalArgumentException("没有可保存的字段");
+        String sql = "insert into " + c.table + "(" + String.join(",", fields) + ") values(" + placeholders(fields.size()) + ")";
+        return insert(sql, values(fields, body).toArray());
     }
 
     @Transactional
@@ -350,6 +498,7 @@ public class EscapeAdminService {
         args.add(id);
         jdbc.update("update " + c.table + " set " + String.join(",", assignments) +
                 (c.versioned ? ",version=version+1" : "") + " where id=?", args.toArray());
+        if ("items".equals(type)) syncLinkedProducts(id);
         audit(actor, "escape:config", "update", type, id, body);
         return decorate(type, requiredOne("select * from " + c.table + " where id=?", id));
     }
@@ -360,10 +509,17 @@ public class EscapeAdminService {
         requiredOne("select id from " + c.table + " where id=? for update", id);
         if ("items".equals(type)) {
             jdbc.update("update escape_items set enabled=0,deleted_at=coalesce(deleted_at,now()),version=version+1 where id=?", id);
+            jdbc.update("update escape_shop_products set enabled=0,version=version+1 where item_id=?", id);
         } else {
             jdbc.update("update " + c.table + " set enabled=0" + (c.versioned ? ",version=version+1" : "") + " where id=?", id);
         }
         audit(actor, "escape:config", "disable", type, id, Collections.emptyMap());
+    }
+
+    private void syncLinkedProducts(long itemId) {
+        Map<String, Object> item = requiredOne("select current_price,stock_quantity,enabled,deleted_at from escape_items where id=?", itemId);
+        jdbc.update("update escape_shop_products set price=?,stock=least(stock,?),enabled=case when ?=1 and ? is null then enabled else 0 end,version=version+1 where item_id=?",
+                item.get("current_price"), item.get("stock_quantity"), item.get("enabled"), item.get("deleted_at"), itemId);
     }
 
     @Transactional

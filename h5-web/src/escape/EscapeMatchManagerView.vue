@@ -16,12 +16,18 @@
       <div class="escape-manager-filters">
         <button v-for="item in filters" :key="item.value" type="button" :class="{ active: filter === item.value }" @click="filter = item.value">{{ item.label }}</button>
       </div>
+      <label class="escape-season-filter">
+        <span>查看赛季</span>
+        <select v-model="selectedSeasonId" @change="loadMatches">
+          <option v-for="season in options.seasons" :key="season.id" :value="String(season.id)">{{ season.name }} · {{ seasonDateRange(season) }}</option>
+        </select>
+      </label>
       <EscapeState v-if="!filteredMatches.length" type="empty" title="暂无对局" description="创建后即可邀请队员加入并完成整备" />
       <div v-else class="escape-managed-matches">
-        <article v-for="match in filteredMatches" :key="match.id" :class="match.status">
+        <article v-for="match in filteredMatches" :key="match.id" :class="match.status" role="button" tabindex="0" @click="openDetails(match)" @keydown.enter="openDetails(match)">
           <header>
             <div><span class="escape-status" :class="match.status">{{ statusText(match.status) }}</span><small>XP-{{ match.id }}</small></div>
-            <button v-if="match.status === 'preparing'" type="button" aria-label="编辑对局" title="编辑对局" @click="openEditor(match)">✎</button>
+            <button v-if="match.status === 'preparing'" type="button" aria-label="编辑对局" title="编辑对局" @click.stop="openEditor(match)">✎</button>
           </header>
           <h3>{{ match.name }}</h3>
           <p>{{ match.venue_name || '场地待定' }} · {{ match.season_name || '未关联赛季' }}</p>
@@ -31,16 +37,62 @@
             <span><b>{{ match.team_count || 0 }}</b> 小队</span>
           </div>
           <div class="escape-manager-actions">
-            <button v-if="match.status === 'preparing'" type="button" class="danger" @click="cancelMatch(match)">取消对局</button>
-            <button v-if="['preparing', 'in_progress'].includes(match.status)" type="button" class="primary" @click="openControl(match)">
+            <button v-if="match.status === 'preparing'" type="button" class="danger" @click.stop="cancelMatch(match)">取消对局</button>
+            <button v-if="['preparing', 'in_progress'].includes(match.status)" type="button" class="primary" @click.stop="openControl(match)">
               {{ match.status === 'preparing' ? '查看整备 / 开始' : '进入结算' }}
             </button>
-            <button v-if="match.status === 'cancelled'" type="button" class="danger" @click="deleteMatch(match)">删除对局</button>
+            <button v-if="match.status === 'cancelled'" type="button" class="danger" @click.stop="deleteMatch(match)">删除对局</button>
             <span v-else class="escape-manager-finished">结算已完成</span>
           </div>
         </article>
       </div>
     </template>
+
+    <div v-if="details.open" class="escape-modal">
+      <button class="escape-modal-backdrop" type="button" aria-label="关闭战局详情" @click="closeDetails"></button>
+      <section class="escape-control-dialog escape-match-details" role="dialog" aria-modal="true" aria-labelledby="escape-details-title">
+        <header>
+          <div><span>MATCH INTELLIGENCE</span><h2 id="escape-details-title">战局详情</h2><p>{{ details.match?.name || '当前战局' }} · XP-{{ details.match?.id }}</p></div>
+          <button class="escape-icon-button" type="button" aria-label="关闭" @click="closeDetails">×</button>
+        </header>
+        <EscapeState v-if="details.loading" type="loading" title="正在读取战局详情" description="同步参与人数与撤离物资" />
+        <EscapeState v-else-if="details.error" type="error" title="战局详情加载失败" :description="details.error" action-label="重试" @action="openDetails(details.match)" />
+        <template v-else>
+          <div class="escape-detail-summary">
+            <div><span>赛季</span><strong>{{ details.data.match?.season_name || '未关联赛季' }}</strong></div>
+            <div><span>状态</span><strong>{{ statusText(details.data.match?.status) }}</strong></div>
+            <div><span>对战人数</span><strong>{{ details.data.participants?.length || 0 }} / {{ details.data.match?.capacity || '-' }}</strong></div>
+            <div><span>小队</span><strong>{{ details.data.match?.team_count || 0 }}</strong></div>
+          </div>
+          <section class="escape-detail-section">
+            <header><div><span>OPERATORS</span><h3>参与人员</h3></div><small>{{ details.data.participants?.length || 0 }} 人</small></header>
+            <div v-if="details.data.participants?.length" class="escape-detail-participants">
+              <article v-for="participant in details.data.participants" :key="participant.id">
+                <div><strong>{{ participant.callsign }}</strong><small>第 {{ participant.team_no || '-' }} 小队 · {{ participant.profession_name || '未选职业' }}</small></div>
+                <span v-if="details.data.match?.status === 'preparing'" :class="{ ready: participant.loadout_status === 'locked' }">{{ participant.loadout_status === 'locked' ? '已锁定' : '未锁定' }}</span>
+              </article>
+            </div>
+            <p v-else class="escape-detail-empty">暂无参与人员</p>
+          </section>
+          <section class="escape-detail-section">
+            <header><div><span>EXTRACTION LOG</span><h3>撤离物资</h3></div><small v-if="details.data.settlement">结算于 {{ formatDetailDate(details.data.settlement.settled_at) }}</small></header>
+            <template v-if="details.data.settlement?.participants?.length">
+              <article v-for="participant in details.data.settlement.participants" :key="participant.id" class="escape-extraction-row">
+                <div><strong>{{ participant.callsign_snapshot }}</strong><small>{{ participant.escaped ? '成功撤离' : '未撤离' }} · {{ participant.kills || 0 }} 击杀</small></div>
+                <div v-if="participant.items?.length" class="escape-extracted-items"><span v-for="item in participant.items" :key="`${participant.id}-${item.item_id}`">{{ item.item_name_snapshot }} ×{{ item.quantity }}</span></div>
+                <span v-else class="escape-detail-muted">未带出物资</span>
+              </article>
+            </template>
+            <p v-else class="escape-detail-empty">本局尚未结算，撤离物资将在结算后显示。</p>
+          </section>
+          <section class="escape-detail-section">
+            <header><div><span>LOADOUT</span><h3>本局带入物资</h3></div></header>
+            <div v-if="details.data.match_items?.length" class="escape-brought-items"><span v-for="item in details.data.match_items" :key="item.item_id">{{ item.name }} ×{{ item.allocated_quantity }}</span></div>
+            <p v-else class="escape-detail-empty">本局未配置带入物资</p>
+          </section>
+        </template>
+      </section>
+    </div>
 
     <div v-if="editor.open" class="escape-modal">
       <button class="escape-modal-backdrop" type="button" aria-label="关闭创建对局" @click="editor.open = false"></button>
@@ -97,6 +149,7 @@
 import { escapeApi } from './api'
 import EscapeState from './EscapeState.vue'
 import MatchControlDialog from './MatchControlDialog.vue'
+import './match-manager-details.css'
 
 let itemRowKey = 0
 const emptyEditor = () => ({ open: false, id: null, name: '', venue_id: '', season_id: '', team_count: 2, team_capacity: 4, match_items: [], loading: false, saving: false, error: '' })
@@ -112,6 +165,7 @@ export default {
       error: '',
       matches: [],
       options: { venues: [], seasons: [], items: [] },
+      selectedSeasonId: '',
       filter: 'all',
       filters: [
         { value: 'all', label: '全部' },
@@ -120,6 +174,7 @@ export default {
         { value: 'settled', label: '已结束' }
       ],
       editor: emptyEditor(),
+      details: { open: false, loading: false, error: '', match: null, data: {} },
       control: { open: false, loading: false, saving: false, error: '', submitError: '', match: null, data: {} }
     }
   },
@@ -138,20 +193,57 @@ export default {
       this.loading = true
       this.error = ''
       try {
-        const [matches, options] = await Promise.all([escapeApi.managedMatches(), escapeApi.matchOptions()])
-        this.matches = Array.isArray(matches) ? matches : matches?.items || []
+        const options = await escapeApi.matchOptions()
         this.options = { venues: options?.venues || [], seasons: options?.seasons || [], items: options?.items || [] }
+        if (!this.selectedSeasonId) this.selectedSeasonId = String(this.currentSeasonId(this.options.seasons) || this.options.seasons[0]?.id || '')
+        await this.loadMatches()
       } catch (error) {
         this.error = error.message || '对局管理加载失败'
       } finally {
         this.loading = false
       }
     },
+    async loadMatches() {
+      if (!this.selectedSeasonId) {
+        this.matches = []
+        return
+      }
+      try {
+        const matches = await escapeApi.managedMatches(this.selectedSeasonId)
+        this.matches = Array.isArray(matches) ? matches : matches?.items || []
+      } catch (error) {
+        this.error = error.message || '对局加载失败'
+      }
+    },
+    currentSeasonId(seasons) {
+      const today = new Date().toISOString().slice(0, 10)
+      return (seasons || []).find(season => String(season.start_date) <= today && today <= String(season.end_date))?.id
+    },
+    seasonDateRange(season) {
+      return `${String(season.start_date || '').slice(0, 10)} - ${String(season.end_date || '').slice(0, 10)}`
+    },
+    formatDetailDate(value) {
+      return value ? String(value).replace('T', ' ').slice(0, 16) : '-'
+    },
     statusCount(status) {
       return this.matches.filter(item => item.status === status).length
     },
     statusText(status) {
       return { preparing: '整备中', in_progress: '进行中', settled: '已结算', cancelled: '已取消' }[status] || status
+    },
+    async openDetails(match) {
+      if (!match) return
+      this.details = { open: true, loading: true, error: '', match, data: {} }
+      try {
+        this.details.data = await escapeApi.managedMatch(match.id)
+      } catch (error) {
+        this.details.error = error.message || '战局详情加载失败'
+      } finally {
+        this.details.loading = false
+      }
+    },
+    closeDetails() {
+      this.details.open = false
     },
     async openEditor(match) {
       this.editor = {

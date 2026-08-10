@@ -18,7 +18,7 @@ function writeOptions(method, body) {
 export const escapeApi = {
   dashboard: () => api(`${base}/dashboard`, { silent: true }),
   matches: () => api(`${base}/matches`, { silent: true }),
-  managedMatches: () => api(`${base}/managed-matches`, { silent: true }),
+  managedMatches: seasonId => api(`${base}/managed-matches${seasonId ? `?season_id=${encodeURIComponent(seasonId)}` : ''}`, { silent: true }),
   managedMatch: matchId => api(`${base}/managed-matches/${matchId}`, { silent: true }),
   matchOptions: () => api(`${base}/managed-matches/options`, { silent: true }),
   createManagedMatch: body => api(`${base}/managed-matches`, { method: 'POST', body }),

@@ -76,6 +76,25 @@ class EscapeH5ControllerTest {
     }
 
     @Test
+    void managedMatchesPassesSelectedSeason() {
+        EscapeAccessService access = mock(EscapeAccessService.class);
+        EscapeH5Service service = mock(EscapeH5Service.class);
+        EscapeAdminService adminService = mock(EscapeAdminService.class);
+        EscapeAccessService.UserContext actor =
+                new EscapeAccessService.UserContext(9, "superadmin", "管理员", true);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setParameter("season_id", "2");
+        when(access.requireMatchManager(request)).thenReturn(actor);
+        when(adminService.managedMatches(actor, 2)).thenReturn(Collections.emptyList());
+
+        ApiResponse<java.util.List<Map<String, Object>>> response =
+                new EscapeH5Controller(access, service, adminService).managedMatches(request);
+
+        assertEquals(0, response.code);
+        verify(adminService).managedMatches(actor, 2);
+    }
+
+    @Test
     void rejectsMissingOrOversizedIdempotencyKey() {
         assertThrows(IllegalArgumentException.class, () -> EscapeH5Controller.idempotencyKey(null));
         assertThrows(IllegalArgumentException.class, () -> EscapeH5Controller.idempotencyKey(" "));

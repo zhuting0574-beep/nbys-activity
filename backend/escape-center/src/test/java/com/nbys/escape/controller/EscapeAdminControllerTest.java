@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -57,5 +58,24 @@ class EscapeAdminControllerTest {
                 EscapeAdminController.idempotencyKey(String.join("", Collections.nCopies(81, "x"))));
         assertEquals(3, EscapeAdminController.positiveInt("3", "bad"));
         assertThrows(IllegalArgumentException.class, () -> EscapeAdminController.positiveInt(0, "bad"));
+    }
+
+    @Test
+    void itemOptionsUsesItemViewPermissionAndFiltersArguments() {
+        EscapeAccessService access = mock(EscapeAccessService.class);
+        EscapeAdminService service = mock(EscapeAdminService.class);
+        EscapeAccessService.UserContext actor =
+                new EscapeAccessService.UserContext(7, "escape_admin", "OP-007", true);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        List<Map<String, Object>> options = Collections.singletonList(Collections.<String, Object>singletonMap("id", 3));
+        when(access.requireAdmin(request, "escape:item:view")).thenReturn(actor);
+        when(service.itemOptions("weapon", 3)).thenReturn(options);
+
+        ApiResponse<List<Map<String, Object>>> response =
+                new EscapeAdminController(access, service).itemOptions("weapon", 3, request);
+
+        assertEquals(0, response.code);
+        assertEquals(options, response.data);
+        verify(service).itemOptions("weapon", 3);
     }
 }
