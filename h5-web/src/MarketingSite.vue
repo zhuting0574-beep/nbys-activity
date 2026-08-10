@@ -297,6 +297,13 @@
       </div>
     </section>
 
+    <footer class="site-footbar">
+      <span>宁波甬士</span>
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        浙ICP备2026046394号
+      </a>
+    </footer>
+
     <aside
       class="contact-drawer"
       :class="{ open: contactOpen }"

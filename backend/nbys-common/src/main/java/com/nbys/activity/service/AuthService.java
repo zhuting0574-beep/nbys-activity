@@ -231,6 +231,18 @@ public class AuthService {
         if ("attendance_admin".equals(role)) {
             Collections.addAll(p, "attendance:create", "attendance:update", "attendance:delete", "attendance:export");
         }
+        if ("escape_admin".equals(role)) {
+            Collections.addAll(p, "escape:view", "escape:match", "escape:config",
+                    "escape:assets", "escape:settle", "escape:audit",
+                    "escape:match:view", "escape:match:create", "escape:match:update", "escape:match:delete",
+                    "escape:match:start", "escape:match:settle",
+                    "escape:item:view", "escape:item:create", "escape:item:update", "escape:item:delete",
+                    "escape:shop:view", "escape:shop:create", "escape:shop:update", "escape:shop:delete",
+                    "escape:season:view", "escape:season:create", "escape:season:update", "escape:season:delete",
+                    "escape:class:view", "escape:class:create", "escape:class:update", "escape:class:delete",
+                    "escape:weapon:view", "escape:weapon:create", "escape:weapon:update", "escape:weapon:delete",
+                    "escape:userAsset:view", "escape:userAsset:adjust", "escape:itemGrant:create");
+        }
         return p;
     }
 
@@ -242,7 +254,16 @@ public class AuthService {
                 "venue:create", "venue:update", "venue:delete", "gameMode:create", "gameMode:update", "gameMode:delete",
                 "user:update", "user:delete", "user:disable", "user:resetPassword", "role:update", "permission:update",
                 "attendance:create", "attendance:update", "attendance:delete", "attendance:export",
-                "launcher:create", "launcher:update", "launcher:delete", "systemImage:update");
+                "launcher:create", "launcher:update", "launcher:delete", "systemImage:update",
+                "escape:view", "escape:match", "escape:config", "escape:assets", "escape:settle", "escape:audit",
+                "escape:match:view", "escape:match:create", "escape:match:update", "escape:match:delete",
+                "escape:match:start", "escape:match:settle",
+                "escape:item:view", "escape:item:create", "escape:item:update", "escape:item:delete",
+                "escape:shop:view", "escape:shop:create", "escape:shop:update", "escape:shop:delete",
+                "escape:season:view", "escape:season:create", "escape:season:update", "escape:season:delete",
+                "escape:class:view", "escape:class:create", "escape:class:update", "escape:class:delete",
+                "escape:weapon:view", "escape:weapon:create", "escape:weapon:update", "escape:weapon:delete",
+                "escape:userAsset:view", "escape:userAsset:adjust", "escape:itemGrant:create");
         return p;
     }
 

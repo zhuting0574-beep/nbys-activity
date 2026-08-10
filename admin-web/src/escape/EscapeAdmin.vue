@@ -4,11 +4,8 @@
       <div>
         <span class="escape-kicker">ESCAPE FROM XP</span>
         <h1>逃离西撇镇</h1>
-        <p>战局、赛季、物品与用户资产统一运营</p>
+        <p>赛季、物品、商店与用户资产统一运营</p>
       </div>
-      <el-button v-if="activeTab === 'matches' && allowed('escape:match:create')" type="primary" @click="openEditor('matches')">
-        创建战局
-      </el-button>
     </header>
 
     <nav class="escape-tabs" aria-label="逃离西撇镇后台导航">
@@ -45,25 +42,6 @@
           </article>
         </div>
         <div class="escape-overview-grid">
-          <article class="escape-panel escape-panel-wide">
-            <div class="escape-panel-title">
-              <div><span>LIVE MATCH</span><h2>当前战局</h2></div>
-              <el-button link type="primary" @click="switchTab('matches')">全部战局</el-button>
-            </div>
-            <el-table v-if="overviewMatches.length" :data="overviewMatches" border>
-              <el-table-column prop="name" label="战局" min-width="180" />
-              <el-table-column label="状态" width="110">
-                <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
-              </el-table-column>
-              <el-table-column label="玩家" width="100">
-                <template #default="{ row }">{{ row.participant_count || 0 }} / {{ row.capacity || row.max_participants || '-' }}</template>
-              </el-table-column>
-              <el-table-column label="已锁定" width="100">
-                <template #default="{ row }">{{ row.locked_count || 0 }} / {{ row.participant_count || 0 }}</template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-else description="暂无进行中的战局" />
-          </article>
           <article class="escape-panel">
             <div class="escape-panel-title"><div><span>ECONOMY</span><h2>经济概况</h2></div></div>
             <dl class="escape-economy">
@@ -78,11 +56,6 @@
       <div v-else class="escape-list-page">
         <div class="escape-filterbar">
           <el-input v-model="filters.keyword" clearable placeholder="输入名称、编号或用户呼号" style="width: 260px" @keyup.enter="load" />
-          <el-select v-if="activeTab === 'matches'" v-model="filters.status" clearable placeholder="全部状态" style="width: 140px">
-            <el-option label="整备中" value="PREPARING" />
-            <el-option label="进行中" value="IN_PROGRESS" />
-            <el-option label="已结束" value="FINISHED" />
-          </el-select>
           <el-select v-if="activeTab === 'items'" v-model="filters.rarity" clearable placeholder="全部稀有度" style="width: 140px">
             <el-option v-for="rarity in rarities" :key="rarity" :label="rarity" :value="rarity" />
           </el-select>
@@ -110,13 +83,9 @@
                 <span v-else>{{ displayValue(row, column) }}</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="!['grants', 'audit'].includes(activeTab)" label="操作" fixed="right" :width="activeTab === 'matches' ? 260 : 180">
+            <el-table-column v-if="!['grants', 'audit'].includes(activeTab)" label="操作" fixed="right" width="180">
               <template #default="{ row }">
                 <el-button v-if="resourceConfig.updatePermission && allowed(resourceConfig.updatePermission)" link type="primary" @click="openEditor(activeTab, row)">编辑</el-button>
-                <template v-if="activeTab === 'matches'">
-                  <el-button v-if="canStart(row)" link type="success" @click="startMatch(row)">开始</el-button>
-                  <el-button v-if="canSettle(row)" link type="warning" @click="openSettlement(row)">结算</el-button>
-                </template>
                 <el-button
                   v-if="resourceConfig.deletePermission && allowed(resourceConfig.deletePermission)"
                   link
@@ -143,6 +112,20 @@
             <el-input v-else-if="field.type === 'textarea'" v-model="editing[field.prop]" type="textarea" :rows="3" />
             <el-input-number v-else-if="field.type === 'number'" v-model="editing[field.prop]" :min="field.min ?? 0" :precision="field.precision" style="width: 100%" />
             <el-date-picker v-else-if="field.type === 'datetime'" v-model="editing[field.prop]" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
+            <div v-else-if="field.type === 'image'" class="escape-item-image-upload">
+              <div class="escape-item-image-actions">
+                <el-upload
+                  action="/api/admin/files/upload"
+                  accept="image/*"
+                  :http-request="options => uploadItemImage(options, field.prop)"
+                  :show-file-list="false"
+                  :on-error="handleImageUploadError"
+                ><el-button :loading="imageUploading">{{ editing[field.prop] ? '重新上传' : '选择图片' }}</el-button></el-upload>
+                <el-button v-if="editing[field.prop]" @click="editing[field.prop] = ''">清除</el-button>
+              </div>
+              <span class="escape-item-image-hint">图片会自动压缩到 100KB 以内</span>
+              <img v-if="editing[field.prop]" :src="editing[field.prop]" alt="物品图片预览" />
+            </div>
             <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable style="width: 100%">
               <el-option v-for="option in field.options || []" :key="option.value ?? option" :label="option.label ?? option" :value="option.value ?? option" />
             </el-select>
@@ -156,41 +139,14 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="settlementVisible" title="最终结算" width="920px" destroy-on-close>
-      <el-alert title="最终结算后不可撤销，系统将一次性更新现金、物品及特殊武器状态。" type="warning" show-icon :closable="false" />
-      <el-form label-width="110px" class="escape-settlement-form">
-        <el-form-item label="结算说明"><el-input v-model="settlement.note" type="textarea" :rows="3" placeholder="请输入本场结算备注" /></el-form-item>
-        <el-form-item label="确认战局"><strong>{{ settlement.match?.name }}</strong></el-form-item>
-      </el-form>
-      <el-table v-loading="settlement.loading" :data="settlement.participants" border>
-        <el-table-column prop="callsign" label="参与者" min-width="120" />
-        <el-table-column label="成功撤离" width="100">
-          <template #default="{ row }"><el-switch v-model="row.escaped" /></template>
-        </el-table-column>
-        <el-table-column label="击杀" width="120">
-          <template #default="{ row }"><el-input-number v-model="row.kills" :min="0" :max="999" controls-position="right" /></template>
-        </el-table-column>
-        <el-table-column label="人工现金" width="150">
-          <template #default="{ row }"><el-input-number v-model="row.manual_cash" :min="0" :precision="2" controls-position="right" /></template>
-        </el-table-column>
-        <el-table-column label="击杀奖励" width="120">
-          <template #default="{ row }">{{ money(Number(row.kills || 0) * Number(settlement.killReward || 0)) }}</template>
-        </el-table-column>
-        <el-table-column label="结算物品" min-width="210">
-          <template #default="{ row }"><el-input v-model="row.itemsText" placeholder="物品ID:数量，如 18:2,27:1" /></template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="settlementVisible = false">取消</el-button>
-        <el-button type="danger" :loading="saving" :disabled="settlement.loading || !settlement.participants.length" @click="submitSettlement">确认最终结算</el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { api } from '../api'
+import { compressImageFile } from '../imageCompression'
 import { escapeAction, escapeCreate, escapeGet, escapeRemove, escapeUpdate, rowsOf } from './api'
 import './styles.css'
 
@@ -199,36 +155,14 @@ const props = defineProps({
 })
 
 const rarities = ['超凡', '史诗', '精品', '普通']
-const statusOptions = [
-  { label: '整备中', value: 'PREPARING' },
-  { label: '进行中', value: 'IN_PROGRESS' },
-  { label: '已结束', value: 'FINISHED' }
-]
 const weaponTypes = [
   { label: '近战武器', value: 'KNIFE' },
   { label: '普通武器', value: 'REGULAR' },
   { label: '特殊武器', value: 'SPECIAL' }
 ]
+const ITEM_IMAGE_MAX_BYTES = 100 * 1024
 
 const configs = {
-  matches: {
-    label: '战局管理', singular: '战局', path: '/matches',
-    viewPermission: 'escape:match:view', createPermission: 'escape:match:create', updatePermission: 'escape:match:update', deletePermission: 'escape:match:delete',
-    columns: [
-      { prop: 'name', label: '战局名称', width: 180 },
-      { prop: 'venue_name', label: '场地', width: 140 },
-      { prop: 'status', label: '状态', width: 100, kind: 'status' },
-      { prop: 'participant_count', label: '玩家', width: 80 },
-      { prop: 'locked_count', label: '锁定', width: 80 },
-      { prop: 'start_at', label: '开局时间', width: 160, kind: 'date' }
-    ],
-    fields: [
-      { prop: 'name', label: '战局名称', type: 'text', required: true },
-      { prop: 'venue_id', label: '场地 ID', type: 'number', required: true },
-      { prop: 'squad_count', label: '小队数量', type: 'number', min: 1, required: true },
-      { prop: 'squad_capacity', label: '每队上限', type: 'number', min: 1, required: true },
-    ]
-  },
   items: {
     label: '物品配置', singular: '物品', path: '/items',
     viewPermission: 'escape:item:view', createPermission: 'escape:item:create', updatePermission: 'escape:item:update', deletePermission: 'escape:item:delete',
@@ -237,6 +171,7 @@ const configs = {
       { prop: 'rarity', label: '稀有度', width: 100, kind: 'rarity' },
       { prop: 'category', label: '分类', width: 110 },
       { prop: 'size', label: '仓库尺寸', width: 100, derive: row => `${row.width || 1} × ${row.height || 1}` },
+      { prop: 'stock_quantity', label: '数量', width: 90 },
       { prop: 'today_price', label: '今日价格', width: 110, kind: 'money' },
       { prop: 'enabled', label: '状态', width: 80, kind: 'boolean' }
     ],
@@ -248,7 +183,8 @@ const configs = {
       { prop: 'max_price', label: '最高价格', type: 'number', required: true },
       { prop: 'width', label: '宽度格数', type: 'number', min: 1, required: true },
       { prop: 'height', label: '高度格数', type: 'number', min: 1, required: true },
-      { prop: 'image_url', label: '图片地址', type: 'text' },
+      { prop: 'stock_quantity', label: '数量', type: 'number', min: 0, required: true },
+      { prop: 'image_url', label: '物品图片', type: 'image' },
       { prop: 'enabled', label: '启用', type: 'boolean' }
     ]
   },
@@ -389,13 +325,11 @@ const overview = ref({})
 const filters = reactive({ keyword: '', status: '', rarity: '' })
 const editorVisible = ref(false)
 const editing = ref(null)
-const settlementVisible = ref(false)
-const settlement = reactive({ match: null, note: '', loading: false, killReward: 0, participants: [] })
+const imageUploading = ref(false)
 
 const allowed = permission => !permission || props.can(permission)
 const visibleTabs = computed(() => tabs.filter(tab => allowed(tab.permission)))
 const resourceConfig = computed(() => configs[activeTab.value])
-const overviewMatches = computed(() => rowsOf(overview.value.current_matches).slice(0, 5))
 const metrics = computed(() => {
   const cards = overview.value.cards || overview.value
   return [
@@ -456,7 +390,6 @@ function defaultValues(config) {
     else if (field.type === 'number') result[field.prop] = field.min > 0 ? field.min : 0
     else result[field.prop] = ''
   })
-  if (config === configs.matches) result.status = 'PREPARING'
   return result
 }
 
@@ -492,6 +425,25 @@ async function saveEditor() {
   }
 }
 
+async function uploadItemImage(options, field) {
+  imageUploading.value = true
+  try {
+    const compressed = await compressImageFile(options.file, ITEM_IMAGE_MAX_BYTES)
+    const body = new FormData()
+    body.append(options.filename || 'file', compressed)
+    const data = await api('/api/admin/files/upload', { method: 'POST', body })
+    editing.value[field] = data.url
+    ElMessage.success(`图片已上传（${Math.ceil(compressed.size / 1024)}KB）`)
+    return { data }
+  } finally {
+    imageUploading.value = false
+  }
+}
+
+function handleImageUploadError(error) {
+  ElMessage.error(error?.message || '图片上传失败')
+}
+
 async function removeRow(row) {
   try {
     await confirmDanger(`确认停用“${row.name || row.callsign || row.id}”？历史记录与结算快照会继续保留。`, '停用确认')
@@ -503,91 +455,12 @@ async function removeRow(row) {
   }
 }
 
-async function startMatch(row) {
-  try {
-    await confirmDanger(`确认开始战局“${row.name}”？系统将校验全员锁定并扣除费用。`, '开始战局')
-    await escapeAction('/matches', row.id, 'start')
-    ElMessage.success('战局已开始')
-    await load()
-  } catch (actionError) {
-    if (actionError !== 'cancel' && actionError !== 'close') ElMessage.error(actionError?.message || '开始失败')
-  }
-}
-
-async function openSettlement(row) {
-  settlement.match = row
-  settlement.note = ''
-  settlement.participants = []
-  settlementVisible.value = true
-  settlement.loading = true
-  try {
-    const preview = await escapeGet(`/matches/${row.id}/settlement`)
-    settlement.killReward = Number(preview?.match?.kill_reward || 0)
-    settlement.participants = (preview?.participants || []).map(item => ({
-      ...item,
-      escaped: false,
-      kills: 0,
-      manual_cash: 0,
-      itemsText: ''
-    }))
-  } catch (previewError) {
-    ElMessage.error(previewError?.message || '结算预览加载失败')
-  } finally {
-    settlement.loading = false
-  }
-}
-
-async function submitSettlement() {
-  if (!settlement.note.trim()) {
-    ElMessage.warning('请输入结算说明')
-    return
-  }
-  saving.value = true
-  try {
-    const participants = settlement.participants.map(item => ({
-      participant_id: item.id,
-      escaped: !!item.escaped,
-      kills: Number(item.kills || 0),
-      manual_cash: Number(item.manual_cash || 0),
-      items: parseSettlementItems(item.itemsText)
-    }))
-    await confirmDanger('最终结算不可撤销，确认提交全部用户的结算结果？', '最终确认')
-    await escapeAction('/matches', settlement.match.id, 'settle', { note: settlement.note, participants })
-    settlementVisible.value = false
-    ElMessage.success('结算完成')
-    await load()
-  } catch (settleError) {
-    if (settleError !== 'cancel' && settleError !== 'close') ElMessage.error(settleError?.message || '结算失败')
-  } finally {
-    saving.value = false
-  }
-}
-
-function parseSettlementItems(value) {
-  if (!String(value || '').trim()) return []
-  return String(value).split(',').map(part => {
-    const [itemId, quantity] = part.trim().split(':').map(Number)
-    if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isInteger(quantity) || quantity <= 0) {
-      throw new Error(`结算物品格式错误：${part}`)
-    }
-    return { item_id: itemId, quantity }
-  })
-}
-
 function confirmDanger(message, title) {
   return ElMessageBox.confirm(message, title, {
     confirmButtonText: '确认',
     cancelButtonText: '取消',
     type: 'warning'
   })
-}
-
-function canStart(row) {
-  return allowed('escape:match:start') && ['PREPARING', 'preparing'].includes(row.status)
-}
-
-function canSettle(row) {
-  return allowed('escape:match:settle') && ['IN_PROGRESS', 'in_progress'].includes(row.status)
 }
 
 function displayValue(row, column) {
