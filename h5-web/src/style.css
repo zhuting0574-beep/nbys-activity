@@ -1172,10 +1172,16 @@ select {
 .detail-page {
   display: grid;
   gap: 12px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .detail-card,
 .squad-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 12px;
   background: rgba(15, 23, 42, .74);
   border: 1px solid rgba(148, 163, 184, .24);
@@ -1188,10 +1194,14 @@ select {
   color: #f8fafc;
   font-size: 24px;
   line-height: 1.18;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-banner {
+  display: block;
   width: 100%;
+  min-width: 0;
   height: auto;
   max-height: 260px;
   aspect-ratio: 16 / 9;
@@ -1203,10 +1213,13 @@ select {
 
 .detail-time,
 .detail-copy {
+  max-width: 100%;
   margin: 0 0 8px;
   color: #b7c4d8;
   font-size: 14px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-status-row {
@@ -1857,9 +1870,10 @@ select option {
   .detail-banner,
   .plan-detail > .banner {
     display: block;
-    height: clamp(300px, 48vw, 440px);
-    max-height: none;
-    object-fit: cover;
+    width: 100%;
+    height: auto;
+    max-height: 440px;
+    object-fit: contain;
     object-position: center;
   }
 }
@@ -2011,4 +2025,500 @@ select option {
   border: 1px solid rgba(59, 130, 246, .28);
   border-radius: 12px;
   font-size: 12px;
+}
+
+/* Member H5 tactical visual system */
+:root {
+  --bg: #070b0c;
+  --bg-deep: #050809;
+  --panel: #0e1416;
+  --panel-strong: #11191b;
+  --text: #edf2ed;
+  --muted: #8e9999;
+  --line: #2a3538;
+  --primary: #b7dd43;
+  --primary-dark: #99be2f;
+  --danger: #e2686d;
+  --blue: #69a9dd;
+}
+
+html,
+body {
+  background: #050809;
+  letter-spacing: 0;
+}
+
+#app {
+  max-width: 430px;
+  background: #070b0c;
+  box-shadow: 0 0 0 1px #202a2d, 0 28px 80px rgba(0, 0, 0, .58);
+}
+
+#app:has(.auth-page) {
+  padding-bottom: 0;
+}
+
+.member-app {
+  min-height: 100vh;
+  background:
+    linear-gradient(rgba(5, 8, 9, .82), rgba(5, 8, 9, .92)),
+    url('./assets/member-auth-bg.jpg') center / cover fixed no-repeat;
+}
+
+.member-app .page {
+  padding: 14px;
+}
+
+.member-app .page-eyebrow {
+  color: #b7dd43;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.member-app .topbar {
+  min-height: 62px;
+  padding: 8px 13px;
+  background: rgba(8, 12, 13, .96);
+  border-bottom-color: #2a3538;
+}
+
+.member-app .brand {
+  font-size: 14px;
+}
+
+.member-app .brand-logo {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #4d5e22;
+  border-radius: 5px;
+  filter: grayscale(1);
+}
+
+.member-app .header-back {
+  min-height: 36px;
+  color: #c7cfcb;
+  background: #182123;
+  border-color: #394548;
+  border-radius: 5px;
+}
+
+.member-app .auth-page {
+  position: relative;
+  isolation: isolate;
+  min-height: 100vh;
+  align-items: safe center;
+  justify-items: center;
+  padding: 22px;
+  overflow: hidden;
+  background: #070b0c !important;
+}
+
+.member-app .auth-page::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background:
+    linear-gradient(rgba(3, 6, 7, .22), rgba(3, 6, 7, .52)),
+    url('./assets/member-auth-bg.jpg') center / cover no-repeat;
+  content: '';
+  filter: grayscale(.52) saturate(.38) brightness(1.05);
+  opacity: .78;
+}
+
+.member-app .auth-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 100%;
+  max-width: 390px;
+  gap: 12px;
+  margin: 0;
+  padding: 20px;
+  background: rgba(8, 13, 14, .76);
+  border: 1px solid #364245;
+  border-radius: 7px;
+  box-shadow: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.member-app .auth-card h2 {
+  margin: 4px 0 0;
+  color: #edf2ed;
+  font-size: 28px;
+}
+
+.member-app .auth-intro,
+.member-app .auth-switch {
+  margin: 0;
+  color: #929e9a;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.member-app .auth-switch {
+  text-align: center;
+}
+
+.member-app .auth-switch a {
+  color: #b7dd43;
+  font-weight: 800;
+}
+
+.member-field {
+  display: grid;
+  gap: 6px;
+}
+
+.member-field span,
+.member-app .upload-field span {
+  color: #aab4b0;
+  font-size: 11px;
+}
+
+.member-app input,
+.member-app textarea,
+.member-app select {
+  color: #edf2ed;
+  background: #11191b;
+  border: 1px solid #354144;
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.member-app input:focus,
+.member-app textarea:focus,
+.member-app select:focus {
+  border-color: #b7dd43;
+  outline: none;
+}
+
+.member-app .btn {
+  min-height: 42px;
+  color: #172008;
+  font-size: 12px;
+  font-weight: 900;
+  background: #b7dd43;
+  border: 1px solid #b7dd43;
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.member-app .btn.secondary {
+  color: #c7cfcb;
+  background: #182123;
+  border-color: #394548;
+}
+
+.member-app .btn.danger {
+  color: #efb3b6;
+  background: #351e21;
+  border-color: #74383c;
+}
+
+.member-app .activity-home-page {
+  padding-top: 12px;
+}
+
+.member-app .escape-entry-banner {
+  min-height: 112px;
+  margin: 0 0 14px;
+  background-position: center;
+  background-size: cover;
+  border: 1px solid #344044;
+  border-radius: 6px;
+  filter: grayscale(1);
+}
+
+.member-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 10px;
+}
+
+.member-section-head h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+
+.member-section-head > span {
+  color: #879391;
+  font-size: 10px;
+}
+
+.member-app .activity-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.member-app .activity-list .card {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background: #0e1416;
+  border: 1px solid #2a3538;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.member-app .activity-list .card:hover {
+  background: #0e1416;
+  border-color: #4b6022;
+  transform: none;
+}
+
+.member-app .activity-card-media {
+  position: relative;
+  overflow: hidden;
+  background: #050809;
+}
+
+.member-app .activity-card-media::after {
+  content: none;
+}
+
+.member-app .activity-list .banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: contain;
+  filter: none;
+}
+
+.member-app .activity-card-body > h3 {
+  margin: 0 0 12px;
+  color: #edf2ed;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.member-app .activity-card-body {
+  padding: 12px;
+}
+
+.member-app .activity-list .card-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  padding: 0;
+}
+
+.member-app .activity-list .activity-meta-grid p {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  margin: 0;
+}
+
+.member-app .activity-list .activity-meta-grid span {
+  color: #879392;
+  font-size: 10px;
+}
+
+.member-app .activity-list .activity-meta-grid strong {
+  overflow: hidden;
+  color: #dce3df;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-app .activity-progress {
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  background: #293234;
+}
+
+.member-app .activity-progress i {
+  display: block;
+  height: 100%;
+  background: #b7dd43;
+}
+
+.member-app .activity-list .status {
+  top: 10px;
+  left: 10px;
+  right: auto;
+  z-index: 2;
+  padding: 5px 7px;
+  color: #d9ef9b;
+  background: #202c13;
+  border: 1px solid #4b6022;
+  border-radius: 3px;
+  font-size: 9px;
+}
+
+.member-app .activity-list .status.planning {
+  color: #efd395;
+  background: #332918;
+  border-color: #6a542b;
+}
+
+.member-page-hero {
+  min-height: 118px;
+  margin: -14px -14px 14px;
+  padding: 26px 16px 18px;
+  background: #11191b url('./assets/activity-default.jpg') center/cover no-repeat;
+  border-bottom: 1px solid #2a3538;
+  box-shadow: inset 0 0 0 999px rgba(4, 7, 8, .67);
+}
+
+.member-page-hero h2 {
+  margin: 5px 0 3px;
+  font-size: 25px;
+}
+
+.member-page-hero p {
+  margin: 0;
+  color: #c0c9c5;
+  font-size: 11px;
+}
+
+.member-app .section-title h2,
+.member-app > h2 {
+  font-size: 19px;
+}
+
+.member-app .card,
+.member-app .detail-card,
+.member-app .squad-panel,
+.member-app .vote-section,
+.member-app .mine-panel,
+.member-app .mine-hero,
+.member-app .rental-card,
+.member-app .empty-state {
+  background: #0e1416;
+  border-color: #2a3538;
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.member-app .detail-banner,
+.member-app .plan-detail > .banner {
+  filter: grayscale(.7) brightness(.72);
+}
+
+.member-app .rental-grid,
+.member-app .activity-rental-grid {
+  gap: 10px;
+}
+
+.member-app .rental-photo,
+.member-app .rental-photo img {
+  border-radius: 5px;
+  filter: grayscale(.8);
+}
+
+.member-app .notice-card {
+  padding-left: 18px;
+}
+
+.member-app .mine-page {
+  gap: 10px;
+}
+
+.member-app .mine-hero {
+  padding: 16px;
+}
+
+.member-app .profile-avatar {
+  width: 58px;
+  height: 58px;
+  border: 2px solid #d8eda7;
+  border-radius: 6px;
+  filter: grayscale(1);
+}
+
+.member-app .mine-identity h2 {
+  margin-top: 5px;
+  font-size: 24px;
+}
+
+.member-app .attendance-table-scroll,
+.member-app .invite-code-box {
+  background: #111719;
+  border-color: #2a3538;
+  border-radius: 5px;
+}
+
+.member-app .tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  min-height: 66px;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(8, 12, 13, .97);
+  border-top-color: #2a3538;
+}
+
+.member-app .tab {
+  display: grid;
+  min-width: 0;
+  place-content: center;
+  gap: 3px;
+  padding: 8px 2px;
+  color: #7f8b89;
+  font-size: 10px;
+}
+
+.member-app .tab b {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.member-app .tab.active {
+  color: #edf2ea;
+}
+
+.member-app .tab.active::before {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  left: 22px;
+  height: 3px;
+  background: #b7dd43;
+  content: '';
+}
+
+.member-app .modal-backdrop {
+  background: rgba(1, 4, 5, .82);
+  backdrop-filter: blur(3px);
+}
+
+.member-app .modal-panel {
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
+  background: #111719;
+  border: 1px solid #364245;
+  border-radius: 8px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .8);
+}
+
+.member-app .icp-footer {
+  padding-bottom: 10px;
+  color: #687371;
+  font-size: 10px;
+}
+
+@media (min-width: 700px) {
+  .member-app .activity-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  #app {
+    box-shadow: none;
+  }
+
+  .member-app .auth-page {
+    padding-top: max(22px, env(safe-area-inset-top));
+    padding-bottom: max(22px, env(safe-area-inset-bottom));
+  }
 }

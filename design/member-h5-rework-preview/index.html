@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>宁波甬士会员 H5 重构原型</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="review-bar">
+    <div><span>NBYS / MEMBER H5</span><strong>会员端视觉重构原型</strong></div>
+    <div class="review-actions">
+      <label>页面<select id="screenPicker"></select></label>
+      <label>状态<select id="statePicker"><option value="ready">正常</option><option value="loading">加载</option><option value="empty">空数据</option><option value="error">错误</option></select></label>
+    </div>
+  </header>
+
+  <main class="prototype-stage">
+    <aside class="review-notes">
+      <span>PRODUCT PREVIEW 01</span>
+      <h1>把活动管理做成队员每天愿意打开的工具</h1>
+      <p>沿用逃离西撇镇的深色战术视觉，但所有信息、图片与操作仍属于宁波甬士活动品牌。</p>
+      <dl>
+        <div><dt>信息层级</dt><dd>身份、活动状态和主要操作优先</dd></div>
+        <div><dt>交互策略</dt><dd>真实读取，写操作只在原型中模拟</dd></div>
+        <div><dt>桌面展示</dt><dd>居中的手机画布，不改变移动端结构</dd></div>
+      </dl>
+      <div class="safe-note"><i></i><span>PROTOTYPE SAFE MODE<br />不会发送业务写请求</span></div>
+    </aside>
+
+    <section class="device-frame" aria-label="宁波甬士会员端原型">
+      <div id="app" class="app-shell"></div>
+    </section>
+  </main>
+
+  <dialog id="prototypeDialog" class="sheet"><div id="dialogContent"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
