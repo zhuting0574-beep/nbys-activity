@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <header class="topbar">
+  <div class="member-app">
+    <header v-if="view === 'app'" class="topbar">
       <a class="brand" href="#" @click.prevent="goHome">
         <img class="brand-logo" :src="displayLogoUrl" alt="甬士 Logo" />
         <span>宁波甬士活动管理系统</span>
@@ -13,22 +13,26 @@
 
     <div v-if="view === 'login'" class="page auth-page" :style="authPageStyle">
       <form class="auth-card" @submit.prevent="login()">
-        <h2>登录</h2>
-        <input v-model="loginForm.account" placeholder="名字 / 呼号" required />
-        <input v-model="loginForm.password" placeholder="密码" type="password" required />
+        <span class="page-eyebrow">NBYS MEMBER ACCESS</span>
+        <h2>队员登录</h2>
+        <p class="auth-intro">活动、出勤、租赁与个人资料统一入口。</p>
+        <label class="member-field"><span>名字 / 呼号</span><input v-model="loginForm.account" required /></label>
+        <label class="member-field"><span>密码</span><input v-model="loginForm.password" type="password" required /></label>
         <button class="btn" style="width: 100%" type="submit" :disabled="loginSubmitting">{{ loginSubmitting ? '登录中…' : '登录' }}</button>
-        <p class="muted">没有账号？赶紧 <a @click="view = 'register'">注册</a>。</p>
+        <p class="auth-switch">没有账号？<a @click="view = 'register'">注册账号</a></p>
       </form>
     </div>
 
     <div v-else-if="view === 'register'" class="page auth-page" :style="authPageStyle">
       <form class="auth-card" @submit.prevent="register()">
-        <h2>注册</h2>
-        <input v-model="registerForm.username" placeholder="用户名" required />
-        <input v-model="registerForm.callsign" placeholder="呼号（选填）" />
-        <input v-model="registerForm.password" placeholder="密码" type="password" required />
-        <input v-model="registerForm.confirm_password" placeholder="确认密码" type="password" />
-        <input v-model="registerForm.invite_code" placeholder="邀请码（选填）" />
+        <span class="page-eyebrow">NBYS MEMBER ACCESS</span>
+        <h2>加入宁波甬士</h2>
+        <p class="auth-intro">创建队员档案，正式审核通过后开放全部功能。</p>
+        <label class="member-field"><span>用户名</span><input v-model="registerForm.username" required /></label>
+        <label class="member-field"><span>呼号</span><input v-model="registerForm.callsign" placeholder="选填" /></label>
+        <label class="member-field"><span>密码</span><input v-model="registerForm.password" type="password" required /></label>
+        <label class="member-field"><span>确认密码</span><input v-model="registerForm.confirm_password" type="password" /></label>
+        <label class="member-field"><span>邀请码</span><input v-model="registerForm.invite_code" placeholder="选填" /></label>
         <p class="muted">用户名、密码为必填项</p>
         <label class="upload-field">
           <span>头像</span>
@@ -36,24 +40,13 @@
         </label>
         <img v-if="registerForm.avatar_url" class="avatar-preview" :src="registerForm.avatar_url" alt="头像预览" />
         <button class="btn" style="width: 100%" type="submit">注册</button>
-        <p class="muted"><a @click="view = 'login'">返回登录</a></p>
+        <p class="auth-switch"><a @click="view = 'login'">返回登录</a></p>
       </form>
     </div>
 
     <template v-else>
     <div v-if="tab === 'activities' && !selectedActivity && !selectedPlan">
-      <div class="top">
-        <div class="home-identity mine-identity">
-          <h2>{{ me.callsign || '未设置呼号' }}</h2>
-          <p>
-            <span>{{ me.username }}</span>
-            <b>{{ attendanceSummary.present_count || 0 }}/{{ attendanceSummary.activity_total || 0 }}</b>
-          </p>
-        </div>
-        <img v-if="me.avatar_url" class="user-avatar" :src="me.avatar_url" alt="用户头像" />
-        <div v-else class="user-avatar fallback">{{ avatarText }}</div>
-      </div>
-      <div class="page">
+      <div class="page activity-home-page">
         <section
           v-if="showEscapeEntryBanner"
           class="escape-entry-banner"
@@ -66,6 +59,10 @@
           @keydown.space.prevent="openEscape"
         >
         </section>
+        <div class="member-section-head">
+          <div><span class="page-eyebrow">ACTIVE OPERATIONS</span><h2>近期活动</h2></div>
+          <span>{{ activities.length }} 项进行中</span>
+        </div>
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
@@ -332,7 +329,7 @@
     </div>
 
     <div v-if="tab === 'activityRentals'" class="page">
-      <h2>活动发射器租借</h2>
+      <div class="member-page-hero"><span class="page-eyebrow">FIELD EQUIPMENT</span><h2>活动发射器</h2><p>为当前活动选择可租用设备</p></div>
       <div class="rental-notice">
         <p>发射器租赁默认只有发射器+头灯接收器，是否含瞄具和头盔会在说明里描述。</p>
         <p>发射器租赁默认不提供电池，请自备XT30 11.1V电池*1 ， CR123A 3.7V 头灯电池*2</p>
@@ -362,8 +359,9 @@
     </div>
 
     <div v-if="tab === 'rentals'" class="page">
+      <div class="member-page-hero"><span class="page-eyebrow">LAUNCHER RENTAL</span><h2>我的发射器</h2><p>维护个人设备与出租状态</p></div>
       <div class="section-title">
-        <h2>我的发射器租赁</h2>
+        <h2>设备列表</h2>
         <button class="btn" @click="openRentalDialog">新增</button>
       </div>
       <div class="rental-grid">
@@ -387,7 +385,7 @@
     </div>
 
     <div v-if="tab === 'notifications'" class="page">
-      <h2>通知</h2>
+      <div class="member-page-hero"><span class="page-eyebrow">MESSAGE CENTER</span><h2>通知</h2><p>活动、租赁与系统动态</p></div>
       <div v-for="notice in notifications" :key="notice.id" class="card notice-card" :class="{ unread: !notice.read_at }">
         <span v-if="!notice.read_at" class="notice-dot"></span>
         <h3>{{ notice.title }}</h3>
@@ -405,6 +403,7 @@
           <img v-if="me.avatar_url" class="profile-avatar" :src="me.avatar_url" alt="用户头像" />
           <div v-else class="profile-avatar fallback">{{ avatarText }}</div>
           <div class="mine-identity">
+            <span class="page-eyebrow">MEMBER DOSSIER</span>
             <h2>{{ me.callsign || '未设置呼号' }}</h2>
             <p>{{ me.username }}</p>
           </div>
@@ -498,12 +497,12 @@
     </footer>
 
     <div class="tabs">
-      <div class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'; selectedActivity = null; selectedPlan = null; loadActivities()">活动</div>
-      <div class="tab" :class="{ active: tab === 'rentals' }" @click="tab = 'rentals'; loadRentals()">发射器租赁</div>
+      <div class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'; selectedActivity = null; selectedPlan = null; loadActivities()"><b>⌂</b><span>活动</span></div>
+      <div class="tab" :class="{ active: tab === 'rentals' }" @click="tab = 'rentals'; loadRentals()"><b>▣</b><span>发射器租赁</span></div>
       <div class="tab" :class="{ active: tab === 'notifications' }" @click="openNotifications">
-        通知<span v-if="unreadCount" class="tab-dot"></span>
+        <b>●</b><span>通知</span><span v-if="unreadCount" class="tab-dot"></span>
       </div>
-      <div class="tab" :class="{ active: tab === 'mine' }" @click="openMine">我的</div>
+      <div class="tab" :class="{ active: tab === 'mine' }" @click="openMine"><b>◆</b><span>我的</span></div>
     </div>
 
     <div v-if="showRentalDialog" class="modal">
@@ -783,8 +782,7 @@ export default {
       return this.systemImages.login_logo_url || this.logoUrl
     },
     authPageStyle() {
-      const url = this.systemImages.login_background_url
-      return url ? { backgroundImage: `linear-gradient(rgba(2, 6, 23, .34), rgba(2, 6, 23, .7)), url("${url}")` } : {}
+      return { backgroundColor: '#070b0c' }
     },
     checkinChoiceHint() {
       const methods = this.checkinMethods(this.detail)
