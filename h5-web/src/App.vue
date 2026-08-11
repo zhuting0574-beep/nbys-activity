@@ -1,5 +1,6 @@
 <template>
-  <MemberApp v-if="route === 'app'" @loading-start="showActivityLoading" @ready="hideActivityLoading" />
+  <EscapePage v-if="route === 'escape'" />
+  <MemberApp v-else-if="route === 'app'" @loading-start="showActivityLoading" @ready="hideActivityLoading" />
   <MarketingSite v-else @enter-app="enterApp" />
   <Teleport to="body">
     <Transition name="activity-loader">
@@ -14,11 +15,12 @@
 <script>
 import MarketingSite from './MarketingSite.vue'
 import MemberApp from './MemberApp.vue'
+import EscapePage from './escape/EscapePage.vue'
 import activityLoadingLogo from './assets/activity-loading-logo.jpg'
 
 export default {
   name: 'App',
-  components: { MarketingSite, MemberApp },
+  components: { MarketingSite, MemberApp, EscapePage },
   data() {
     const initialRoute = window.location.hash.replace(/^#\/?/, '') || 'site'
     return {
@@ -50,8 +52,10 @@ export default {
       window.scrollTo({ top: 0, behavior: 'auto' })
     },
     applyAppMode() {
-      document.body.classList.toggle('ys-marketing-mode', this.route !== 'app')
-      document.body.classList.toggle('ys-member-mode', this.route === 'app')
+      const memberRoute = this.route === 'app' || this.route === 'escape'
+      document.body.classList.toggle('ys-marketing-mode', !memberRoute)
+      document.body.classList.toggle('ys-member-mode', memberRoute)
+      document.body.classList.toggle('ys-escape-mode', this.route === 'escape')
     },
     enterApp() {
       this.showActivityLoading()

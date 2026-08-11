@@ -31,6 +31,15 @@ public class PermissionController {
         add(pages, "attendance", "出勤统计", "view,create,update,delete,export");
         add(pages, "systemImage", "图片管理", "view,update");
         add(pages, "permission", "权限管理", "view,update");
+        add(pages, "escape", "逃离西撇镇入口与审计", "view,audit");
+        add(pages, "escape:match", "逃离-战局", "view,create,update,delete,start,settle");
+        add(pages, "escape:item", "逃离-物品", "view,create,update,delete");
+        add(pages, "escape:shop", "逃离-商店", "view,create,update,delete");
+        add(pages, "escape:season", "逃离-赛季", "view,create,update,delete");
+        add(pages, "escape:class", "逃离-职业", "view,create,update,delete");
+        add(pages, "escape:weapon", "逃离-武器", "view,create,update,delete");
+        add(pages, "escape:userAsset", "逃离-用户资产", "view,adjust");
+        add(pages, "escape:itemGrant", "逃离-物品入库", "create");
         return ApiResponse.ok(pages);
     }
 
@@ -41,6 +50,7 @@ public class PermissionController {
         role(roles, "user", "普通用户");
         role(roles, "activity_admin", "活动管理员");
         role(roles, "attendance_admin", "出勤管理员");
+        role(roles, "escape_admin", "逃离西撇镇管理员");
         role(roles, "superadmin", "超级管理员");
         return ApiResponse.ok(roles);
     }

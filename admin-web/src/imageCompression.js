@@ -22,8 +22,8 @@ async function loadImage(file) {
 }
 
 export async function compressImageFile(file, maxBytes = DEFAULT_MAX_BYTES) {
-  if (!file || file.size <= maxBytes) return file
-  if (!String(file.type || '').startsWith('image/')) throw new Error('请选择图片文件')
+  if (!file || !String(file.type || '').startsWith('image/')) throw new Error('请选择图片文件')
+  if (file.size <= maxBytes) return file
 
   const source = await loadImage(file)
   const canvas = document.createElement('canvas')
@@ -45,7 +45,7 @@ export async function compressImageFile(file, maxBytes = DEFAULT_MAX_BYTES) {
       context.drawImage(source.image, 0, 0, canvas.width, canvas.height)
       const blob = await canvasBlob(canvas, 'image/webp', quality)
       if (blob.size <= maxBytes) {
-        const baseName = String(file.name || 'venue-image').replace(/\.[^.]+$/, '')
+        const baseName = String(file.name || 'image').replace(/\.[^.]+$/, '')
         return new File([blob], `${baseName}.webp`, { type: blob.type, lastModified: Date.now() })
       }
       const scale = Math.min(0.88, Math.sqrt(maxBytes / blob.size) * 0.94)
@@ -56,7 +56,7 @@ export async function compressImageFile(file, maxBytes = DEFAULT_MAX_BYTES) {
   } finally {
     source.dispose()
   }
-  throw new Error('图片内容过于复杂，无法压缩到300KB以内')
+  throw new Error(`图片内容过于复杂，无法压缩到${Math.ceil(maxBytes / 1024)}KB以内`)
 }
 
 export { DEFAULT_MAX_BYTES }

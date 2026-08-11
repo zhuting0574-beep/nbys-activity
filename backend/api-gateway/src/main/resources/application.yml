@@ -8,7 +8,7 @@ spring:
     loadbalancer:
       eager-load:
         enabled: true
-        clients: activity-center,user-center,public-center
+        clients: activity-center,escape-center,user-center,public-center
     gateway:
       discovery:
         locator:
@@ -35,6 +35,14 @@ spring:
           uri: lb://activity-center
           predicates:
             - Path=/api/public/system-settings,/api/public/system-settings/**
+        - id: escape-center-h5
+          uri: lb://escape-center
+          predicates:
+            - Path=/api/escape/h5,/api/escape/h5/**
+        - id: escape-center-admin
+          uri: lb://escape-center
+          predicates:
+            - Path=/api/escape/admin,/api/escape/admin/**
 
 eureka:
   client:

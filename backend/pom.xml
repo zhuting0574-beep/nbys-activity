@@ -13,6 +13,7 @@
         <module>eureka-server</module>
         <module>api-gateway</module>
         <module>activity-center</module>
+        <module>escape-center</module>
         <module>user-center</module>
         <module>public-center</module>
     </modules>

@@ -3,14 +3,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNTIME_DIR="${NBYS_RUNTIME_DIR:-/tmp/nbys-local-dev}"
-LAUNCHD_LABEL="com.nbys.activity-center"
-JAVA_BIN="${JAVA_BIN:-${JAVA_HOME:-/Library/Java/JavaVirtualMachines/jdk1.8.0_281.jdk/Contents/Home}/bin/java}"
-NPM_BIN="${NPM_BIN:-$ROOT_DIR/.tools/node/bin/npm}"
+LAUNCHD_LABELS=(
+  "com.nbys.activity-center"
+  "com.nbys.nbys-eureka"
+  "com.nbys.nbys-api-gateway"
+  "com.nbys.nbys-activity-center"
+  "com.nbys.nbys-user-center"
+  "com.nbys.nbys-public-center"
+  "com.nbys.nbys-escape-center"
+  "com.nbys.nbys-admin-web"
+  "com.nbys.nbys-h5-web"
+)
+JAVA_BIN="${JAVA_BIN:-${JAVA_HOME:+$JAVA_HOME/bin/java}}"
+JAVA_BIN="${JAVA_BIN:-$(command -v java)}"
+NPM_BIN="${NPM_BIN:-$(command -v npm 2>/dev/null || command -v pnpm)}"
 export PATH="$ROOT_DIR/.tools/node/bin:${JAVA_BIN%/java}:$PATH"
 
 mkdir -p "$RUNTIME_DIR"
 
-if [[ -f "$ROOT_DIR/.env.local" ]]; then
+if [[ "${NBYS_SKIP_LOCAL_ENV:-false}" != "true" && -f "$ROOT_DIR/.env.local" ]]; then
   set -a
   # shellcheck disable=SC1091
   source "$ROOT_DIR/.env.local"
@@ -21,10 +32,12 @@ export DB_HOST="${DB_HOST:-127.0.0.1}"
 export DB_PORT="${DB_PORT:-13306}"
 export UPLOAD_DIR="${UPLOAD_DIR:-$ROOT_DIR/uploads}"
 export EUREKA_URL="${EUREKA_URL:-http://127.0.0.1:8761/eureka/}"
+export EUREKA_INSTANCE_HOSTNAME="${EUREKA_INSTANCE_HOSTNAME:-127.0.0.1}"
+export EUREKA_INSTANCE_PREFER_IP_ADDRESS="${EUREKA_INSTANCE_PREFER_IP_ADDRESS:-false}"
 export AUTH_TOKEN_SECRET="${AUTH_TOKEN_SECRET:-nbys-local-development-secret}"
 export APOLLO_BOOTSTRAP_ENABLED="${APOLLO_BOOTSTRAP_ENABLED:-false}"
 
-services="h5-web admin-web api-gateway public-center user-center activity-center eureka-server"
+services="h5-web admin-web api-gateway escape-center public-center user-center activity-center eureka-server"
 
 pid_file() { printf '%s/%s.pid' "$RUNTIME_DIR" "$1"; }
 log_file() { printf '%s/%s.log' "$RUNTIME_DIR" "$1"; }
@@ -72,18 +85,14 @@ stop_pid() {
   rm -f "$file"
 }
 
-disable_conflicting_launch_agent() {
-  local domain="gui/$(id -u)"
-  if launchctl print "$domain/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-    echo "Stopping conflicting LaunchAgent $LAUNCHD_LABEL..."
-    launchctl bootout "$domain/$LAUNCHD_LABEL"
-  fi
-  for _ in $(seq 1 20); do
-    [[ -z "$(port_pid 8081)" ]] && return 0
-    sleep 0.5
+disable_conflicting_launch_agents() {
+  local domain="gui/$(id -u)" label
+  for label in "${LAUNCHD_LABELS[@]}"; do
+    if launchctl print "$domain/$label" >/dev/null 2>&1; then
+      echo "Stopping conflicting LaunchAgent $label..."
+      launchctl bootout "$domain/$label"
+    fi
   done
-  echo "LaunchAgent stopped, but port 8081 is still occupied." >&2
-  return 1
 }
 
 start_java() {
@@ -120,19 +129,19 @@ start_all() {
     exit 1
   }
 
-  # Check unrelated ports before touching the persistent activity-center job.
-  # This keeps a failed `start` attempt from taking down an otherwise healthy stack.
+  disable_conflicting_launch_agents
   assert_port_free eureka-server 8761
   assert_port_free api-gateway 8080
   assert_port_free user-center 8082
   assert_port_free public-center 8083
+  assert_port_free escape-center 8084
   assert_port_free admin-web 5173
   assert_port_free h5-web 5174
-  disable_conflicting_launch_agent
   start_java eureka-server 8761 backend/eureka-server/target/eureka-server-0.1.0.jar
   start_java activity-center 8081 backend/activity-center/target/activity-center-0.1.0.jar
   start_java user-center 8082 backend/user-center/target/user-center-0.1.0.jar
   start_java public-center 8083 backend/public-center/target/public-center-0.1.0.jar
+  start_java escape-center 8084 backend/escape-center/target/escape-center-0.1.0.jar
   start_java api-gateway 8080 backend/api-gateway/target/api-gateway-0.1.0.jar
   start_web admin-web 5173 admin-web
   start_web h5-web 5174 h5-web
@@ -144,13 +153,14 @@ start_all() {
 }
 
 stop_all() {
+  disable_conflicting_launch_agents
   for name in $services; do stop_pid "$name"; done
   echo "Managed local services stopped."
 }
 
 status_all() {
   local spec name port pid source
-  for spec in "eureka-server:8761" "api-gateway:8080" "activity-center:8081" "user-center:8082" "public-center:8083" "admin-web:5173" "h5-web:5174"; do
+  for spec in "eureka-server:8761" "api-gateway:8080" "activity-center:8081" "user-center:8082" "public-center:8083" "escape-center:8084" "admin-web:5173" "h5-web:5174"; do
     name="${spec%%:*}"
     port="${spec##*:}"
     pid="$(port_pid "$port")"
@@ -164,9 +174,12 @@ status_all() {
       printf '%-18s DOWN port=%s\n' "$name" "$port"
     fi
   done
-  if launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" >/dev/null 2>&1; then
-    echo "WARNING: conflicting LaunchAgent is loaded: $LAUNCHD_LABEL"
-  fi
+  local label
+  for label in "${LAUNCHD_LABELS[@]}"; do
+    if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+      echo "WARNING: conflicting LaunchAgent is loaded: $label"
+    fi
+  done
 }
 
 case "${1:-}" in

@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AdminActivityControllerExportTest {
-    private final AdminActivityController controller = new AdminActivityController(null, null);
+    private final AdminActivityController controller = new AdminActivityController(null, null, null);
 
     @Test
     void enrollmentWorkbookUsesYesterdayFormatAndKeepsUserFieldsAuditable() throws IOException {

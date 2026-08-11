@@ -122,6 +122,8 @@
         </div>
       </section>
 
+      <EscapeAdmin v-if="active === 'escape'" :can="can" />
+
       <section v-if="active === 'activities'" class="card">
         <div class="toolbar">
           <el-input v-model="filters.name" placeholder="活动名称" style="width: 180px" />
@@ -157,8 +159,8 @@
             <template #default="{ row }">
               <el-button size="small" @click="row.record_type === 'plan' ? openPlan(row) : openActivity(row)">查看/编辑</el-button>
               <template v-if="row.record_type === 'activity'">
-                <el-button size="small" v-if="!row.deleted_at && can('activity:cancel')" @click="post(`/api/admin/activities/${row.id}/cancel`, loadActivities)">取消</el-button>
-                <el-button size="small" v-if="row.deleted_at && can('activity:restore')" @click="post(`/api/admin/activities/${row.id}/restore`, loadActivities)">恢复</el-button>
+                <el-button size="small" v-if="!row.deleted_at && can('activity:cancel')" @click="put(`/api/admin/activities/${row.id}/cancel`, loadActivities)">取消</el-button>
+                <el-button size="small" v-if="row.deleted_at && can('activity:restore')" @click="put(`/api/admin/activities/${row.id}/restore`, loadActivities)">恢复</el-button>
                 <el-button size="small" @click="downloadFile(`/api/admin/activities/${row.id}/enrollments/export`)">导出报名表</el-button>
                 <el-button size="small" @click="downloadFile(`/api/admin/activities/${row.id}/launcher-rentals/export`)">导出租赁表</el-button>
                 <el-button size="small" type="danger" v-if="can('activity:delete')" @click="remove(`/api/admin/activities/${row.id}`, loadActivities)">删除</el-button>
@@ -691,6 +693,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, setToken, token } from './api'
 import defaultActivityBanner from './assets/activity-default.jpg'
 import { compressImageFile, DEFAULT_MAX_BYTES } from './imageCompression'
+import EscapeAdmin from './escape/EscapeAdmin.vue'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
@@ -775,7 +778,7 @@ const PlanForm = {
 }
 
 export default {
-  components: { ActivityForm, PlanForm },
+  components: { ActivityForm, PlanForm, EscapeAdmin },
   data() {
     const query = new URLSearchParams(location.search)
     return {
@@ -845,6 +848,7 @@ export default {
     menus() {
       const topItems = [
         { key: 'dashboard', name: '数据看板' },
+        { key: 'escape', name: '逃离西撇镇', permission: 'escape:view' },
         { key: 'activities', name: '活动管理', permission: 'activity:view' },
         { key: 'venues', name: '场地管理', permission: 'venue:view' },
         { key: 'modes', name: '模式管理', permission: 'gameMode:view' },
@@ -1023,7 +1027,7 @@ export default {
       window.location.href = `${this.h5Base()}?returnTo=${encodeURIComponent(current)}#/app`
     },
     load() {
-      return ({ dashboard: this.loadDashboard, activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
+      return ({ dashboard: this.loadDashboard, escape: () => Promise.resolve(), activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
     },
     loadSystem() {
       if (!this.systemMenus.some(item => item.key === this.systemActive)) {
@@ -1275,7 +1279,7 @@ export default {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        invitee_ids: this.parseIds(detail.invitee_ids),
-	        dates: (detail.dates || []).map(item => ({ date: item.date || '', remark: item.remark || '' })),
+	        dates: (detail.dates || []).map(item => ({ id: item.id, date: item.date || '', remark: item.remark || '' })),
 	        venue_ids: (detail.venues || []).map(item => item.id),
 	        game_mode_ids: (detail.game_modes || []).map(item => item.id)
 	      }
@@ -1294,7 +1298,9 @@ export default {
 	    },
 	    savePlan() {
 	      this.planForm.invitee_ids = this.normalizedInviteeIds(this.planForm)
-	      this.planForm.dates = (this.planForm.dates || []).map(item => typeof item === 'object' ? { date: item.date || '', remark: item.remark || '' } : { date: item, remark: '' }).filter(item => item.date)
+	      this.planForm.dates = (this.planForm.dates || []).map(item => typeof item === 'object'
+	        ? { id: item.id, date: item.date || '', remark: item.remark || '' }
+	        : { date: item, remark: '' }).filter(item => item.date)
 	      const method = this.planForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activity-plans${this.planForm.id ? `/${this.planForm.id}` : ''}`
 	      return api(url, { method, body: this.planForm }).then(() => { this.planForm = null; this.loadActivities() })
@@ -1584,6 +1590,7 @@ export default {
 	        .then(() => Promise.all([this.loadAttendance(), this.loadActivities()]))
 	    },
 	    post(url, callback) { return api(url, { method: 'POST', body: {} }).then(() => callback && callback()) },
+	    put(url, callback) { return api(url, { method: 'PUT', body: {} }).then(() => callback && callback()) },
 	    remove(url, callback) {
 	      return ElMessageBox.confirm('确认删除？').then(() => api(url, { method: 'DELETE' }).then(() => callback && callback()))
 	    },

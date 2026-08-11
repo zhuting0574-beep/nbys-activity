@@ -3,7 +3,10 @@ package com.nbys.activity.config;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Component;
+import java.util.Objects;
 
 @Component
 public class DbMigrationRunner implements ApplicationRunner {
@@ -57,6 +60,20 @@ public class DbMigrationRunner implements ApplicationRunner {
         } catch (Exception e) {
             System.err.println("Database migration skipped: " + e.getMessage());
         }
+        try {
+            runSqlResource("db/migration/V20260723__escape_from_xp_domain.sql");
+            runSqlResource("db/migration/V20260810__escape_warehouse_dimensions.sql");
+            runSqlResource("db/migration/V20260810__escape_match_item_stock.sql");
+        } catch (Exception e) {
+            throw new IllegalStateException("Escape from XP database migration failed", e);
+        }
+    }
+
+    private void runSqlResource(String path) {
+        ResourceDatabasePopulator populator = new ResourceDatabasePopulator(new ClassPathResource(path));
+        populator.setContinueOnError(false);
+        populator.setIgnoreFailedDrops(true);
+        populator.execute(Objects.requireNonNull(jdbc.getDataSource(), "DataSource unavailable"));
     }
 
     private void addColumn(String table, String column, String definition, String after) {

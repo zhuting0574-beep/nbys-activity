@@ -54,6 +54,18 @@
         <div v-else class="user-avatar fallback">{{ avatarText }}</div>
       </div>
       <div class="page">
+        <section
+          v-if="showEscapeEntryBanner"
+          class="escape-entry-banner"
+          :style="escapeEntryStyle"
+          role="button"
+          tabindex="0"
+          aria-label="进入战区"
+          @click="openEscape"
+          @keydown.enter="openEscape"
+          @keydown.space.prevent="openEscape"
+        >
+        </section>
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
@@ -482,7 +494,7 @@
     </div>
 
     <footer class="icp-footer">
-      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">浙ICP 备2026046394</a>
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">浙ICP备2026046394号</a>
     </footer>
 
     <div class="tabs">
@@ -659,6 +671,7 @@
 import { api, setErrorHandler, setToken, token } from './api'
 import logoUrl from './assets/nbys-logo.png'
 import defaultActivityBanner from './assets/activity-default.jpg'
+import xpBannerUrl from './escape/assets/xp-banner.jpg'
 import QRCode from 'qrcode'
 import { Html5Qrcode } from 'html5-qrcode'
 
@@ -752,6 +765,14 @@ export default {
     },
     showSiteHome() {
       return this.view === 'app' && this.tab === 'activities' && !this.selectedActivity && !this.selectedPlan
+    },
+    showEscapeEntryBanner() {
+      return this.me.is_regular_member === true || Number(this.me.is_regular_member) === 1
+    },
+    escapeEntryStyle() {
+      return {
+        backgroundImage: `url("${xpBannerUrl}")`
+      }
     },
     canManageActivities() {
       const role = String(this.me.role || '')
@@ -930,6 +951,9 @@ export default {
     },
     goSiteHome() {
       window.location.hash = '#/'
+    },
+    openEscape() {
+      window.location.hash = '#/escape'
     },
     goAdminActivity() {
       if (!this.selectedActivity || !this.canManageActivities) return
