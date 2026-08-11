@@ -250,7 +250,8 @@ public class EscapeAdminController {
     private ApiResponse<List<Map<String, Object>>> listCatalog(String type, String permission,
                                                                HttpServletRequest request) {
         access.requireAdmin(request, permission);
-        return ApiResponse.ok(service.catalog(type));
+        return ApiResponse.ok(service.catalog(type, request.getParameter("keyword"),
+                request.getParameter("rarity")));
     }
 
     private ApiResponse<Map<String, Object>> createCatalog(String type, String permission, Map<String, Object> body,

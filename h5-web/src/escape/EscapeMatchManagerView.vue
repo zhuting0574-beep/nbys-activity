@@ -1,6 +1,6 @@
 <template>
   <section class="escape-manager-view">
-    <header class="escape-manager-heading">
+    <header class="escape-manager-heading escape-manager-hero">
       <div><span>FIELD OPERATIONS</span><h2>对局管理</h2><p>当前身份：{{ role === 'superadmin' ? '超级管理员' : '活动发起人' }}</p></div>
       <button type="button" class="escape-manager-create" @click="openEditor()">＋ 创建</button>
     </header>

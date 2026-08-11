@@ -78,4 +78,21 @@ class EscapeAdminControllerTest {
         assertEquals(options, response.data);
         verify(service).itemOptions("weapon", 3);
     }
+
+    @Test
+    void itemListPassesKeywordAndRarityFilters() {
+        EscapeAccessService access = mock(EscapeAccessService.class);
+        EscapeAdminService service = mock(EscapeAdminService.class);
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setParameter("keyword", "LEDX");
+        request.setParameter("rarity", "史诗");
+        when(service.catalog("items", "LEDX", "史诗")).thenReturn(Collections.emptyList());
+
+        ApiResponse<List<Map<String, Object>>> response =
+                new EscapeAdminController(access, service).items(request);
+
+        assertEquals(0, response.code);
+        verify(access).requireAdmin(request, "escape:item:view");
+        verify(service).catalog("items", "LEDX", "史诗");
+    }
 }

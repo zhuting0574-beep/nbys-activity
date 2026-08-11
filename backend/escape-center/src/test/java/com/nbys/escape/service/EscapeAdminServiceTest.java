@@ -2,13 +2,44 @@ package com.nbys.escape.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.jdbc.core.ColumnMapRowMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class EscapeAdminServiceTest {
+    @Test
+    void rarityFilterAcceptsLabelsAndCodes() {
+        assertEquals("epic", EscapeAdminService.normalizeRarityFilter("史诗"));
+        assertEquals("fine", EscapeAdminService.normalizeRarityFilter("FINE"));
+        assertThrows(IllegalArgumentException.class,
+                () -> EscapeAdminService.normalizeRarityFilter("不存在"));
+    }
+
+    @Test
+    void itemCatalogAppliesNormalizedRarityToQuery() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        when(jdbc.query(anyString(), any(Object[].class), any(ColumnMapRowMapper.class)))
+                .thenReturn(Collections.emptyList());
+
+        new EscapeAdminService(jdbc, new ObjectMapper()).catalog("items", "", "史诗");
+
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object[]> args = ArgumentCaptor.forClass(Object[].class);
+        verify(jdbc).query(sql.capture(), args.capture(), any(ColumnMapRowMapper.class));
+        assertTrue(sql.getValue().contains("rarity=?"));
+        assertArrayEquals(new Object[]{"epic"}, args.getValue());
+    }
+
     @Test
     void linkedProductPriceCannotBeLowerThanItemPrice() {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,

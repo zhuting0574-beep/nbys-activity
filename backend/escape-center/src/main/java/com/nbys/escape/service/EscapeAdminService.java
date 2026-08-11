@@ -345,13 +345,44 @@ public class EscapeAdminService {
     }
 
     public List<Map<String, Object>> catalog(String type) {
+        return catalog(type, null, null);
+    }
+
+    public List<Map<String, Object>> catalog(String type, String keyword, String rarity) {
         Catalog c = catalogDef(type);
+        String alias = "products".equals(type) ? "p." : "";
+        List<String> conditions = new ArrayList<String>();
+        List<Object> args = new ArrayList<Object>();
+        if (!blank(keyword)) {
+            String value = "%" + keyword.trim() + "%";
+            conditions.add("(cast(" + alias + "id as char) like ? or " + alias + "name like ?)");
+            args.add(value);
+            args.add(value);
+        }
+        if ("items".equals(type) && !blank(rarity)) {
+            conditions.add("rarity=?");
+            args.add(normalizeRarityFilter(rarity));
+        }
+        String where = conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
         if ("products".equals(type)) {
             return decorate(type, Rows.list(jdbc, "select p.*,i.name item_name,i.current_price item_current_price," +
                     "i.stock_quantity item_stock_quantity,i.enabled item_enabled,i.deleted_at item_deleted_at " +
-                    "from escape_shop_products p left join escape_items i on i.id=p.item_id order by p.id desc"));
+                    "from escape_shop_products p left join escape_items i on i.id=p.item_id" + where +
+                    " order by p.id desc", args.toArray()));
         }
-        return decorate(type, Rows.list(jdbc, "select * from " + c.table + " order by id desc"));
+        return decorate(type, Rows.list(jdbc, "select * from " + c.table + where + " order by id desc", args.toArray()));
+    }
+
+    static String normalizeRarityFilter(String rarity) {
+        String value = String.valueOf(rarity).trim().toLowerCase(Locale.ROOT);
+        Map<String, String> values = new HashMap<String, String>();
+        values.put("超凡", "extraordinary"); values.put("史诗", "epic");
+        values.put("精品", "fine"); values.put("普通", "normal");
+        if (values.containsKey(value)) value = values.get(value);
+        if (!Arrays.asList("extraordinary", "epic", "fine", "normal").contains(value)) {
+            throw new IllegalArgumentException("物品品质无效");
+        }
+        return value;
     }
 
     public List<Map<String, Object>> itemOptions(String category, Integer includeId) {
