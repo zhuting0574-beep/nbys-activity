@@ -451,6 +451,28 @@ body {
   overflow: auto;
 }
 
+.invitee-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.invitee-search-row .el-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.invitee-search-row .muted {
+  flex: none;
+  white-space: nowrap;
+}
+
+.invitee-search-empty {
+  padding: 28px 0 14px;
+  text-align: center;
+}
+
 .permission-tree-panel {
   max-width: 720px;
   padding: 12px 10px;
@@ -813,6 +835,14 @@ body {
 
   .attendance-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .invitee-search-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
   }
 }
 .venue-map-wrap {

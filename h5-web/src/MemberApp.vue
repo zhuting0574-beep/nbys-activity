@@ -360,7 +360,7 @@
     </div>
 
     <div v-if="tab === 'rentals'" class="page">
-      <div class="member-page-hero"><span class="page-eyebrow">LAUNCHER RENTAL</span><h2>我的发射器</h2><p>维护个人设备与出租状态</p></div>
+      <div class="member-page-hero launcher-arsenal-hero"><span class="page-eyebrow">LAUNCHER RENTAL</span><h2>我的发射器</h2><p>维护个人设备与出租状态</p></div>
       <div class="section-title">
         <h2>设备列表</h2>
         <button class="btn" @click="openRentalDialog">新增</button>
@@ -386,7 +386,7 @@
     </div>
 
     <div v-if="tab === 'notifications'" class="page">
-      <div class="member-page-hero"><span class="page-eyebrow">MESSAGE CENTER</span><h2>通知</h2><p>活动、租赁与系统动态</p></div>
+      <div class="member-page-hero launcher-arsenal-hero"><span class="page-eyebrow">MESSAGE CENTER</span><h2>通知</h2><p>活动、租赁与系统动态</p></div>
       <div v-for="notice in notifications" :key="notice.id" class="card notice-card" :class="{ unread: !notice.read_at }">
         <span v-if="!notice.read_at" class="notice-dot"></span>
         <h3>{{ notice.title }}</h3>
