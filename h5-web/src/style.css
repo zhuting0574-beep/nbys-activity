@@ -2381,6 +2381,12 @@ body {
   font-size: 11px;
 }
 
+.member-page-hero.launcher-arsenal-hero {
+  background-image: url('./assets/launcher-arsenal-banner.jpg');
+  background-position: center 42%;
+  box-shadow: inset 0 0 0 999px rgba(4, 7, 8, .42);
+}
+
 .member-app .section-title h2,
 .member-app > h2 {
   font-size: 19px;

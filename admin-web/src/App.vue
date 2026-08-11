@@ -628,12 +628,17 @@
     <template #footer><el-button @click="planVotesVisible = false">关闭</el-button></template>
   </el-dialog>
   <el-dialog v-model="invitePickerVisible" title="选择邀请人员" width="560px">
+    <div class="invitee-search-row">
+      <el-input v-model="invitePickerKeyword" clearable placeholder="搜索呼号、用户名或用户 ID" />
+      <span class="muted">已选择 {{ invitePickerSelected.length }} 人</span>
+    </div>
     <el-checkbox-group v-model="invitePickerSelected" class="invitee-option-list">
-      <el-checkbox v-for="user in nonFormalUsers" :key="user.id" :label="String(user.id)">
+      <el-checkbox v-for="user in filteredNonFormalUsers" :key="user.id" :label="String(user.id)">
         {{ user.callsign || user.username }}<span class="muted" v-if="user.username"> / {{ user.username }}</span>
       </el-checkbox>
     </el-checkbox-group>
     <div v-if="!nonFormalUsers.length" class="muted">暂无非正式队员</div>
+    <div v-else-if="!filteredNonFormalUsers.length" class="muted invitee-search-empty">未找到匹配人员</div>
     <template #footer>
       <el-button @click="invitePickerVisible = false">取消</el-button>
       <el-button type="primary" @click="confirmInvitePicker">确认</el-button>
@@ -805,6 +810,7 @@ export default {
 	      invitePickerVisible: false,
 	      invitePickerTarget: '',
 	      invitePickerSelected: [],
+	      invitePickerKeyword: '',
 	      launcherOptions: [],
 	      launcherPickerVisible: false,
 	      launcherPickerSelected: [],
@@ -903,6 +909,12 @@ export default {
           label: actionNames[action] || action
         }))
       }))
+    },
+    filteredNonFormalUsers() {
+      const keyword = String(this.invitePickerKeyword || '').trim().toLowerCase()
+      if (!keyword) return this.nonFormalUsers
+      return this.nonFormalUsers.filter(user => [user.id, user.callsign, user.username]
+        .some(value => String(value || '').toLowerCase().includes(keyword)))
     },
     uploadHeaders() {
       return { Authorization: `Bearer ${this.tokenValue}` }
@@ -1333,6 +1345,7 @@ export default {
 	    async openInvitePicker(target) {
 	      await this.loadNonFormalUsers()
 	      this.invitePickerTarget = target
+	      this.invitePickerKeyword = ''
 	      const form = target === 'activity' ? this.activityForm : this.planForm
 	      this.invitePickerSelected = this.normalizedInviteeIds(form)
 	      this.invitePickerVisible = true
