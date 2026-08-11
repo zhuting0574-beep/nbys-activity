@@ -126,12 +126,13 @@ public class EscapeAdminService {
     @Transactional
     public Map<String, Object> createMatch(Map<String, Object> body, EscapeAccessService.UserContext actor) {
         String name = text(body, "name", 100);
-        int teamCount = positive(first(body, "team_count", "squad_count"), "小队数量必须大于0");
+        int teamCount = atLeast(first(body, "team_count", "squad_count"), 2, "小队数量不能少于2个");
         int teamCapacity = positive(first(body, "team_capacity", "squad_capacity"), "每队人数必须大于0");
         Integer venueId = nullableInt(body.get("venue_id"));
         Integer seasonId = nullableInt(body.get("season_id"));
+        if (seasonId == null) throw new IllegalArgumentException("请选择赛季");
         if (venueId != null) requiredOne("select id from venues where id=?", venueId);
-        if (seasonId != null) requiredOne("select id from escape_seasons where id=?", seasonId);
+        requiredOne("select id from escape_seasons where id=?", seasonId);
         long id = insert("insert into escape_matches(season_id,name,venue_id,team_count,team_capacity,status,created_by) " +
                 "values(?,?,?,?,?,'preparing',?)", seasonId, name, venueId, teamCount, teamCapacity, actor.userId);
         replaceMatchItems(id, body.get("match_items"));
@@ -148,7 +149,7 @@ public class EscapeAdminService {
         }
         String name = body.containsKey("name") ? text(body, "name", 100) : String.valueOf(match.get("name"));
         int teamCount = body.containsKey("team_count") || body.containsKey("squad_count")
-                ? positive(first(body, "team_count", "squad_count"), "小队数量必须大于0")
+                ? atLeast(first(body, "team_count", "squad_count"), 2, "小队数量不能少于2个")
                 : number(match.get("team_count"));
         int teamCapacity = body.containsKey("team_capacity") || body.containsKey("squad_capacity")
                 ? positive(first(body, "team_capacity", "squad_capacity"), "每队人数必须大于0")
@@ -282,6 +283,8 @@ public class EscapeAdminService {
         List<Map<String, Object>> inputs = maps(body.get("participants"), "participants不能为空");
         Map<Long, Map<String, Object>> byParticipant = indexSettlementInputs(inputs);
         if (byParticipant.size() != participants.size()) throw new IllegalArgumentException("必须一次性提交全部参与者的结算结果");
+        validateSettlementExtractionRules(inputs);
+        validateTeamKillLimits(participants, byParticipant);
         Map<Integer, Integer> requestedItems = settlementItemTotals(inputs);
         validateSettlementItemTotals(matchId, requestedItems);
         BigDecimal killReward = BigDecimal.ZERO;
@@ -343,6 +346,11 @@ public class EscapeAdminService {
 
     public List<Map<String, Object>> catalog(String type) {
         Catalog c = catalogDef(type);
+        if ("products".equals(type)) {
+            return decorate(type, Rows.list(jdbc, "select p.*,i.name item_name,i.current_price item_current_price," +
+                    "i.stock_quantity item_stock_quantity,i.enabled item_enabled,i.deleted_at item_deleted_at " +
+                    "from escape_shop_products p left join escape_items i on i.id=p.item_id order by p.id desc"));
+        }
         return decorate(type, Rows.list(jdbc, "select * from " + c.table + " order by id desc"));
     }
 
@@ -440,9 +448,11 @@ public class EscapeAdminService {
             int itemStock = number(item.get("stock_quantity"));
             int stock = nonNegative(input.get("stock"), "商品库存不能为负");
             if (stock > itemStock) throw new IllegalArgumentException("商品库存不能超过物品配置数量");
+            BigDecimal itemPrice = decimal(item.get("current_price"));
+            validateLinkedProductPrice(price, itemPrice);
             prepared.put("item_id", itemId);
             prepared.put("name", item.get("name"));
-            prepared.put("price", decimal(item.get("current_price")));
+            prepared.put("price", price);
             prepared.put("stock", stock);
             prepared.put("enabled", bool(item.get("enabled")) && item.get("deleted_at") == null
                     && (!input.containsKey("enabled") || bool(input.get("enabled"))));
@@ -519,8 +529,14 @@ public class EscapeAdminService {
 
     private void syncLinkedProducts(long itemId) {
         Map<String, Object> item = requiredOne("select current_price,stock_quantity,enabled,deleted_at from escape_items where id=?", itemId);
-        jdbc.update("update escape_shop_products set price=?,stock=least(stock,?),enabled=case when ?=1 and ? is null then enabled else 0 end,version=version+1 where item_id=?",
+        jdbc.update("update escape_shop_products set price=greatest(price,?),stock=least(stock,?),enabled=case when ?=1 and ? is null then enabled else 0 end,version=version+1 where item_id=?",
                 item.get("current_price"), item.get("stock_quantity"), item.get("enabled"), item.get("deleted_at"), itemId);
+    }
+
+    static void validateLinkedProductPrice(BigDecimal productPrice, BigDecimal itemPrice) {
+        if (productPrice.compareTo(itemPrice) < 0) {
+            throw new IllegalArgumentException("商品售价不能低于物品配置价格");
+        }
     }
 
     @Transactional
@@ -751,6 +767,45 @@ public class EscapeAdminService {
         return totals;
     }
 
+    static void validateSettlementExtractionRules(List<Map<String, Object>> participants) {
+        for (Map<String, Object> participant : participants) {
+            Object rawItems = participant.get("items");
+            if (rawItems == null) continue;
+            if (!(rawItems instanceof List)) throw new IllegalArgumentException("结算物品格式错误");
+            if (!((List<?>) rawItems).isEmpty() && !booleanValue(participant.get("escaped"))) {
+                throw new IllegalArgumentException("未成功撤离的参与者不能带出物资");
+            }
+        }
+    }
+
+    static void validateTeamKillLimits(List<Map<String, Object>> participants,
+                                       Map<Long, Map<String, Object>> inputs) {
+        int totalParticipants = participants.size();
+        Map<Integer, Integer> teamSizes = new LinkedHashMap<Integer, Integer>();
+        Map<Integer, Long> teamKills = new LinkedHashMap<Integer, Long>();
+        for (Map<String, Object> participant : participants) {
+            long participantId = ((Number) participant.get("id")).longValue();
+            Map<String, Object> input = inputs.get(participantId);
+            if (input == null) throw new IllegalArgumentException("结算参与者与战局不匹配");
+            Object rawTeamNo = participant.get("team_no");
+            if (!(rawTeamNo instanceof Number) || ((Number) rawTeamNo).intValue() < 1) {
+                throw new IllegalArgumentException("存在未分配小队的参与者，无法结算");
+            }
+            int teamNo = ((Number) rawTeamNo).intValue();
+            int kills = nonNegativeValue(input.get("kills"), "击杀数必须为非负整数");
+            teamSizes.put(teamNo, teamSizes.containsKey(teamNo) ? teamSizes.get(teamNo) + 1 : 1);
+            teamKills.put(teamNo, teamKills.containsKey(teamNo) ? teamKills.get(teamNo) + kills : (long) kills);
+        }
+        for (Map.Entry<Integer, Integer> team : teamSizes.entrySet()) {
+            int teamNo = team.getKey();
+            int limit = totalParticipants - team.getValue();
+            long kills = teamKills.get(teamNo);
+            if (kills > limit) {
+                throw new IllegalArgumentException("第 " + teamNo + " 小队击杀数合计为 " + kills + "，不能超过 " + limit);
+            }
+        }
+    }
+
     private Map<Integer, Integer> itemQuantities(Object value, String message) {
         Map<Integer, Integer> result = new LinkedHashMap<Integer, Integer>();
         if (value == null) return result;
@@ -773,6 +828,17 @@ public class EscapeAdminService {
         } catch (Exception e) {
             throw new IllegalArgumentException(message);
         }
+    }
+
+    private static int nonNegativeValue(Object value, String message) {
+        int result;
+        try {
+            result = Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            throw new IllegalArgumentException(message);
+        }
+        if (result < 0) throw new IllegalArgumentException(message);
+        return result;
     }
 
     static Map<Long, Map<String, Object>> indexSettlementInputs(List<Map<String, Object>> inputs) {
@@ -1025,6 +1091,12 @@ public class EscapeAdminService {
         return result;
     }
 
+    private int atLeast(Object value, int minimum, String message) {
+        int result = numberValue(value, message);
+        if (result < minimum) throw new IllegalArgumentException(message);
+        return result;
+    }
+
     private int nonNegative(Object value, String message) {
         int result = numberValue(value, message);
         if (result < 0) throw new IllegalArgumentException(message);
@@ -1064,6 +1136,10 @@ public class EscapeAdminService {
     }
 
     private boolean bool(Object value) {
+        return booleanValue(value);
+    }
+
+    private static boolean booleanValue(Object value) {
         if (value instanceof Boolean) return (Boolean) value;
         if (value instanceof Number) return ((Number) value).intValue() != 0;
         if ("true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value))) return true;

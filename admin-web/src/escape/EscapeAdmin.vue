@@ -67,7 +67,7 @@
             type="primary"
             @click="openEditor(activeTab)"
           >
-            {{ activeTab === 'grants' ? '物品入库' : `新增${resourceConfig.singular}` }}
+            新增{{ resourceConfig.singular }}
           </el-button>
         </div>
 
@@ -85,7 +85,7 @@
                 <span v-else>{{ displayValue(row, column) }}</span>
               </template>
             </el-table-column>
-            <el-table-column v-if="!['grants', 'audit'].includes(activeTab)" label="操作" fixed="right" width="180">
+            <el-table-column v-if="activeTab !== 'audit'" label="操作" fixed="right" width="180">
               <template #default="{ row }">
                 <el-button v-if="resourceConfig.updatePermission && allowed(resourceConfig.updatePermission)" link type="primary" @click="openEditor(activeTab, row)">编辑</el-button>
                 <el-button
@@ -141,7 +141,7 @@
                 <el-button v-if="editing.item_id" @click="clearSelectedItem">清除关联</el-button>
               </div>
             </div>
-            <el-input-number v-else-if="field.type === 'product-price'" v-model="editing[field.prop]" :min="0" :disabled="Boolean(editing.item_id)" style="width: 100%" />
+            <el-input-number v-else-if="field.type === 'product-price'" v-model="editing[field.prop]" :min="productPriceMin" style="width: 100%" />
             <el-input-number v-else-if="field.type === 'product-stock'" v-model="editing[field.prop]" :min="0" :max="productStockMax" :disabled="editing.product_type === 'expansion'" style="width: 100%" />
             <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable style="width: 100%" @change="value => handleFieldChange(field.prop, value)">
               <el-option v-for="option in field.options || []" :key="option.value ?? option" :label="option.label ?? option" :value="option.value ?? option" />
@@ -165,7 +165,7 @@
             <el-radio :value="item.id" :disabled="!item.enabled || item.deleted_at" />
             <img v-if="item.image_url" :src="item.image_url" :alt="item.name" />
             <div class="escape-product-item-option-body">
-              <strong>{{ item.name }}</strong>
+              <strong>商品名称：{{ item.name || '-' }}</strong>
               <span>{{ item.rarity }} · {{ money(item.current_price) }}</span>
               <small>库存 {{ item.stock_quantity }}</small>
             </div>
@@ -335,24 +335,6 @@ const configs = {
       { prop: 'reason', label: '调整原因', type: 'textarea', required: true }
     ]
   },
-  grants: {
-    label: '物品入库', singular: '入库记录', path: '/item-grants',
-    viewPermission: 'escape:itemGrant:create', createPermission: 'escape:itemGrant:create',
-    columns: [
-      { prop: 'created_at', label: '入库时间', width: 160, kind: 'date' },
-      { prop: 'callsign', label: '用户呼号', width: 140 },
-      { prop: 'item_name', label: '物品', width: 160 },
-      { prop: 'quantity', label: '数量', width: 80 },
-      { prop: 'reason', label: '原因', width: 220 },
-      { prop: 'operator_name', label: '操作人', width: 140 }
-    ],
-    fields: [
-      { prop: 'user_id', label: '用户 ID', type: 'number', min: 1, required: true },
-      { prop: 'item_id', label: '物品 ID', type: 'number', min: 1, required: true },
-      { prop: 'quantity', label: '数量', type: 'number', min: 1, required: true },
-      { prop: 'reason', label: '入库原因', type: 'textarea', required: true }
-    ]
-  },
   audit: {
     label: '操作审计', singular: '审计记录', path: '/audit',
     viewPermission: 'escape:audit',
@@ -452,11 +434,11 @@ function openEditor(type, row = null) {
     editing.value.warehouse_height = editing.value.warehouse_height || 10
     selectedItem.value = editing.value.item_id ? {
       id: Number(editing.value.item_id),
-      name: editing.value.name,
-      current_price: editing.value.price,
-      stock_quantity: editing.value.stock,
-      enabled: Boolean(editing.value.enabled),
-      deleted_at: null
+      name: editing.value.item_name || editing.value.name,
+      current_price: editing.value.item_current_price,
+      stock_quantity: editing.value.item_stock_quantity ?? editing.value.stock,
+      enabled: editing.value.item_enabled ?? Boolean(editing.value.enabled),
+      deleted_at: editing.value.item_deleted_at ?? null
     } : null
   } else {
     selectedItem.value = null
@@ -484,6 +466,10 @@ async function saveEditor() {
     }
     if (editing.value.item_id && selectedItem.value && Number(editing.value.stock) > Number(selectedItem.value.stock_quantity)) {
       ElMessage.warning('商品库存不能超过物品配置数量')
+      return
+    }
+    if (editing.value.item_id && Number(editing.value.price) < productPriceMin.value) {
+      ElMessage.warning(`商品售价不能低于物品配置价格 ${money(productPriceMin.value)}`)
       return
     }
   }
@@ -541,6 +527,11 @@ function handleProductTypeChange() {
 const productStockMax = computed(() => {
   if (editing.value?.product_type === 'expansion') return 999
   return selectedItem.value ? Number(selectedItem.value.stock_quantity) : undefined
+})
+
+const productPriceMin = computed(() => {
+  if (!editing.value?.item_id || !selectedItem.value) return 0
+  return Number(selectedItem.value.current_price ?? selectedItem.value.today_price ?? 0)
 })
 
 async function openItemPicker() {

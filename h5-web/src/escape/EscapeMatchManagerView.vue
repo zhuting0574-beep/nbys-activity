@@ -103,9 +103,9 @@
         </header>
         <label><span>对局名称</span><input v-model.trim="editor.name" maxlength="100" required /></label>
         <label><span>活动场地</span><select v-model="editor.venue_id"><option value="">暂不选择</option><option v-for="venue in options.venues" :key="venue.id" :value="venue.id">{{ venue.name }}</option></select></label>
-        <label><span>关联赛季</span><select v-model="editor.season_id"><option value="">暂不选择</option><option v-for="season in options.seasons" :key="season.id" :value="season.id">{{ season.name }}</option></select></label>
+        <label><span>关联赛季</span><select v-model="editor.season_id" required><option value="" disabled>请选择赛季</option><option v-for="season in options.seasons" :key="season.id" :value="season.id">{{ season.name }}</option></select></label>
         <div class="escape-manager-field-pair">
-          <label><span>小队数量</span><input v-model.number="editor.team_count" type="number" min="1" max="99" inputmode="numeric" required /></label>
+          <label><span>小队数量</span><input v-model.number="editor.team_count" type="number" min="2" max="99" inputmode="numeric" required /></label>
           <label><span>每队上限</span><input v-model.number="editor.team_capacity" type="number" min="1" max="99" inputmode="numeric" required /></label>
         </div>
         <section class="escape-match-item-editor">
@@ -252,7 +252,7 @@ export default {
         id: match?.id || null,
         name: match?.name || '',
         venue_id: match?.venue_id || '',
-        season_id: match?.season_id || '',
+        season_id: match?.season_id || this.selectedSeasonId || this.currentSeasonId(this.options.seasons) || '',
         team_count: Number(match?.team_count || 2),
         team_capacity: Number(match?.team_capacity || 4),
         loading: !!match
@@ -297,8 +297,8 @@ export default {
     },
     async saveMatch() {
       this.editor.error = ''
-      if (!this.editor.name || this.editor.team_count < 1 || this.editor.team_capacity < 1) {
-        this.editor.error = '请完整填写对局名称和小队容量'
+      if (!this.editor.name || !this.editor.season_id || this.editor.team_count < 2 || this.editor.team_capacity < 1) {
+        this.editor.error = '请完整填写对局信息，小队数量不能少于2个'
         return
       }
       const invalidItem = this.editor.match_items.find(row => !row.item_id || Number(row.quantity) < 1 || Number(row.quantity) > this.selectedItemAvailable(row))
@@ -310,7 +310,7 @@ export default {
       const body = {
         name: this.editor.name,
         venue_id: this.editor.venue_id || null,
-        season_id: this.editor.season_id || null,
+        season_id: Number(this.editor.season_id),
         team_count: Number(this.editor.team_count),
         team_capacity: Number(this.editor.team_capacity),
         match_items: this.editor.match_items.map(item => ({ item_id: Number(item.item_id), quantity: Number(item.quantity) }))

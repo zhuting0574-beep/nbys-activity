@@ -70,17 +70,18 @@
             <div class="escape-control-member-head">
               <div><strong>{{ participant.callsign }}</strong><small>第 {{ participant.team_no || '-' }} 小队</small></div>
               <label class="escape-control-switch">
-                <input v-model="participant.escaped" type="checkbox" />
+                <input v-model="participant.escaped" type="checkbox" @change="onEscapeChange(participant)" />
                 <span>成功撤离</span>
               </label>
             </div>
             <div class="escape-control-fields">
-              <label><span>击杀数</span><input v-model.number="participant.kills" type="number" min="0" max="999" inputmode="numeric" /></label>
+              <label><span>击杀数</span><input v-model.number="participant.kills" type="number" min="0" :max="teamKillLimit(participant)" inputmode="numeric" /></label>
               <label><span>人工现金</span><input v-model.number="participant.manual_cash" type="number" min="0" step="0.01" inputmode="decimal" /></label>
             </div>
-            <div class="escape-settlement-items">
+            <div class="escape-settlement-items" :class="{ disabled: !participant.escaped }">
+              <small v-if="!participant.escaped" class="escape-settlement-hint">未撤离不能带出物资</small>
               <div class="escape-settlement-item-add">
-                <label><span>结算物品</span><select v-model.number="participant.pending_item_id">
+                <label><span>结算物品</span><select v-model.number="participant.pending_item_id" :disabled="!participant.escaped">
                   <option value="">选择本局物品</option>
                   <option
                     v-for="item in matchItems"
@@ -89,8 +90,8 @@
                     :disabled="itemAlreadySelected(participant, item.item_id) || poolRemaining(item.item_id) <= 0"
                   >{{ item.name }}（剩余 {{ poolRemaining(item.item_id) }}）</option>
                 </select></label>
-                <button type="button" aria-label="添加物品" title="添加物品" :disabled="!participant.pending_item_id" @click="addSelectedItem(participant)">＋</button>
-                <button type="button" class="scan" aria-label="扫描物品二维码" title="扫描物品二维码" @click="openScanner(participant)">⌗</button>
+                <button type="button" aria-label="添加物品" title="添加物品" :disabled="!participant.escaped || !participant.pending_item_id" @click="addSelectedItem(participant)">＋</button>
+                <button type="button" class="scan" aria-label="扫描物品二维码" title="扫描物品二维码" :disabled="!participant.escaped" @click="openScanner(participant)">⌗</button>
               </div>
               <div v-for="(selected, itemIndex) in participant.items" :key="selected.item_id" class="escape-settlement-item-row">
                 <span>{{ itemName(selected.item_id) }}</span>
@@ -219,6 +220,12 @@ export default {
     itemName(itemId) {
       return this.matchItems.find(item => Number(item.item_id) === Number(itemId))?.name || `物品 ${itemId}`
     },
+    onEscapeChange(participant) {
+      if (participant.escaped) return
+      participant.pending_item_id = ''
+      participant.items = []
+      if (Number(this.scanner.participantId) === Number(participant.id)) this.closeScanner()
+    },
     itemAlreadySelected(participant, itemId) {
       return participant.items.some(item => Number(item.item_id) === Number(itemId))
     },
@@ -234,6 +241,28 @@ export default {
     maxQuantity(selected) {
       return Math.max(1, Number(selected.quantity || 0) + this.poolRemaining(selected.item_id))
     },
+    teamKillLimit(participant) {
+      const teamSize = this.drafts.filter(item => Number(item.team_no) === Number(participant.team_no)).length
+      return Math.max(0, this.drafts.length - teamSize)
+    },
+    teamKillValidationError() {
+      const teams = new Map()
+      for (const participant of this.drafts) {
+        const kills = Number(participant.kills || 0)
+        if (!Number.isInteger(kills) || kills < 0) return `${participant.callsign} 的击杀数必须为非负整数`
+        const teamNo = Number(participant.team_no)
+        if (!Number.isInteger(teamNo) || teamNo < 1) return `${participant.callsign} 尚未分配小队，无法结算`
+        const team = teams.get(teamNo) || { size: 0, kills: 0 }
+        team.size += 1
+        team.kills += kills
+        teams.set(teamNo, team)
+      }
+      for (const [teamNo, team] of teams) {
+        const limit = this.drafts.length - team.size
+        if (team.kills > limit) return `第 ${teamNo} 小队击杀数合计为 ${team.kills}，不能超过 ${limit}`
+      }
+      return ''
+    },
     addSelectedItem(participant) {
       const itemId = Number(participant.pending_item_id)
       if (!itemId || this.itemAlreadySelected(participant, itemId) || this.poolRemaining(itemId) <= 0) return
@@ -241,6 +270,7 @@ export default {
       participant.pending_item_id = ''
     },
     async openScanner(participant) {
+      if (!participant.escaped) return
       await this.stopScanner()
       this.scanner = { open: true, participantId: participant.id, item: null, quantity: 1, error: '' }
       await this.$nextTick()
@@ -308,6 +338,8 @@ export default {
         return
       }
       try {
+        const teamKillError = this.teamKillValidationError()
+        if (teamKillError) throw new Error(teamKillError)
         const exceeded = this.matchItems.find(item => this.selectedTotal(item.item_id) > Number(item.remaining_quantity || 0))
         if (exceeded) throw new Error(`“${exceeded.name}”的结算数量超过本局可用量`)
         const participants = this.drafts.map(item => ({
@@ -315,13 +347,13 @@ export default {
           escaped: !!item.escaped,
           kills: Math.max(0, Number(item.kills || 0)),
           manual_cash: Math.max(0, Number(item.manual_cash || 0)),
-          items: item.items.map(selected => {
+          items: item.escaped ? item.items.map(selected => {
             const quantity = Number(selected.quantity)
             if (!Number.isInteger(quantity) || quantity < 1 || quantity > this.maxQuantity(selected)) {
               throw new Error(`${item.callsign} 的物品数量无效`)
             }
             return { item_id: Number(selected.item_id), quantity }
-          })
+          }) : []
         }))
         this.$emit('settle', { note: this.note, participants })
       } catch (error) {

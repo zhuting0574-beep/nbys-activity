@@ -1,12 +1,74 @@
 package com.nbys.escape.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class EscapeAdminServiceTest {
+    @Test
+    void linkedProductPriceCannotBeLowerThanItemPrice() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> EscapeAdminService.validateLinkedProductPrice(new BigDecimal("99.99"), new BigDecimal("100.00")));
+
+        assertEquals("商品售价不能低于物品配置价格", error.getMessage());
+    }
+
+    @Test
+    void linkedProductPriceAllowsEqualOrHigherPrice() {
+        assertDoesNotThrow(() -> EscapeAdminService.validateLinkedProductPrice(
+                new BigDecimal("100.00"), new BigDecimal("100.00")));
+        assertDoesNotThrow(() -> EscapeAdminService.validateLinkedProductPrice(
+                new BigDecimal("120.00"), new BigDecimal("100.00")));
+    }
+
+    @Test
+    void createMatchRequiresAtLeastTwoTeams() {
+        EscapeAdminService service = new EscapeAdminService(null, new ObjectMapper());
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("name", "测试对局");
+        body.put("team_count", 1);
+        body.put("team_capacity", 4);
+        body.put("season_id", 2);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createMatch(body, null));
+
+        assertEquals("小队数量不能少于2个", error.getMessage());
+    }
+
+    @Test
+    void createMatchRequiresSeason() {
+        EscapeAdminService service = new EscapeAdminService(null, new ObjectMapper());
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("name", "测试对局");
+        body.put("team_count", 2);
+        body.put("team_capacity", 4);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createMatch(body, null));
+
+        assertEquals("请选择赛季", error.getMessage());
+    }
+
+    @Test
+    void createMatchRejectsBlankSeason() {
+        EscapeAdminService service = new EscapeAdminService(null, new ObjectMapper());
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("name", "测试对局");
+        body.put("team_count", 2);
+        body.put("team_capacity", 4);
+        body.put("season_id", " ");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.createMatch(body, null));
+
+        assertEquals("请选择赛季", error.getMessage());
+    }
+
     @Test
     void settlementInputIndexRejectsDuplicateParticipant() {
         List<Map<String, Object>> inputs = Arrays.asList(input(9), input(9));
@@ -48,6 +110,54 @@ class EscapeAdminServiceTest {
     }
 
     @Test
+    void settlementRejectsItemsWhenParticipantDidNotEscape() {
+        Map<String, Object> participant = input(11);
+        participant.put("escaped", false);
+        participant.put("items", Collections.singletonList(item(7, 1)));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> EscapeAdminService.validateSettlementExtractionRules(Collections.singletonList(participant)));
+
+        assertTrue(error.getMessage().contains("不能带出物资"));
+    }
+
+    @Test
+    void settlementAllowsNoItemsWhenParticipantDidNotEscape() {
+        Map<String, Object> participant = input(11);
+        participant.put("escaped", false);
+
+        assertDoesNotThrow(() -> EscapeAdminService.validateSettlementExtractionRules(
+                Collections.singletonList(participant)));
+    }
+
+    @Test
+    void settlementRejectsTeamKillsAboveOpponentCount() {
+        List<Map<String, Object>> participants = Arrays.asList(
+                participant(11, 1), participant(12, 1), participant(13, 2));
+        List<Map<String, Object>> inputs = Arrays.asList(input(11), input(12), input(13));
+        inputs.get(0).put("kills", 1);
+        inputs.get(1).put("kills", 1);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> EscapeAdminService.validateTeamKillLimits(
+                        participants, EscapeAdminService.indexSettlementInputs(inputs)));
+
+        assertEquals("第 1 小队击杀数合计为 2，不能超过 1", error.getMessage());
+    }
+
+    @Test
+    void settlementAllowsTeamKillsEqualToOpponentCount() {
+        List<Map<String, Object>> participants = Arrays.asList(
+                participant(11, 1), participant(12, 1), participant(13, 2));
+        List<Map<String, Object>> inputs = Arrays.asList(input(11), input(12), input(13));
+        inputs.get(0).put("kills", 1);
+        inputs.get(2).put("kills", 2);
+
+        assertDoesNotThrow(() -> EscapeAdminService.validateTeamKillLimits(
+                participants, EscapeAdminService.indexSettlementInputs(inputs)));
+    }
+
+    @Test
     void settlementReturnsOnlyUnconsumedMatchItemQuantity() {
         assertEquals(7, EscapeAdminService.unconsumedQuantity(10, 3, 0));
         assertEquals(4, EscapeAdminService.unconsumedQuantity(10, 3, 3));
@@ -68,6 +178,13 @@ class EscapeAdminServiceTest {
         Map<String, Object> value = new LinkedHashMap<String, Object>();
         value.put("item_id", itemId);
         value.put("quantity", quantity);
+        return value;
+    }
+
+    private Map<String, Object> participant(long participantId, int teamNo) {
+        Map<String, Object> value = new LinkedHashMap<String, Object>();
+        value.put("id", participantId);
+        value.put("team_no", teamNo);
         return value;
     }
 }

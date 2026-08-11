@@ -86,7 +86,9 @@ public class EscapeH5Service {
                         "(select count(*) from escape_match_participants x where x.match_id=m.id) participant_count " +
                         "from escape_matches m left join venues v on v.id=m.venue_id " +
                         "left join escape_match_participants p on p.match_id=m.id and p.user_id=? " +
-                        "where m.status in ('preparing','in_progress') order by m.id desc", me.userId);
+                        "where m.status in ('preparing','in_progress') and m.season_id=(select id from escape_seasons " +
+                        "where enabled=1 and current_date between start_date and end_date order by id desc limit 1) " +
+                        "order by m.id desc", me.userId);
         for (Map<String, Object> match : matches) {
             boolean owner = ((Number) match.get("created_by")).intValue() == me.userId;
             match.put("can_control", owner || "superadmin".equals(me.role));
@@ -365,7 +367,7 @@ public class EscapeH5Service {
         String operationType = operationType("sell_item", inventoryId);
         if (!claimOperation(userId, operationType, idempotencyKey)) return balanceResult(userId);
         Map<String, Object> item = requiredOne(
-                "select inv.id,inv.status,i.name,i.current_price from escape_inventory_instances inv " +
+                "select inv.id,inv.item_id,inv.status,i.name,i.current_price from escape_inventory_instances inv " +
                         "join escape_items i on i.id=inv.item_id where inv.id=? and inv.user_id=? for update",
                 inventoryId, userId);
         if (!"available".equals(String.valueOf(item.get("status")))) {
@@ -377,6 +379,7 @@ public class EscapeH5Service {
         BigDecimal price = decimal(item.get("current_price"));
         BigDecimal after = decimal(asset.get("cash_balance")).add(price);
         jdbc.update("delete from escape_inventory_instances where id=? and user_id=?", inventoryId, userId);
+        returnItemStock(Collections.singletonMap(((Number) item.get("item_id")).intValue(), 1));
         jdbc.update("update escape_user_assets set cash_balance=?,version=version+1 where user_id=?", after, userId);
         jdbc.update("insert into escape_cash_ledger(user_id,amount,balance_after,business_type,business_id,description) " +
                         "values(?,?,?,?,?,?)",
@@ -391,7 +394,7 @@ public class EscapeH5Service {
         String operationType = "sell_all_" + warehouseType;
         if (!claimOperation(userId, operationType, idempotencyKey)) return balanceResult(userId);
         List<Map<String, Object>> items = Rows.list(jdbc,
-                "select inv.id,i.current_price from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
+                "select inv.id,inv.item_id,i.current_price from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
                         "where inv.user_id=? and inv.warehouse_type=? and inv.status='available' for update",
                 userId, warehouseType);
         BigDecimal total = BigDecimal.ZERO;
@@ -403,6 +406,7 @@ public class EscapeH5Service {
         if (!items.isEmpty()) {
             jdbc.update("delete from escape_inventory_instances where user_id=? and warehouse_type=? and status='available'",
                     userId, warehouseType);
+            returnItemStock(soldItemCounts(items));
             jdbc.update("update escape_user_assets set cash_balance=?,version=version+1 where user_id=?", after, userId);
             jdbc.update("insert into escape_cash_ledger(user_id,amount,balance_after,business_type,business_id,description) " +
                             "values(?,?,?,?,?,?)",
@@ -415,14 +419,33 @@ public class EscapeH5Service {
         return result;
     }
 
+    static Map<Integer, Integer> soldItemCounts(List<Map<String, Object>> items) {
+        Map<Integer, Integer> counts = new LinkedHashMap<Integer, Integer>();
+        for (Map<String, Object> item : items) {
+            int itemId = ((Number) item.get("item_id")).intValue();
+            counts.put(itemId, counts.containsKey(itemId) ? counts.get(itemId) + 1 : 1);
+        }
+        return counts;
+    }
+
+    void returnItemStock(Map<Integer, Integer> itemCounts) {
+        for (Map.Entry<Integer, Integer> item : itemCounts.entrySet()) {
+            jdbc.update("update escape_items set stock_quantity=stock_quantity+?,version=version+1 where id=?",
+                    item.getValue(), item.getKey());
+        }
+    }
+
     public List<Map<String, Object>> products() {
         return Rows.list(jdbc,
-                "select p.id,p.name,p.product_type,p.price,p.stock,p.warehouse_width,p.warehouse_height,p.off_shelf_at," +
+                "select p.id,p.name,p.product_type,p.price," +
+                        "case when p.product_type='expansion' then p.stock else least(p.stock,i.stock_quantity) end stock," +
+                        "p.warehouse_width,p.warehouse_height,p.off_shelf_at," +
                         "i.name item_name,i.rarity,i.category,i.width,i.height,i.image_url,w.weapon_type " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
                         "left join escape_weapons w on w.item_id=i.id and w.enabled=1 " +
                         "where p.enabled=1 and p.stock>0 and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
-                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null)) order by p.id desc");
+                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null and i.stock_quantity>0)) " +
+                        "order by p.id desc");
     }
 
     @Transactional
@@ -432,7 +455,8 @@ public class EscapeH5Service {
                 "select id,total_amount from escape_orders where user_id=? and idempotency_key=?", userId, idempotencyKey);
         if (existing != null) return existing;
         Map<String, Object> product = requiredOne(
-                "select p.*,i.width item_width,i.height item_height,i.name item_name,i.category item_category " +
+                "select p.*,i.width item_width,i.height item_height,i.name item_name,i.category item_category," +
+                        "i.stock_quantity item_stock_quantity " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
                         "where p.id=? and p.enabled=1 and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
                         "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null)) for update",
@@ -440,6 +464,10 @@ public class EscapeH5Service {
         if (((Number) product.get("stock")).intValue() < quantity) throw new IllegalArgumentException("商品库存不足");
         String type = String.valueOf(product.get("product_type"));
         if ("expansion".equals(type) && quantity != 1) throw new IllegalArgumentException("仓库扩充商品每次只能购买1件");
+        if (!"expansion".equals(type)
+                && ((Number) product.get("item_stock_quantity")).intValue() < quantity) {
+            throw new IllegalArgumentException("物品库存不足");
+        }
         BigDecimal total = decimal(product.get("price")).multiply(BigDecimal.valueOf(quantity));
         ensureAsset(userId);
         Map<String, Object> asset = requiredOne(
@@ -470,6 +498,7 @@ public class EscapeH5Service {
                 "update escape_shop_products set stock=stock-?,version=version+1 where id=? and stock>=?",
                 quantity, productId, quantity);
         if (stockUpdated == 0) throw new IllegalArgumentException("商品库存不足");
+        deductItemStock(product, quantity);
         jdbc.update("update escape_user_assets set cash_balance=?,version=version+1 where user_id=?", after, userId);
         if ("expansion".equals(type)) {
             jdbc.update("update escape_user_assets set personal_width=?,personal_height=? where user_id=?",
@@ -503,6 +532,17 @@ public class EscapeH5Service {
         result.put("total_amount", total);
         result.put("cash_balance", after);
         return result;
+    }
+
+    void deductItemStock(Map<String, Object> product, int quantity) {
+        if ("expansion".equals(String.valueOf(product.get("product_type")))) return;
+        Object itemId = product.get("item_id");
+        if (itemId == null) throw new IllegalArgumentException("商品未关联物品");
+        int updated = jdbc.update(
+                "update escape_items set stock_quantity=stock_quantity-?,version=version+1 " +
+                        "where id=? and stock_quantity>=?",
+                quantity, itemId, quantity);
+        if (updated == 0) throw new IllegalArgumentException("物品库存不足");
     }
 
     public List<Map<String, Object>> records(int userId, boolean administrator, boolean onlyMine) {
