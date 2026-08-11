@@ -65,24 +65,25 @@
         </div>
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
-            <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
-            <img class="banner" :src="activity.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
-            <h3>{{ activity.name }}</h3>
-            <div v-if="activity.record_kind === 'activity'" class="card-meta">
-              <p>{{ formatTimeRange(activity.start_at, activity.end_at) }}</p>
-              <p>{{ displayVenueName(activity) }}</p>
-              <p>发起人：{{ activity.creator_name || '未设置' }}</p>
-              <p>报名：{{ activity.enroll_count || 0 }} / {{ activity.signup_limit || '-' }}</p>
-              <p :class="{ ready: (activity.enroll_count || 0) >= activity.open_min }">
-                {{ (activity.enroll_count || 0) >= activity.open_min ? '已满足开启人数' : '未满足开启人数' }}
-              </p>
+            <div class="activity-card-media">
+              <img class="banner" :src="activity.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
+              <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
             </div>
-            <div v-else class="card-meta">
-              <p>投票截止：{{ formatDateTime(activity.vote_deadline) }}</p>
-              <p>发起人：{{ activity.creator_name || '未设置' }}</p>
-              <p>可选日期：{{ planDateNames(activity.dates) || '待配置' }}</p>
-              <p>可选场地：{{ planNames(activity.venues, 'name') || '待配置' }}</p>
-              <p>游戏模式：{{ planNames(activity.game_modes, 'name') || '待配置' }}</p>
+            <div class="activity-card-body">
+              <h3>{{ activity.name }}</h3>
+              <div v-if="activity.record_kind === 'activity'" class="card-meta activity-meta-grid">
+                <p><span>活动时间</span><strong>{{ formatDateTime(activity.start_at) }}</strong></p>
+                <p><span>报名进度</span><strong>{{ activity.enroll_count || 0 }} / {{ activity.signup_limit || '-' }}</strong></p>
+                <p><span>活动地点</span><strong>{{ displayVenueName(activity) }}</strong></p>
+                <p><span>发起人</span><strong>{{ activity.creator_name || '未设置' }}</strong></p>
+              </div>
+              <div v-else class="card-meta activity-meta-grid">
+                <p><span>投票截止</span><strong>{{ formatDateTime(activity.vote_deadline) }}</strong></p>
+                <p><span>已投票</span><strong>{{ activity.voter_count || 0 }} 人</strong></p>
+                <p><span>可选场地</span><strong>{{ planNames(activity.venues, 'name') || '待配置' }}</strong></p>
+                <p><span>发起人</span><strong>{{ activity.creator_name || '未设置' }}</strong></p>
+              </div>
+              <div v-if="activity.record_kind === 'activity'" class="activity-progress" aria-hidden="true"><i :style="{ width: activityProgress(activity) }"></i></div>
             </div>
           </div>
           <div v-if="activities.length === 0" class="empty-state">暂无报名中、进行中或策划中的活动</div>
@@ -998,6 +999,12 @@ export default {
       if (status === '活动开始' || status === '活动进行中' || status === '进行中') return 'running'
       if (status === '策划中') return 'planning'
       return ''
+    },
+    activityProgress(activity) {
+      const current = Number(activity.enroll_count) || 0
+      const total = Number(activity.signup_limit) || 0
+      if (!total) return '0%'
+      return `${Math.min(100, Math.max(0, current / total * 100))}%`
     },
     openHomeCard(item) {
       if (item.record_kind === 'activity') return this.openActivity(item.id)

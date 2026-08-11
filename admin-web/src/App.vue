@@ -510,7 +510,7 @@
           <span class="muted">0 表示活动开始时开放签到</span>
         </div>
       </el-form-item>
-      <el-form-item label="时间">
+      <el-form-item label="时间" required>
         <el-date-picker v-model="activityForm.start_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
         <el-date-picker v-model="activityForm.end_at" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" />
       </el-form-item>
@@ -1292,6 +1292,8 @@ export default {
 	      this.activityForm.checkin_open_value = this.normalizeCheckinOpenValue(this.activityForm.checkin_open_value)
 	      this.activityForm.checkin_open_unit = this.normalizeCheckinOpenUnit(this.activityForm.checkin_open_unit)
 	      if (!this.activityForm.checkin_methods.length) return ElMessage.warning('请至少选择一种签到方式')
+	      if (!this.activityForm.start_at || !this.activityForm.end_at) return ElMessage.warning('请选择活动开始时间和结束时间')
+	      if (new Date(this.activityForm.end_at.replace(' ', 'T')) <= new Date(this.activityForm.start_at.replace(' ', 'T'))) return ElMessage.warning('活动结束时间必须晚于开始时间')
 	      const method = this.activityForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activities${this.activityForm.id ? `/${this.activityForm.id}` : ''}`
 	      return api(url, { method, body: this.activityForm }).then(() => { this.activityForm = null; this.loadActivities() })

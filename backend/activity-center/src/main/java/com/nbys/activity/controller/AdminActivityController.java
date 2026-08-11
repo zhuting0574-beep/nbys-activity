@@ -115,6 +115,7 @@ public class AdminActivityController {
     @Transactional
     public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "activity:create");
+        validateActivityTime(body);
         Integer id = insertActivity(body, auth.currentUserId(req));
         createSquads(id, num(body.get("camp_count"), 2), num(body.get("squad_count"), 1));
         replaceLauncherOptions(id, body.get("launcher_ids"));
@@ -126,6 +127,7 @@ public class AdminActivityController {
     @Transactional
     public ApiResponse<Void> update(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "activity:update");
+        validateActivityTime(body);
         Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         Integer venueId = numOrNull(body.get("venue_id"));
         String location = activityLocation(body, venueId);
@@ -512,6 +514,23 @@ public class AdminActivityController {
             return ps;
         }, kh);
         return kh.getKey().intValue();
+    }
+
+    private void validateActivityTime(Map<String, Object> body) {
+        String startValue = text(body.get("start_at"));
+        String endValue = text(body.get("end_at"));
+        if (startValue.isEmpty() || endValue.isEmpty()) {
+            throw new IllegalArgumentException("请选择活动开始时间和结束时间");
+        }
+        try {
+            LocalDateTime start = LocalDateTime.parse(startValue.replace(' ', 'T'));
+            LocalDateTime end = LocalDateTime.parse(endValue.replace(' ', 'T'));
+            if (!end.isAfter(start)) throw new IllegalArgumentException("活动结束时间必须晚于开始时间");
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("活动时间格式不正确");
+        }
     }
 
     private int checkinOpenValue(Object value) {

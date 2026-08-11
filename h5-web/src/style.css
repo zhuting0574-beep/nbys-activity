@@ -1172,10 +1172,16 @@ select {
 .detail-page {
   display: grid;
   gap: 12px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .detail-card,
 .squad-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 12px;
   background: rgba(15, 23, 42, .74);
   border: 1px solid rgba(148, 163, 184, .24);
@@ -1188,10 +1194,14 @@ select {
   color: #f8fafc;
   font-size: 24px;
   line-height: 1.18;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-banner {
+  display: block;
   width: 100%;
+  min-width: 0;
   height: auto;
   max-height: 260px;
   aspect-ratio: 16 / 9;
@@ -1203,10 +1213,13 @@ select {
 
 .detail-time,
 .detail-copy {
+  max-width: 100%;
   margin: 0 0 8px;
   color: #b7c4d8;
   font-size: 14px;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .detail-status-row {
@@ -1857,9 +1870,10 @@ select option {
   .detail-banner,
   .plan-detail > .banner {
     display: block;
-    height: clamp(300px, 48vw, 440px);
-    max-height: none;
-    object-fit: cover;
+    width: 100%;
+    height: auto;
+    max-height: 440px;
+    object-fit: contain;
     object-position: center;
   }
 }
@@ -2244,7 +2258,7 @@ body {
 .member-app .activity-list .card {
   overflow: hidden;
   margin: 0;
-  padding: 0 0 12px;
+  padding: 0;
   background: #0e1416;
   border: 1px solid #2a3538;
   border-radius: 7px;
@@ -2257,28 +2271,75 @@ body {
   transform: none;
 }
 
+.member-app .activity-card-media {
+  position: relative;
+  overflow: hidden;
+  background: #050809;
+}
+
+.member-app .activity-card-media::after {
+  content: none;
+}
+
 .member-app .activity-list .banner {
   display: block;
   width: 100%;
-  height: 132px;
+  height: auto;
   max-height: none;
-  object-fit: cover;
-  filter: grayscale(.72) brightness(.72);
+  object-fit: contain;
+  filter: none;
 }
 
-.member-app .activity-list .card h3 {
-  margin: 12px 12px 10px;
+.member-app .activity-card-body > h3 {
+  margin: 0 0 12px;
   color: #edf2ed;
   font-size: 17px;
   line-height: 1.35;
 }
 
+.member-app .activity-card-body {
+  padding: 12px;
+}
+
 .member-app .activity-list .card-meta {
+  display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px 12px;
-  padding: 0 12px;
-  color: #8e9999;
+  gap: 10px 14px;
+  padding: 0;
+}
+
+.member-app .activity-list .activity-meta-grid p {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  margin: 0;
+}
+
+.member-app .activity-list .activity-meta-grid span {
+  color: #879392;
   font-size: 10px;
+}
+
+.member-app .activity-list .activity-meta-grid strong {
+  overflow: hidden;
+  color: #dce3df;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-app .activity-progress {
+  height: 4px;
+  margin-top: 12px;
+  overflow: hidden;
+  background: #293234;
+}
+
+.member-app .activity-progress i {
+  display: block;
+  height: 100%;
+  background: #b7dd43;
 }
 
 .member-app .activity-list .status {
@@ -2292,6 +2353,12 @@ body {
   border: 1px solid #4b6022;
   border-radius: 3px;
   font-size: 9px;
+}
+
+.member-app .activity-list .status.planning {
+  color: #efd395;
+  background: #332918;
+  border-color: #6a542b;
 }
 
 .member-page-hero {
