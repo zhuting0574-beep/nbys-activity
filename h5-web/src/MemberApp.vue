@@ -401,7 +401,7 @@
     <div v-if="tab === 'mine'" class="page">
       <div class="mine-page">
         <section class="mine-hero">
-          <img v-if="me.avatar_url" class="profile-avatar" :src="me.avatar_url" alt="用户头像" />
+          <img v-if="me.avatar_url" class="profile-avatar" :src="remoteFirstAvatar(me.avatar_url)" alt="用户头像" @error="fallbackAvatar" />
           <div v-else class="profile-avatar fallback">{{ avatarText }}</div>
           <div class="mine-identity">
             <span class="page-eyebrow">MEMBER DOSSIER</span>
@@ -905,6 +905,17 @@ export default {
       this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
       this.attendanceSummary = dashboard.attendance_summary || { present_count: 0, activity_total: 0 }
       this.notifications = dashboard.notifications || []
+    },
+    remoteFirstAvatar(url) {
+      const value = String(url || '')
+      if (!value.startsWith('/uploads/')) return value
+      return `http://8.160.183.48:575${value}`
+    },
+    fallbackAvatar(event) {
+      const original = event?.target?.dataset?.original || event?.target?.getAttribute('src')?.replace('http://8.160.183.48:575', '')
+      if (!original || event.target.src === original) return
+      event.target.dataset.original = original
+      event.target.src = original
     },
     preloadImages(urls) {
       const uniqueUrls = [...new Set(urls.filter(Boolean))]

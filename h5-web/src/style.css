@@ -1904,7 +1904,15 @@ select option {
   }
 
   .mine-action-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .mine-action-grid .btn {
+    min-width: 0;
+    padding-inline: 4px;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .rental-grid {
@@ -1920,6 +1928,7 @@ select option {
     grid-template-columns: 1fr;
   }
 }
+
 .checkin-modal-panel {
   width: min(440px, 100%);
   text-align: center;
@@ -1954,6 +1963,15 @@ select option {
   .checkin-choice-actions {
     grid-template-columns: 1fr;
   }
+}
+
+/* Render uploaded artwork exactly as supplied, after all theme overrides. */
+.member-app .escape-entry-banner,
+.member-app .profile-avatar {
+  filter: none !important;
+  -webkit-filter: none !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
 }
 
 .checkin-qr-image {
@@ -2228,7 +2246,7 @@ body {
   background-size: cover;
   border: 1px solid #344044;
   border-radius: 6px;
-  filter: grayscale(1);
+  filter: none;
 }
 
 .member-section-head {
@@ -2439,7 +2457,7 @@ body {
   height: 58px;
   border: 2px solid #d8eda7;
   border-radius: 6px;
-  filter: grayscale(1);
+  filter: none;
 }
 
 .member-app .mine-identity h2 {
@@ -2527,4 +2545,12 @@ body {
     padding-top: max(22px, env(safe-area-inset-top));
     padding-bottom: max(22px, env(safe-area-inset-bottom));
   }
+}
+
+html body .member-app .escape-entry-banner,
+html body .member-app .profile-avatar {
+  filter: none !important;
+  -webkit-filter: none !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
 }
