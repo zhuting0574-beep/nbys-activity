@@ -16,6 +16,7 @@
         <module>escape-center</module>
         <module>user-center</module>
         <module>public-center</module>
+        <module>training-center</module>
     </modules>
 
     <parent>

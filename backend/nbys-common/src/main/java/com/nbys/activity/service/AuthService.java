@@ -243,6 +243,7 @@ public class AuthService {
                     "escape:weapon:view", "escape:weapon:create", "escape:weapon:update", "escape:weapon:delete",
                     "escape:userAsset:view", "escape:userAsset:adjust", "escape:itemGrant:create");
         }
+        if ("training_admin".equals(role)) Collections.addAll(p, "training:view", "training:update", "training:delete");
         return p;
     }
 
@@ -264,6 +265,7 @@ public class AuthService {
                 "escape:class:view", "escape:class:create", "escape:class:update", "escape:class:delete",
                 "escape:weapon:view", "escape:weapon:create", "escape:weapon:update", "escape:weapon:delete",
                 "escape:userAsset:view", "escape:userAsset:adjust", "escape:itemGrant:create");
+        Collections.addAll(p, "training:view", "training:update", "training:delete");
         return p;
     }
 

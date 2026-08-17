@@ -47,7 +47,7 @@
             @pointerup="endDrag"
             @pointercancel="cancelDrag"
           >
-            <img v-if="item.image_url" :src="item.image_url" alt="" draggable="false" />
+            <img v-if="item.image_url" :src="assetUrl(item.image_url)" alt="" draggable="false" />
             <b v-else>{{ symbol(item) }}</b>
             <em>{{ item.width || 1 }}×{{ item.height || 1 }}</em>
             <small>{{ item.name }}</small>
@@ -84,7 +84,7 @@
       :style="ghostStyle"
       aria-hidden="true"
     >
-      <img v-if="pointer.item.image_url" :src="pointer.item.image_url" alt="" />
+      <img v-if="pointer.item.image_url" :src="assetUrl(pointer.item.image_url)" alt="" />
       <b v-else>{{ symbol(pointer.item) }}</b>
     </div>
   </section>
@@ -134,6 +134,11 @@ export default {
     }
   },
   methods: {
+    assetUrl(url) {
+      const value = String(url || '')
+      if (!value || /^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) return value
+      return value.startsWith('/uploads/') ? `http://8.160.183.48:575${value}` : value
+    },
     warehouse(type) {
       return this.warehouses[type] || { width: type === 'buffer' ? 48 : 12, height: type === 'buffer' ? 16 : 8, items: [] }
     },

@@ -66,7 +66,7 @@
         <div class="activity-list">
           <div v-for="activity in activities" :key="`${activity.record_kind}-${activity.id}`" class="card" :class="{ 'plan-card': activity.record_kind === 'plan' }" @click="openHomeCard(activity)">
             <div class="activity-card-media">
-              <img class="banner" :src="activity.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
+              <img class="banner" :src="assetUrl(activity.banner_url || defaultActivityBanner)" loading="lazy" decoding="async" />
               <span class="status" :class="statusClass(activity.display_status)">{{ statusLabel(activity.display_status) }}</span>
             </div>
             <div class="activity-card-body">
@@ -92,7 +92,7 @@
     </div>
 
     <div v-if="tab === 'activities' && selectedPlan" class="page plan-detail">
-      <img v-if="selectedPlan.banner_url" class="banner" :src="selectedPlan.banner_url" loading="lazy" decoding="async" />
+      <img v-if="selectedPlan.banner_url" class="banner" :src="assetUrl(selectedPlan.banner_url)" loading="lazy" decoding="async" />
       <div v-else class="banner banner-placeholder">活动策划</div>
       <div class="plan-head">
         <div>
@@ -103,7 +103,7 @@
             <span>总投票人数：{{ selectedPlan.voter_count || 0 }}</span>
             <div class="voter-avatars" aria-label="已投票人员">
               <template v-for="voter in selectedPlan.voters || []" :key="voter.id">
-                <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+                <img v-if="voter.avatar_url" class="voter-avatar" :src="assetUrl(voter.avatar_url)" :alt="voter.callsign || voter.username || '投票人员'" />
                 <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
               </template>
               <span v-if="!(selectedPlan.voters || []).length" class="muted">暂无投票</span>
@@ -160,7 +160,7 @@
 
     <div v-if="tab === 'activities' && selectedActivity" class="page detail-page">
       <section class="detail-card">
-        <img class="detail-banner" :src="detail.banner_url || defaultActivityBanner" loading="lazy" decoding="async" />
+        <img class="detail-banner" :src="assetUrl(detail.banner_url || defaultActivityBanner)" loading="lazy" decoding="async" />
         <h2>{{ detail.name }}</h2>
         <p class="detail-time">{{ formatTimeRange(detail.start_at, detail.end_at) }} · {{ displayVenueName(detail) }}</p>
         <p class="detail-copy">发起人：{{ detail.creator_name || '未设置' }}</p>
@@ -168,7 +168,7 @@
           <span>总投票人数：{{ detail.voter_count || 0 }}</span>
           <div class="voter-avatars" aria-label="已投票人员">
             <template v-for="voter in detail.voters || []" :key="voter.id">
-              <img v-if="voter.avatar_url" class="voter-avatar" :src="voter.avatar_url" :alt="voter.callsign || voter.username || '投票人员'" />
+              <img v-if="voter.avatar_url" class="voter-avatar" :src="assetUrl(voter.avatar_url)" :alt="voter.callsign || voter.username || '投票人员'" />
               <span v-else class="voter-avatar fallback">{{ shortName(voter.callsign || voter.username) }}</span>
             </template>
             <span v-if="!(detail.voters || []).length" class="muted">暂无投票</span>
@@ -398,6 +398,39 @@
       <div v-if="notifications.length === 0" class="empty-state">暂无通知</div>
     </div>
 
+    <div v-if="tab === 'training'" class="page training-room-page">
+      <div class="member-page-hero launcher-arsenal-hero"><span class="page-eyebrow">LIVE FIRE / DRY TRAINING</span><h2>训练屋</h2><p>历史成绩与训练房间</p></div>
+      <div v-if="!training.room" class="section-title"><div><h2>历史成绩</h2><p class="muted">训练完成后自动保存成绩</p></div><button class="btn" @click="training.modeDialog = true">开始训练</button></div>
+      <section v-else class="training-room-panel card">
+        <div class="training-room-panel-head"><div><span class="page-eyebrow">ROOM {{ training.room.room_code }}</span><h2>{{ training.room.name }}</h2><p class="muted">{{ training.room.member_count }}/10 人 · {{ training.room.target_count }} 台靶机 · {{ training.room.training_mode === 'reaction' ? '反应计时' : '精准训练' }}</p></div><button class="btn secondary" @click="leaveTrainingRoom">退出</button></div>
+        <div class="training-room-tabs"><button :class="{active: training.roomTab === 'dashboard'}" @click="training.roomTab='dashboard'">数据看板</button><button v-if="training.room.is_owner" :class="{active: training.roomTab === 'settings'}" @click="training.roomTab='settings'">设置</button></div>
+        <template v-if="training.roomTab === 'dashboard'">
+          <div class="training-live-status" :class="{busy: training.session, offline: !training.session && !training.room.ready}"><span>{{ training.session ? 'TRAINING IN PROGRESS' : training.room.ready ? 'ROOM READY' : 'TARGET OFFLINE' }}</span><strong>{{ training.session ? '训练中' : training.room.ready ? `${training.room.target_count} 台靶机已就绪` : '靶机未连接' }}</strong><small>{{ training.session ? '完成后点击结束训练保存成绩' : training.room.ready ? '任意成员均可开始本人的训练' : `已连接 ${training.room.connected_target_count || 0}/${training.room.target_count} 台，请先在 App 中连接靶机` }}</small><div class="training-device-links"><button v-if="!training.session && !training.room.ready" class="btn secondary" :disabled="training.refreshingDevices" @click="refreshTrainingDevices">{{ training.refreshingDevices ? '正在查询…' : '刷新并关联靶机' }}</button><a class="training-app-download" :href="trainingAppDownloadUrl" target="_blank" rel="noopener">下载靶机 App</a></div></div>
+          <div class="training-member-list"><div v-for="member in training.room.members || []" :key="member.id"><span>{{ member.callsign || member.username }}</span><em>{{ member.member_role === 'owner' ? '房主' : '成员' }}</em></div></div>
+          <div class="training-action-row"><button class="btn" :disabled="!!training.session || training.submitting || !training.room.ready" @click="startTraining">{{ training.session ? '训练中…' : training.room.ready ? '开始训练' : '等待靶机连接' }}</button><button v-if="training.session && training.session.user_id === me.id" class="btn secondary" @click="completeTraining">结束训练</button></div>
+        </template>
+        <template v-else>
+          <label class="training-setting"><span>训练模式</span><select v-model="training.settings.training_mode"><option value="precision">精准训练</option><option value="reaction">反应计时</option></select></label>
+          <label class="training-setting"><span>启用靶机数量（1-3）</span><input v-model.number="training.settings.target_count" type="number" min="1" max="3" step="1" /></label>
+          <label class="training-setting"><span>每台靶机上靶次数（1-100）</span><input v-model.number="training.settings.target_hits" type="number" min="1" max="100" step="1" /></label>
+          <label class="training-setting"><span>上靶次数设置方式</span><select v-model="training.settings.target_hits_mode"><option value="unified">统一设置</option><option value="separate">分别设置</option></select></label>
+          <div v-if="training.settings.target_hits_mode === 'separate'" class="training-target-hit-list">
+            <label v-for="targetNo in Number(training.settings.target_count) || 1" :key="targetNo" class="training-setting"><span>靶机 {{ targetNo }} 上靶次数</span><input v-model.number="training.settings.target_hits_by_target[targetNo - 1]" type="number" min="1" max="100" step="1" /></label>
+          </div>
+          <label class="training-setting"><span>蜂鸣前等待（秒）</span><div class="training-range"><input v-model.number="training.settings.beep_min_delay" type="number" min="0" step="0.5" /><input v-model.number="training.settings.beep_max_delay" type="number" min="0" step="0.5" /></div></label>
+          <p class="muted">播放 “Are you ready?” 后，在设定范围内随机等待，再蜂鸣并开始计时。</p><button class="btn" @click="saveTrainingSettings">保存设置</button>
+        </template>
+      </section>
+      <div v-if="training.history.length" class="training-history-list">
+        <article v-for="session in training.history" :key="session.id" class="card training-history-card">
+          <div><span class="page-eyebrow">{{ session.training_mode === 'precision' ? 'PRECISION' : 'REACTION TIMER' }}</span><h3>{{ session.room_name || session.session_code }}</h3><p class="muted">{{ formatDateTime(session.created_at) }} · {{ session.target_count || 1 }} 台靶机 · {{ session.total_hits || 0 }} 次命中</p></div>
+          <div class="training-history-result"><strong>{{ session.average_accuracy == null ? (session.duration_ms ? `${(session.duration_ms / 1000).toFixed(2)}s` : '进行中') : session.average_accuracy }}</strong><button class="btn secondary" @click="openTrainingSession(session.id)">查看</button></div>
+        </article>
+      </div>
+      <div v-else class="empty-state">暂无训练记录，开始第一轮训练后将在这里展示。</div>
+      <div v-if="!training.room" class="training-room-note card"><strong>训练屋</strong><p class="muted">支持单人训练、多人房间、1-3 台靶机和反应计时 / 精准训练。</p></div>
+    </div>
+
     <div v-if="tab === 'mine'" class="page">
       <div class="mine-page">
         <section class="mine-hero">
@@ -500,8 +533,8 @@
     <div class="tabs">
       <div class="tab" :class="{ active: tab === 'activities' }" @click="tab = 'activities'; selectedActivity = null; selectedPlan = null; loadActivities()"><b>⌂</b><span>活动</span></div>
       <div class="tab" :class="{ active: tab === 'rentals' }" @click="tab = 'rentals'; loadRentals()"><b>▣</b><span>发射器租赁</span></div>
-      <div class="tab" :class="{ active: tab === 'notifications' }" @click="openNotifications">
-        <b>●</b><span>通知</span><span v-if="unreadCount" class="tab-dot"></span>
+      <div class="tab" :class="{ active: tab === 'notifications' || tab === 'training' }" @click="openMemberUtility">
+        <b>{{ showTrainingRoom ? '◎' : '●' }}</b><span>{{ showTrainingRoom ? '训练屋' : '通知' }}</span><span v-if="!showTrainingRoom && unreadCount" class="tab-dot"></span>
       </div>
       <div class="tab" :class="{ active: tab === 'mine' }" @click="openMine"><b>◆</b><span>我的</span></div>
     </div>
@@ -614,6 +647,26 @@
       </div>
     </div>
 
+    <div v-if="training.modeDialog" class="modal" role="dialog" aria-modal="true" aria-label="选择训练模式">
+      <div class="modal-backdrop" @click="training.modeDialog = false"></div>
+      <div class="modal-panel confirm-panel">
+        <h2>开始训练</h2><p>选择训练方式，进入后默认启用 1 台靶机。</p>
+        <div class="training-mode-actions"><button class="btn" @click="createTrainingRoom('solo')">单人练习</button><button class="btn secondary" @click="training.modeDialog = false; training.multiDialog = true">多人练习</button></div>
+      </div>
+    </div>
+    <div v-if="training.multiDialog" class="modal" role="dialog" aria-modal="true" aria-label="多人训练">
+      <div class="modal-backdrop" @click="training.multiDialog = false"></div>
+      <div class="modal-panel confirm-panel"><h2>多人练习</h2><p>创建房间后邀请队员，或加入已有房间。</p><div class="training-mode-actions"><button class="btn" @click="createTrainingRoom('multi')">创建房间</button><button class="btn secondary" @click="training.multiDialog = false; training.joinDialog = true">加入房间</button></div></div>
+    </div>
+      <div v-if="training.joinDialog" class="modal" role="dialog" aria-modal="true" aria-label="加入训练房间">
+      <div class="modal-backdrop" @click="training.joinDialog = false"></div>
+      <div class="modal-panel confirm-panel"><h2>可加入房间</h2><div class="training-open-room-list"><button v-for="room in training.rooms || []" :key="room.id" :disabled="Number(room.member_count) >= 10 || Number(room.running) > 0" @click="joinTrainingRoom(room.id)"><span><strong>{{ room.name }}</strong><small>{{ room.owner_callsign || room.owner_username }} · {{ room.member_count }}/10 人 · {{ room.target_count }} 台靶机</small></span><em>{{ Number(room.running) > 0 ? '训练中' : Number(room.member_count) >= 10 ? '已满' : '加入' }}</em></button><p v-if="!(training.rooms || []).length" class="muted">暂无可加入房间</p></div></div>
+    </div>
+    <div v-if="training.result" class="modal" role="dialog" aria-modal="true" aria-label="训练成绩详情">
+      <div class="modal-backdrop" @click="training.result = null"></div>
+      <div class="modal-panel confirm-panel training-result-modal"><h2>{{ training.result.room_name || '训练成绩' }}</h2><p class="muted">{{ formatDateTime(training.result.finished_at || training.result.created_at) }} · 实际使用 {{ training.result.target_count || 1 }} 台靶机</p><div class="training-result-summary"><strong>{{ training.result.average_accuracy || 0 }}</strong><span>平均精准度</span><strong>{{ ((training.result.duration_ms || 0) / 1000).toFixed(2) }}s</strong><span>总用时</span><strong>{{ training.result.total_hits || 0 }}</strong><span>有效命中</span></div><div class="training-target-results"><section v-for="targetNo in Number(training.result.target_count) || 1" :key="targetNo"><h3>靶机 {{ targetNo }}</h3><div class="training-target-map"><img :src="trainingTargetImage" alt="训练靶纸"/><i v-for="hit in hitsForTarget(targetNo)" :key="hit.id" :style="{left: `${Number(hit.x_ratio || 0) * 100}%`, top: `${Number(hit.y_ratio || 0) * 100}%`}">{{ hit.shot_no }}</i></div></section></div><div class="training-hit-list"><div v-for="hit in training.result.hits || []" :key="hit.id"><span>靶机 {{ hit.target_no }} · #{{ hit.shot_no }}</span><strong>{{ hit.ring_score == null ? '-' : hit.ring_score }} 环</strong><em>{{ hit.accuracy == null ? '-' : `${hit.accuracy}%` }}</em></div><p v-if="!(training.result.hits || []).length" class="muted">暂无逐次命中数据</p></div></div>
+    </div>
+
     <div v-if="shareDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="微信分享活动">
       <div class="modal-backdrop" @click="shareDialog.show = false"></div>
       <div class="modal-panel confirm-panel share-modal-panel">
@@ -720,6 +773,11 @@ export default {
       showQr: false,
       qrDataUrl: '',
       notifications: [],
+      training: { history: [], rooms: [], settings: { target_count: 1, target_hits: 5, target_hits_mode: 'unified', target_hits_by_target: [5], training_mode: 'precision', beep_min_delay: 2, beep_max_delay: 4 }, room: null, pendingRoom: null, replaceRoomId: null, reconnectFailures: 0, roomTab: 'dashboard', session: null, result: null, pollTimer: null, modeDialog: false, multiDialog: false, joinDialog: false, submitting: false, refreshingDevices: false },
+      trainingAppDownloadUrl: ['127.0.0.1', 'localhost'].includes(location.hostname)
+        ? `${location.origin}/activity/downloads/training-room.apk`
+        : 'http://8.160.183.48:575/downloads/training-room.apk',
+      trainingTargetImage: '/activity/training/precision-target-a4.png',
       toastTimer: null,
       toast: { show: false, message: '' },
       confirmDialog: { show: false, title: '确认操作', message: '', resolve: null }
@@ -769,6 +827,9 @@ export default {
     showEscapeEntryBanner() {
       return this.me.is_regular_member === true || Number(this.me.is_regular_member) === 1
     },
+    showTrainingRoom() {
+      return this.me.is_regular_member === true || Number(this.me.is_regular_member) === 1
+    },
     escapeEntryStyle() {
       return {
         backgroundImage: `url("${xpBannerUrl}")`
@@ -780,7 +841,7 @@ export default {
       return !guest && (this.me.permissions || []).includes('activity:view')
     },
     displayLogoUrl() {
-      return this.systemImages.login_logo_url || this.logoUrl
+      return this.assetUrl(this.systemImages.login_logo_url || this.logoUrl)
     },
     authPageStyle() {
       return { backgroundColor: '#070b0c' }
@@ -810,6 +871,7 @@ export default {
   beforeUnmount() {
     window.removeEventListener('nbys-auth-expired', this.expireSession)
     this.stopQrScanner()
+    this.stopTrainingPolling()
   },
   methods: {
     expireSession() {
@@ -905,11 +967,23 @@ export default {
       this.activities = [...activeActivities, ...planning].sort((a, b) => this.sortTime(b.created_at) - this.sortTime(a.created_at))
       this.attendanceSummary = dashboard.attendance_summary || { present_count: 0, activity_total: 0 }
       this.notifications = dashboard.notifications || []
+      if (this.showTrainingRoom) {
+        this.loadTrainingBootstrap().then(async () => {
+          if (this.training.pendingRoom && !this.training.room) {
+            await this.openTrainingRoom(this.training.pendingRoom)
+            this.training.pendingRoom = null
+          }
+        })
+      }
     },
     remoteFirstAvatar(url) {
+      return this.assetUrl(url)
+    },
+    assetUrl(url) {
       const value = String(url || '')
-      if (!value.startsWith('/uploads/')) return value
-      return `http://8.160.183.48:575${value}`
+      if (!value || value.startsWith('data:') || value.startsWith('blob:') || /^https?:\/\//i.test(value)) return value
+      if (value.startsWith('/uploads/')) return `http://8.160.183.48:575${value}`
+      return value
     },
     fallbackAvatar(event) {
       const original = event?.target?.dataset?.original || event?.target?.getAttribute('src')?.replace('http://8.160.183.48:575', '')
@@ -1719,6 +1793,183 @@ export default {
         await api('/api/h5/notifications/read-all', { method: 'PUT' })
         await this.loadNotifications()
       }
+    },
+    async openMemberUtility() {
+      if (this.showTrainingRoom) {
+        this.tab = 'training'
+        await this.loadTrainingBootstrap()
+        if (this.training.pendingRoom && (!this.training.room || Number(this.training.room.id) !== Number(this.training.pendingRoom))) {
+          await this.openTrainingRoom(this.training.pendingRoom)
+          this.training.pendingRoom = null
+        }
+      } else {
+        await this.openNotifications()
+      }
+    },
+    async loadTrainingBootstrap() {
+      try {
+        const data = await api('/api/training/h5/bootstrap')
+      this.training.history = data.history || []
+      this.training.rooms = data.rooms || []
+      this.training.settings = { ...this.training.settings, ...(data.settings || {}) }
+      this.training.pendingRoom = data.current_room_id ? data.current_room_id : null
+      } catch (error) { this.showToast(error.message || '训练屋加载失败') }
+    },
+    async createTrainingRoom(roomType) {
+      this.training.submitting = true
+      try {
+        const room = await api('/api/training/h5/rooms', { method: 'POST', body: { room_type: roomType, target_count: 1, training_mode: 'precision', replace_room_id: this.training.replaceRoomId || undefined } })
+        this.training.modeDialog = false
+        this.training.multiDialog = false
+        this.training.replaceRoomId = null
+        await this.openTrainingRoom(room.id)
+      } catch (error) { this.showToast(error.message || '创建房间失败') } finally { this.training.submitting = false }
+    },
+    async joinTrainingRoom(id) {
+      try {
+        await api(`/api/training/h5/rooms/${id}/join`, { method: 'POST' })
+        this.training.joinDialog = false
+        await this.openTrainingRoom(id)
+      } catch (error) { this.showToast(error.message || '加入房间失败') }
+    },
+    async openTrainingRoom(id) {
+      const previousSessionId = this.training.session?.id
+      const room = await api(`/api/training/h5/rooms/${id}`)
+      this.training.room = room
+      this.training.reconnectFailures = 0
+      this.training.session = room.running_session || null
+      if (previousSessionId && !this.training.session) {
+        await this.openTrainingSession(previousSessionId)
+        await this.loadTrainingBootstrap()
+      }
+      this.training.roomTab = 'dashboard'
+      const targetCount = Number(room.target_count) || 1
+      const hitsByTarget = Array.from({ length: targetCount }, (_, index) => Number(room.target_hits_by_target?.[index]) || Number(room.target_hits) || 5)
+      this.training.settings = { target_count: targetCount, target_hits: Number(room.target_hits) || 5, target_hits_mode: room.target_hits_by_target?.length > 1 && new Set(room.target_hits_by_target).size > 1 ? 'separate' : 'unified', target_hits_by_target: hitsByTarget, training_mode: room.training_mode || 'precision', beep_min_delay: Number(room.beep_min_delay) || 2, beep_max_delay: Number(room.beep_max_delay) || 4 }
+      if (!room.connected_target_count) this.stopTrainingPolling()
+      else this.startTrainingPolling()
+    },
+    async refreshTrainingDevices() {
+      if (!this.training.room || this.training.refreshingDevices) return
+      this.training.refreshingDevices = true
+      try {
+        const room = await api(`/api/training/h5/rooms/${this.training.room.id}/devices/refresh`, { method: 'POST' })
+        this.training.room = room
+        if (room.ready) {
+          this.showToast(`已重新关联 ${room.connected_target_count} 台靶机`)
+          this.startTrainingPolling()
+        } else if (!Number(room.owned_online_device_count)) this.showToast('当前账号名下没有在线靶机，请确认 App 已登录并保持在线')
+        else this.showToast(`已找到 ${room.owned_online_device_count} 台在线靶机，当前关联 ${room.connected_target_count}/${room.target_count} 台`)
+      } catch (error) { this.showToast(error.message || '刷新靶机失败') }
+      finally { this.training.refreshingDevices = false }
+    },
+    startTrainingPolling() {
+      this.stopTrainingPolling()
+      this.training.pollTimer = window.setInterval(async () => {
+        if (this.tab !== 'training') return this.stopTrainingPolling()
+        try {
+          if (this.training.room && this.training.room.connected_target_count > 0) await this.openTrainingRoom(this.training.room.id)
+          else {
+            const rooms = await api('/api/training/h5/rooms')
+            this.training.rooms = rooms || []
+          }
+          this.training.reconnectFailures = 0
+        } catch (_) {
+          this.training.reconnectFailures += 1
+          if (this.training.reconnectFailures >= 3 && this.training.room) {
+            this.training.room = { ...this.training.room, ready: false, targets_ready: false, connected_target_count: 0 }
+            this.stopTrainingPolling()
+            if (this.training.session) {
+              await this.completeTraining(true)
+              this.showToast('靶机失联，训练数据已保存并结束训练')
+            }
+          }
+        }
+      }, 3000)
+    },
+    stopTrainingPolling() {
+      if (this.training.pollTimer) window.clearInterval(this.training.pollTimer)
+      this.training.pollTimer = null
+    },
+    async openTrainingSession(id) {
+      try { this.training.result = await api(`/api/training/h5/sessions/${id}`) } catch (error) { this.showToast(error.message || '成绩详情加载失败') }
+    },
+    hitsForTarget(targetNo) {
+      return (this.training.result?.hits || []).filter(hit => Number(hit.target_no) === Number(targetNo))
+    },
+    async leaveTrainingRoom() {
+      if (!(await this.askConfirm('确认退出当前训练房间？'))) return
+      try {
+        await api(`/api/training/h5/rooms/${this.training.room.id}/members/me`, { method: 'DELETE' })
+        this.training.room = null
+        this.training.session = null
+        await this.loadTrainingBootstrap()
+      } catch (error) { this.showToast(error.message || '退出房间失败') }
+    },
+    async saveTrainingSettings() {
+      try {
+        const room = await api(`/api/training/h5/rooms/${this.training.room.id}/settings`, { method: 'PUT', body: this.training.settings })
+        await this.openTrainingRoom(room.id)
+        this.training.roomTab = 'settings'
+        this.showToast('房间设置已保存')
+      } catch (error) { this.showToast(error.message || '保存设置失败') }
+    },
+    async startTraining() {
+      if (this.training.pendingRoom && !this.training.room) {
+        const useOld = await this.askConfirm('检测到你之前创建的训练房间仍在开放，是否继续加入原有房间？取消后将新建房间并自动结束原房间。')
+        if (useOld) {
+          await this.openTrainingRoom(this.training.pendingRoom)
+          this.training.pendingRoom = null
+          return
+        }
+        this.training.replaceRoomId = this.training.pendingRoom
+        this.training.pendingRoom = null
+        this.training.modeDialog = true
+        return
+      }
+      this.playTrainingReadyCue()
+      this.training.submitting = true
+      try {
+        const session = await api(`/api/training/h5/rooms/${this.training.room.id}/sessions`, { method: 'POST' })
+        this.training.session = { ...session, local_started_at: Date.now() }
+        const min = Number(this.training.room.beep_min_delay) || 2
+        const max = Math.max(min, Number(this.training.room.beep_max_delay) || 4)
+        window.setTimeout(() => {
+          try {
+            const audio = new AudioContext()
+            const oscillator = audio.createOscillator()
+            oscillator.frequency.value = 1200
+            oscillator.connect(audio.destination)
+            oscillator.start()
+            oscillator.stop(audio.currentTime + 0.16)
+          } catch (_) {}
+          this.showToast('训练计时开始')
+        }, (min + Math.random() * (max - min)) * 1000)
+      } catch (error) { this.showToast(error.message || '开始训练失败') } finally { this.training.submitting = false }
+    },
+    playTrainingReadyCue() {
+      if (!('speechSynthesis' in window)) return
+      window.speechSynthesis.cancel()
+      const cue = new SpeechSynthesisUtterance('Shooter ready')
+      cue.lang = 'en-US'
+      cue.rate = 0.92
+      cue.pitch = 0.9
+      cue.volume = 1
+      const englishVoice = window.speechSynthesis.getVoices().find(voice => /^en[-_]/i.test(voice.lang))
+      if (englishVoice) cue.voice = englishVoice
+      window.speechSynthesis.speak(cue)
+    },
+    async completeTraining(silent = false) {
+      if (!this.training.session) return
+      const started = Number(this.training.session.local_started_at) || Date.parse(this.training.session.started_at) || Date.now()
+      const sessionId = this.training.session.id
+      this.training.session = null
+      try {
+        await api(`/api/training/h5/sessions/${sessionId}/complete`, { method: 'PUT', body: { duration_ms: Math.max(0, Date.now() - started), total_hits: 0, average_accuracy: 0 } })
+        await this.openTrainingRoom(this.training.room.id)
+        await this.loadTrainingBootstrap()
+        if (!silent) this.showToast('训练成绩已保存')
+      } catch (error) { this.training.session = { id: sessionId, local_started_at: started }; this.showToast(error.message || '结束训练失败') }
     },
     confirmRentalNotice(notice) {
       return api(`/api/h5/launcher-rentals/${notice.rental_action_id || notice.related_id}/confirm`, { method: 'PUT' }).then(async () => {

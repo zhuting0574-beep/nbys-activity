@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>逃离西撇镇｜UX 设计确认稿</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="review-bar">
+    <div>
+      <span class="review-kicker">NBYS · UX REVIEW</span>
+      <strong>逃离西撇镇 / Escape from XP</strong>
+    </div>
+    <div class="review-actions">
+      <button class="mode-btn active" data-mode="h5">H5 玩家端</button>
+      <button class="mode-btn" data-mode="admin">后台管理端</button>
+    </div>
+  </header>
+
+  <main class="review-stage">
+    <section id="h5Prototype" class="prototype active" aria-label="H5 玩家端原型">
+      <aside class="review-notes">
+        <span class="note-index">01</span>
+        <h1>战术终端，延续现有 H5</h1>
+        <p>保留当前深色移动端体系，用军绿作为模块识别色；关键资产与锁定状态始终可见。</p>
+        <ul>
+          <li>底部四入口：战局、仓库、商店、战绩</li>
+          <li>赛前不暴露其他玩家配装</li>
+          <li>危险操作使用二次确认</li>
+          <li>375 px 起适配，触控目标不小于 44 px</li>
+        </ul>
+      </aside>
+
+      <div class="phone-frame">
+        <div class="phone-status"><span>09:41</span><span>● ● ●</span></div>
+        <div class="app-shell">
+          <header class="app-header">
+            <button class="icon-btn" aria-label="返回">‹</button>
+            <div>
+              <span class="app-eyebrow">NBYS OPERATIONS</span>
+              <strong>逃离西撇镇</strong>
+            </div>
+            <div class="cash-chip">¥ 12,680</div>
+          </header>
+
+          <div class="mobile-view active" data-mobile-view="battle">
+            <section class="operator-card">
+              <div>
+                <span class="muted-label">操作员档案</span>
+                <h2>夜枭 <span>LV.08</span></h2>
+                <p>本赛季撤离率 62% · 场均收益 ¥3,420</p>
+              </div>
+              <div class="avatar-mark">夜</div>
+            </section>
+
+            <section class="season-strip">
+              <div><span>当前赛季</span><strong>S01 · 雾港危机</strong></div>
+              <div class="progress"><i></i></div>
+              <small>剩余 18 天</small>
+            </section>
+
+            <div class="section-head">
+              <div><span>ACTIVE MATCH</span><h3>当前战局</h3></div>
+              <button class="text-btn">规则说明</button>
+            </div>
+
+            <article class="match-card">
+              <div class="match-cover">
+                <span class="status-pill preparing">整备中</span>
+                <span class="match-no">XP-0712-03</span>
+              </div>
+              <div class="match-body">
+                <h3>西撇镇 · 夜间封锁区</h3>
+                <p>07月26日 18:30 · 海鹰城训练场</p>
+                <div class="match-meta">
+                  <span><b>18</b>/24 人</span>
+                  <span><b>6</b> 个小队</span>
+                  <span><b>20:00</b> 锁定</span>
+                </div>
+                <button class="primary-action" data-open-dialog="loadoutDialog">进入战局并配置装备</button>
+              </div>
+            </article>
+
+            <div class="section-head compact">
+              <div><span>NEXT STEP</span><h3>整备检查</h3></div>
+            </div>
+            <div class="check-grid">
+              <button class="check-card done"><i>✓</i><span>选择小队<small>灰狐 2 队</small></span></button>
+              <button class="check-card"><i>2</i><span>职业配装<small>尚未锁定</small></span></button>
+            </div>
+          </div>
+
+          <div class="mobile-view" data-mobile-view="warehouse">
+            <div class="warehouse-head">
+              <div><span class="app-eyebrow">ASSET STORAGE</span><h2>仓库</h2></div>
+              <div class="warehouse-tabs">
+                <button class="warehouse-tab active">个人 38/60</button>
+                <button class="warehouse-tab">暂存 74/360</button>
+              </div>
+            </div>
+            <div class="warehouse-alert"><b>暂存区将在每日 05:00 自动出售</b><span>高价值物品请及时转移</span></div>
+            <div class="inventory-grid">
+              <button class="loot loot-red size-2x2" data-item="机密情报箱"><span>▣</span><small>机密情报箱</small></button>
+              <button class="loot loot-orange size-1x2" data-item="夜视瞄具"><span>⌖</span><small>夜视瞄具</small></button>
+              <button class="loot loot-purple" data-item="加密芯片"><span>◆</span><small>加密芯片</small></button>
+              <button class="loot loot-blue" data-item="医疗包"><span>✚</span><small>医疗包</small></button>
+              <button class="loot loot-purple size-2x1" data-item="特制消音器"><span>▰</span><small>特制消音器</small></button>
+              <button class="loot loot-blue" data-item="军用电池"><span>▥</span><small>军用电池</small></button>
+            </div>
+            <div class="item-panel">
+              <div><span class="rarity rarity-red">超凡</span><h3 id="selectedItemName">机密情报箱</h3><p>占用 2 × 2 格 · 今日估值</p></div>
+              <strong>¥ 8,860 <small class="trend-up">↑ 12%</small></strong>
+            </div>
+            <div class="sell-dock"><span>拖动物品至此出售</span><button>全部出售</button></div>
+          </div>
+
+          <div class="mobile-view" data-mobile-view="shop">
+            <div class="shop-hero">
+              <span class="app-eyebrow">BLACK MARKET</span>
+              <h2>补给商店</h2>
+              <p>每日 05:00 刷新价格与库存</p>
+            </div>
+            <div class="filter-row"><button class="active">全部</button><button>扩容</button><button>物资</button><button>武器</button></div>
+            <div class="product-list">
+              <article class="product-card"><div class="product-image orange">⌖</div><div><span class="rarity rarity-orange">史诗</span><h3>热成像瞄具</h3><p>库存 2 · 进入暂存区</p></div><button>¥4,600</button></article>
+              <article class="product-card"><div class="product-image green">▦</div><div><span class="rarity">永久扩容</span><h3>个人仓库扩容</h3><p>6×10 → 8×10</p></div><button>¥8,000</button></article>
+              <article class="product-card"><div class="product-image purple">▰</div><div><span class="rarity rarity-purple">精品</span><h3>特制消音器</h3><p>库存 7 · 进入暂存区</p></div><button>¥2,280</button></article>
+            </div>
+          </div>
+
+          <div class="mobile-view" data-mobile-view="records">
+            <div class="records-head"><span class="app-eyebrow">SEASON REPORT</span><h2>战绩</h2><p>S01 · 雾港危机</p></div>
+            <div class="stat-grid">
+              <div><span>参战</span><strong>13</strong></div><div><span>成功撤离</span><strong>8</strong></div>
+              <div><span>撤离率</span><strong>62%</strong></div><div><span>总击杀</span><strong>27</strong></div>
+            </div>
+            <div class="section-head compact"><div><span>HISTORY</span><h3>最近战局</h3></div></div>
+            <div class="record-list">
+              <article><i class="success"></i><div><h3>西撇镇 · 水厂</h3><p>07月18日 · 灰狐2队 · 正规军</p></div><strong>+¥6,820<small>成功撤离</small></strong></article>
+              <article><i class="failed"></i><div><h3>西撇镇 · 老街</h3><p>07月12日 · 灰狐1队 · 重装兵</p></div><strong>-¥1,800<small>撤离失败</small></strong></article>
+              <article><i class="success"></i><div><h3>西撇镇 · 港口</h3><p>07月05日 · 独狼 · 跑刀仔</p></div><strong>+¥3,460<small>成功撤离</small></strong></article>
+            </div>
+          </div>
+
+          <nav class="bottom-nav">
+            <button class="nav-item active" data-view="battle"><i>⌁</i><span>战局</span></button>
+            <button class="nav-item" data-view="warehouse"><i>▦</i><span>仓库</span></button>
+            <button class="nav-item" data-view="shop"><i>◇</i><span>商店</span></button>
+            <button class="nav-item" data-view="records"><i>◎</i><span>战绩</span></button>
+          </nav>
+        </div>
+      </div>
+    </section>
+
+    <section id="adminPrototype" class="prototype" aria-label="后台管理端原型">
+      <div class="admin-window">
+        <aside class="admin-side">
+          <div class="admin-brand"><span>NBYS</span><strong>运营后台</strong></div>
+          <nav>
+            <button>▥ <span>数据看板</span></button>
+            <button>◫ <span>活动管理</span></button>
+            <button class="active">⌖ <span>逃离西撇镇</span><small>NEW</small></button>
+            <div class="admin-subnav">
+              <button class="active" data-admin-view="overview">运营概览</button>
+              <button data-admin-view="items">物品配置</button>
+              <button data-admin-view="season">赛季与规则</button>
+              <button data-admin-view="classes">职业与武器</button>
+              <button data-admin-view="assets">用户资产</button>
+            </div>
+            <button>◇ <span>场地管理</span></button>
+            <button>♙ <span>用户管理</span></button>
+            <button>⚙ <span>系统管理</span></button>
+          </nav>
+          <div class="admin-user"><i>管</i><span>管理员 / 夜枭</span></div>
+        </aside>
+
+        <div class="admin-main">
+          <header class="admin-topbar"><div><span>逃离西撇镇</span><b>/</b><strong id="adminPageTitle">运营概览</strong></div><button>查看 H5 端 ↗</button></header>
+
+          <section class="admin-view active" data-admin-page="overview">
+            <div class="page-heading"><div><span>ESCAPE OPERATIONS</span><h1>运营概览</h1><p>监控当前战局、用户资产与经济流转</p></div><button class="admin-primary">＋ 创建战局</button></div>
+            <div class="metric-row">
+              <article><span>本赛季参战</span><strong>286</strong><small class="up">↑ 18.2%</small></article>
+              <article><span>当前流通现金</span><strong>¥1.28M</strong><small>124 名玩家</small></article>
+              <article><span>暂存区物品</span><strong>1,842</strong><small>05:00 自动出售</small></article>
+              <article><span>平均撤离率</span><strong>46.8%</strong><small class="down">↓ 2.1%</small></article>
+            </div>
+            <div class="admin-grid">
+              <article class="admin-card wide">
+                <div class="card-title"><div><span>LIVE MATCH</span><h2>当前战局</h2></div><button>全部战局</button></div>
+                <table><thead><tr><th>战局</th><th>状态</th><th>玩家</th><th>锁定</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>XP-0712-03</strong><small>西撇镇 · 夜间封锁区</small></td><td><span class="table-status preparing">整备中</span></td><td>18 / 24</td><td><b>15 / 18</b></td><td><button class="link-action">进入管理</button></td></tr>
+                  <tr><td><strong>XP-0712-02</strong><small>西撇镇 · 老街</small></td><td><span class="table-status live">进行中</span></td><td>24 / 24</td><td><b>24 / 24</b></td><td><button class="link-action">进入结算</button></td></tr>
+                </tbody></table>
+              </article>
+              <article class="admin-card economy">
+                <div class="card-title"><div><span>ECONOMY</span><h2>经济健康度</h2></div></div>
+                <div class="donut"><span><b>72</b><small>健康</small></span></div>
+                <ul><li><span>今日产出</span><b>¥182,400</b></li><li><span>今日消耗</span><b>¥165,820</b></li><li><span>净流入</span><b class="up">+10.0%</b></li></ul>
+              </article>
+            </div>
+          </section>
+
+          <section class="admin-view" data-admin-page="items">
+            <div class="page-heading"><div><span>ITEM CATALOG</span><h1>物品配置</h1><p>统一管理尺寸、稀有度、价格区间和展示素材</p></div><button class="admin-primary">＋ 新增物品</button></div>
+            <div class="toolbar-card"><input placeholder="搜索物品名称 / ID" /><select><option>全部稀有度</option></select><select><option>全部分类</option></select><button>查询</button></div>
+            <article class="admin-card table-card">
+              <table><thead><tr><th>物品</th><th>稀有度</th><th>分类</th><th>仓库尺寸</th><th>价格区间</th><th>今日价格</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr><td><div class="item-cell"><i class="loot-red">▣</i><span><b>机密情报箱</b><small>ITEM-00018</small></span></div></td><td><span class="rarity rarity-red">超凡</span></td><td>常规物品</td><td>2 × 2</td><td>¥7,200–9,600</td><td><b>¥8,860</b></td><td><button class="link-action">编辑</button><button class="danger-link">删除</button></td></tr>
+                <tr><td><div class="item-cell"><i class="loot-orange">⌖</i><span><b>热成像瞄具</b><small>ITEM-00027</small></span></div></td><td><span class="rarity rarity-orange">史诗</span></td><td>武器配件</td><td>1 × 2</td><td>¥4,000–5,200</td><td><b>¥4,600</b></td><td><button class="link-action">编辑</button><button class="danger-link">删除</button></td></tr>
+              </tbody></table>
+            </article>
+          </section>
+
+          <section class="admin-view" data-admin-page="season">
+            <div class="page-heading"><div><span>SEASON CONTROL</span><h1>赛季与规则</h1><p>同一时间仅允许一个启用赛季</p></div><button class="admin-primary">＋ 新建赛季</button></div>
+            <article class="season-admin-card"><div><span class="live-dot">进行中</span><h2>S01 · 雾港危机</h2><p>2026-07-01 — 2026-08-31</p></div><div><span>每击杀奖励</span><strong>¥ 300</strong></div><button>编辑规则</button></article>
+            <article class="admin-card"><div class="card-title"><div><span>SETTLEMENT RULE</span><h2>结算规则预览</h2></div></div><div class="rule-flow"><span>管理员录入撤离/击杀</span><i>→</i><span>系统计算击杀现金</span><i>→</i><span>物品进入暂存仓库</span><i>→</i><span>记录资产流水</span></div></article>
+          </section>
+
+          <section class="admin-view" data-admin-page="classes">
+            <div class="page-heading"><div><span>LOADOUT RULES</span><h1>职业与武器</h1><p>职业规则与武器资产分离配置，避免结算逻辑耦合</p></div><button class="admin-primary">＋ 新增职业</button></div>
+            <div class="class-grid">
+              <article><span>轻装</span><h2>跑刀仔</h2><p>仅可使用近战武器，不产生武器费用</p><dl><div><dt>生命值</dt><dd>100</dd></div><div><dt>维护费</dt><dd>¥0</dd></div></dl><button>编辑</button></article>
+              <article><span>经济</span><h2>拖鞋军</h2><p>低成本进入战局，可选普通武器</p><dl><div><dt>生命值</dt><dd>120</dd></div><div><dt>维护费</dt><dd>¥300</dd></div></dl><button>编辑</button></article>
+              <article><span>标准</span><h2>正规军</h2><p>标准战斗属性，可选全部普通武器</p><dl><div><dt>生命值</dt><dd>150</dd></div><div><dt>维护费</dt><dd>¥800</dd></div></dl><button>编辑</button></article>
+              <article><span>重型</span><h2>重装兵</h2><p>高生存、高维护成本，限制部分武器</p><dl><div><dt>生命值</dt><dd>200</dd></div><div><dt>维护费</dt><dd>¥1,500</dd></div></dl><button>编辑</button></article>
+            </div>
+          </section>
+
+          <section class="admin-view" data-admin-page="assets">
+            <div class="page-heading"><div><span>USER ASSETS</span><h1>用户资产</h1><p>资产调整必须记录原因、操作人和前后值</p></div><button class="admin-primary">物品入库</button></div>
+            <div class="toolbar-card"><input placeholder="呼号 / 用户名 / 手机号" /><button>查询用户</button></div>
+            <article class="user-asset-card"><div class="asset-profile"><i>夜</i><div><h2>夜枭</h2><p>用户 ID 128 · 正常</p></div></div><div><span>现金余额<strong>¥12,680</strong></span><span>个人仓库<strong>38 / 60</strong></span><span>暂存仓库<strong>74 / 360</strong></span><span>赛季撤离率<strong>62%</strong></span></div><button>调整资产</button></article>
+            <article class="admin-card"><div class="card-title"><div><span>AUDIT LOG</span><h2>最近资产流水</h2></div></div><table><thead><tr><th>时间</th><th>类型</th><th>变更</th><th>原因</th><th>操作人</th></tr></thead><tbody><tr><td>07-23 10:28</td><td>物品入库</td><td class="up">+ 加密芯片 ×2</td><td>活动补发</td><td>管理员 / 夜枭</td></tr><tr><td>07-22 05:00</td><td>自动出售</td><td class="up">+ ¥3,280</td><td>暂存区日结</td><td>系统任务</td></tr></tbody></table></article>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="loadoutDialog" class="loadout-dialog">
+    <form method="dialog">
+      <div class="dialog-head"><div><span>LOADOUT</span><h2>战前配装</h2></div><button value="cancel">×</button></div>
+      <label>选择小队<select><option>灰狐 2 队 · 3/4 人</option><option>灰狐 3 队 · 2/4 人</option></select></label>
+      <div class="choice-title"><span>职业</span><small>费用在战局开始时扣除</small></div>
+      <div class="choice-grid"><button type="button">跑刀仔<small>¥0</small></button><button type="button" class="selected">正规军<small>¥800</small></button><button type="button">重装兵<small>¥1,500</small></button></div>
+      <label>主武器<select><option>AK-105 · 普通武器 / ¥600</option><option>仓库特殊武器 · 耐久 3/5</option></select></label>
+      <div class="cost-summary"><span>预计扣除</span><strong>¥1,400</strong></div>
+      <p class="warning-copy">锁定后不可修改。特殊武器将在战局期间锁定；撤离失败时永久销毁。</p>
+      <button class="dialog-primary" value="confirm">保存并锁定配装</button>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -8,13 +8,17 @@ spring:
     loadbalancer:
       eager-load:
         enabled: true
-        clients: activity-center,escape-center,user-center,public-center
+        clients: activity-center,escape-center,user-center,public-center,training-center
     gateway:
       discovery:
         locator:
           enabled: true
           lower-case-service-id: true
       routes:
+        - id: training-center-h5
+          uri: lb://training-center
+          predicates:
+            - Path=/api/training/h5/**,/api/training/admin/**,/ws/training/**
         - id: activity-center-admin
           uri: lb://activity-center
           predicates:

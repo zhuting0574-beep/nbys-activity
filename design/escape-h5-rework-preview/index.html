@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>逃离西撇镇 H5 改版预览</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="review-toolbar">
+    <div>
+      <span>NBYS / H5 PROTOTYPE</span>
+      <strong>逃离西撇镇改版预览</strong>
+    </div>
+    <div class="role-preview" aria-label="权限身份预览">
+      <button class="active" data-role="creator">活动发起人</button>
+      <button data-role="superadmin">超级管理员</button>
+      <button data-role="member">普通队员</button>
+    </div>
+  </header>
+
+  <main class="preview-stage">
+    <aside class="review-copy">
+      <span class="review-index">PREVIEW 01</span>
+      <h1>把资产和对局放回玩家现场</h1>
+      <p>个人首页承接参考页中的档案、赛季统计和双仓库。战局管理从后管移到 H5，只在活动发起人或超级管理员身份下出现。</p>
+      <dl>
+        <div><dt>主页</dt><dd>档案、赛季、缓冲区、个人仓库</dd></div>
+        <div><dt>商店</dt><dd>分类筛选、库存、购买</dd></div>
+        <div><dt>对局</dt><dd>创建、整备、开局、最终结算</dd></div>
+      </dl>
+      <div class="permission-note"><i></i><span id="permissionCopy">当前以活动发起人身份预览，对局管理入口可见。</span></div>
+    </aside>
+
+    <section class="phone-frame" aria-label="逃离西撇镇 H5 页面预览">
+      <div class="app-shell">
+        <header class="app-header">
+          <button class="icon-button" type="button" title="返回活动首页" aria-label="返回活动首页">&#8592;</button>
+          <div><span>ESCAPE FROM XP</span><strong>逃离西撇镇</strong></div>
+          <div class="cash-balance"><small>甬士币</small><b>12,680</b></div>
+        </header>
+
+        <nav class="top-tabs" aria-label="逃离西撇镇页面导航">
+          <button class="active" data-view="profile">个人主页</button>
+          <button data-view="shop">商店</button>
+          <button data-view="matches" data-manager-tab>对局管理</button>
+        </nav>
+
+        <div class="app-content">
+          <section class="page-view active" data-page="profile">
+            <section class="profile-hero">
+              <div class="profile-overlay"></div>
+              <div class="profile-main">
+                <div class="avatar">夜</div>
+                <div><span>OPERATOR PROFILE</span><h2>夜枭</h2><p>YS-025 · 正式队员</p></div>
+              </div>
+              <div class="season-tag"><i></i>S02 暗潮</div>
+            </section>
+
+            <section class="profile-metrics" aria-label="个人数据">
+              <div><span>总对局</span><strong>18</strong></div>
+              <div><span>本季撤离</span><strong>8 / 13</strong></div>
+              <div><span>撤离率</span><strong>62%</strong></div>
+              <div><span>场均收益</span><strong>3,420</strong></div>
+            </section>
+
+            <section class="season-summary">
+              <header><div><span>SEASON REPORT</span><h2>本赛季统计</h2></div><button type="button">历史赛季</button></header>
+              <div class="season-progress"><i></i></div>
+              <div class="season-row"><span>S02 · 暗潮</span><small>剩余 18 天</small></div>
+              <div class="rarity-summary">
+                <span class="red"><b>2</b>超凡</span><span class="orange"><b>5</b>史诗</span><span class="purple"><b>11</b>精品</span><span class="blue"><b>24</b>普通</span>
+              </div>
+            </section>
+
+            <section class="warehouse-section">
+              <header class="section-heading">
+                <div><span>ASSET STORAGE</span><h2>我的仓库</h2></div>
+                <small>拖拽或点选后放置</small>
+              </header>
+
+              <section class="warehouse-zone buffer-zone">
+                <header><div><strong>缓冲区仓库</strong><span>16 × 48</span></div><small>每日 05:00 自动出售过夜物品</small></header>
+                <div class="storage-scroll buffer-scroll">
+                  <div class="storage-grid" data-storage="buffer" aria-label="缓冲区仓库 16 行 48 列"></div>
+                </div>
+                <footer><span>横向滑动查看完整仓库</span><b id="bufferUsage">0 / 768 格</b></footer>
+              </section>
+
+              <section class="warehouse-zone personal-zone">
+                <header><div><strong>个人仓库</strong><span>8 × 12</span></div><small>永久保存，不参与自动出售</small></header>
+                <div class="storage-scroll personal-scroll">
+                  <div class="storage-grid" data-storage="personal" aria-label="个人仓库 8 行 12 列"></div>
+                </div>
+                <footer><span>可拖回缓冲区</span><b id="personalUsage">0 / 96 格</b></footer>
+              </section>
+
+              <div class="selected-item">
+                <div><span id="selectedRarity">已选中 · 3 × 2</span><strong id="selectedItem">机密情报箱</strong></div>
+                <div><small>今日估值</small><b id="selectedPrice">&#165;8,860</b></div>
+                <button type="button" data-action="sell">出售</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="page-view" data-page="shop">
+            <section class="shop-banner">
+              <span>BLACK MARKET</span><h2>补给商店</h2><p>库存与价格每日 05:00 刷新</p>
+            </section>
+            <div class="filter-tabs" aria-label="商品分类">
+              <button class="active">全部</button><button>仓库扩容</button><button>装备</button><button>物资</button>
+            </div>
+            <div class="product-list">
+              <article>
+                <div class="product-art orange"><img src="./assets/item-orange.png" alt="热成像瞄具" /></div>
+                <div><span class="rarity-label orange">史诗</span><h3>热成像瞄具</h3><p>库存 2 · 购买后进入缓冲区</p></div>
+                <button type="button" data-action="buy">&#165;4,600</button>
+              </article>
+              <article>
+                <div class="product-art green"><span>+20</span></div>
+                <div><span class="rarity-label green">永久资产</span><h3>个人仓库扩容</h3><p>60 格升级至 80 格</p></div>
+                <button type="button" data-action="buy">&#165;8,000</button>
+              </article>
+              <article>
+                <div class="product-art purple"><span>SUP</span></div>
+                <div><span class="rarity-label purple">精品</span><h3>特制消音器</h3><p>库存 7 · 购买后进入缓冲区</p></div>
+                <button type="button" data-action="buy">&#165;2,280</button>
+              </article>
+              <article>
+                <div class="product-art blue"><span>MED</span></div>
+                <div><span class="rarity-label blue">普通</span><h3>战地医疗包</h3><p>库存 18 · 购买后进入缓冲区</p></div>
+                <button type="button" data-action="buy">&#165;780</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="page-view" data-page="matches">
+            <section class="manager-heading">
+              <div><span>FIELD OPERATIONS</span><h2>对局管理</h2><p id="managerIdentity">当前身份：活动发起人</p></div>
+              <button class="create-button" type="button" data-open="createMatch">&#65291; 创建</button>
+            </section>
+
+            <section class="manager-summary">
+              <div><span>整备中</span><strong>1</strong></div><div><span>进行中</span><strong>1</strong></div><div><span>待结算</span><strong>1</strong></div>
+            </section>
+
+            <div class="match-filter"><button class="active">全部</button><button>整备中</button><button>进行中</button><button>已结束</button></div>
+
+            <div class="managed-matches">
+              <article class="managed-match">
+                <header><div><span class="status preparing">整备中</span><small>XP-0822-01</small></div><button class="more-button" type="button" title="更多操作" aria-label="更多操作">&#8943;</button></header>
+                <h3>西撇镇 · 夜间封锁区</h3>
+                <p>08月22日 18:30 · 天宫庄园</p>
+                <div class="match-numbers"><span><b>6 / 8</b> 玩家</span><span><b>4 / 6</b> 已锁定</span><span><b>2</b> 小队</span></div>
+                <div class="lock-progress"><i style="width:66%"></i></div>
+                <div class="match-actions"><button type="button" data-open="controlMatch">查看整备</button><button class="primary" type="button" data-open="controlMatch">开始战局</button></div>
+              </article>
+
+              <article class="managed-match live">
+                <header><div><span class="status running">进行中</span><small>XP-0818-03</small></div><button class="more-button" type="button" title="更多操作" aria-label="更多操作">&#8943;</button></header>
+                <h3>西撇镇 · 水厂争夺</h3>
+                <p>08月18日 14:00 · 海鹰城训练场</p>
+                <div class="match-numbers"><span><b>12 / 12</b> 玩家</span><span><b>3</b> 小队</span><span><b>02:18</b> 已进行</span></div>
+                <div class="match-actions"><button type="button">查看成员</button><button class="warning" type="button" data-open="settleMatch">进入结算</button></div>
+              </article>
+
+              <article class="managed-match settled">
+                <header><div><span class="status finished">已结束</span><small>XP-0811-02</small></div></header>
+                <h3>西撇镇 · 老街撤离</h3><p>08月11日 13:30 · 迎春里</p>
+                <div class="match-numbers"><span><b>10</b> 玩家</span><span><b>6</b> 成功撤离</span><span><b>60%</b> 撤离率</span></div>
+                <div class="match-actions single"><button type="button">查看结算记录</button></div>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="createMatch" class="sheet-dialog">
+    <form method="dialog">
+      <header><div><span>NEW OPERATION</span><h2>创建战局</h2></div><button value="cancel" aria-label="关闭">&#215;</button></header>
+      <label><span>战局名称</span><input value="西撇镇 · 夜间封锁区" /></label>
+      <label><span>活动场地</span><select><option>天宫庄园</option><option>海鹰城训练场</option></select></label>
+      <div class="field-pair"><label><span>小队数量</span><input type="number" value="2" /></label><label><span>每队上限</span><input type="number" value="4" /></label></div>
+      <button class="dialog-primary" value="confirm" data-action="created">确认创建战局</button>
+    </form>
+  </dialog>
+
+  <dialog id="controlMatch" class="sheet-dialog">
+    <form method="dialog">
+      <header><div><span>PREPARATION</span><h2>战局整备</h2></div><button value="cancel" aria-label="关闭">&#215;</button></header>
+      <div class="control-state"><span>整备中</span><strong>4 / 6 已锁定</strong></div>
+      <div class="participant-list">
+        <div><span><b>夜枭</b><small>第 1 小队 · 正规军</small></span><em class="ready">已锁定</em></div>
+        <div><span><b>菜鸟</b><small>第 1 小队 · 跑刀仔</small></span><em class="ready">已锁定</em></div>
+        <div><span><b>白泽</b><small>第 2 小队 · 未完成配装</small></span><em>未锁定</em></div>
+      </div>
+      <p class="dialog-warning">仍有 2 名成员未锁定配装，暂时不能开始战局。</p>
+      <button class="dialog-primary" value="cancel" disabled>仍有成员未锁定</button>
+    </form>
+  </dialog>
+
+  <dialog id="settleMatch" class="sheet-dialog">
+    <form method="dialog">
+      <header><div><span>FINAL SETTLEMENT</span><h2>最终结算</h2></div><button value="cancel" aria-label="关闭">&#215;</button></header>
+      <div class="settlement-list">
+        <label><span><b>夜枭</b><small>第 1 小队</small></span><input type="checkbox" checked />成功撤离</label>
+        <label><span><b>菜鸟</b><small>第 1 小队</small></span><input type="checkbox" />成功撤离</label>
+      </div>
+      <label><span>结算说明</span><textarea rows="3" placeholder="填写本场结算说明"></textarea></label>
+      <p class="dialog-warning danger">最终结算不可撤销，将更新现金、物品和特殊武器状态。</p>
+      <button class="dialog-danger" value="confirm" data-action="settled">确认最终结算</button>
+    </form>
+  </dialog>
+
+  <div class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

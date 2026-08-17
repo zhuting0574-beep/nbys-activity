@@ -123,6 +123,7 @@
       </section>
 
       <EscapeAdmin v-if="active === 'escape'" :can="can" />
+      <TrainingAdmin v-if="active === 'training'" />
 
       <section v-if="active === 'activities'" class="card">
         <div class="toolbar">
@@ -699,6 +700,7 @@ import { api, setToken, token } from './api'
 import defaultActivityBanner from './assets/activity-default.jpg'
 import { compressImageFile, DEFAULT_MAX_BYTES } from './imageCompression'
 import EscapeAdmin from './escape/EscapeAdmin.vue'
+import TrainingAdmin from './training/TrainingAdmin.vue'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
@@ -783,7 +785,7 @@ const PlanForm = {
 }
 
 export default {
-  components: { ActivityForm, PlanForm, EscapeAdmin },
+  components: { ActivityForm, PlanForm, EscapeAdmin, TrainingAdmin },
   data() {
     const query = new URLSearchParams(location.search)
     return {
@@ -855,6 +857,7 @@ export default {
       const topItems = [
         { key: 'dashboard', name: '数据看板' },
         { key: 'escape', name: '逃离西撇镇', permission: 'escape:view' },
+        { key: 'training', name: '训练屋管理', permission: 'training:view' },
         { key: 'activities', name: '活动管理', permission: 'activity:view' },
         { key: 'venues', name: '场地管理', permission: 'venue:view' },
         { key: 'modes', name: '模式管理', permission: 'gameMode:view' },
@@ -1039,7 +1042,7 @@ export default {
       window.location.href = `${this.h5Base()}?returnTo=${encodeURIComponent(current)}#/app`
     },
     load() {
-      return ({ dashboard: this.loadDashboard, escape: () => Promise.resolve(), activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
+      return ({ dashboard: this.loadDashboard, escape: () => Promise.resolve(), training: () => Promise.resolve(), activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
     },
     loadSystem() {
       if (!this.systemMenus.some(item => item.key === this.systemActive)) {

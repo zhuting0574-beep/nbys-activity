@@ -27,7 +27,7 @@
 
       <template v-else-if="activeView === 'profile'">
         <section class="escape-profile-hero">
-          <img v-if="user.avatar_url" class="escape-profile-avatar" :src="user.avatar_url" :alt="`${summary.callsign || user.callsign || user.username || '用户'}头像`" />
+          <img v-if="user.avatar_url" class="escape-profile-avatar" :src="assetUrl(user.avatar_url)" :alt="`${summary.callsign || user.callsign || user.username || '用户'}头像`" />
           <div v-else class="escape-profile-avatar fallback">{{ shortName(summary.callsign || user.callsign || user.username) }}</div>
           <div><span>OPERATOR PROFILE</span><h2>{{ summary.callsign || user.callsign || user.username || '未设置呼号' }}</h2><p>{{ user.username || 'NBYS 正式队员' }}</p></div>
           <em v-if="summary.season">{{ summary.season.name }}</em>
@@ -109,7 +109,7 @@
         <EscapeState v-if="!products.length" type="empty" title="暂无在售商品" description="商品上架后会出现在这里" />
         <div v-else class="escape-products">
           <article v-for="product in products" :key="product.id">
-            <div :class="`rarity-${product.rarity || 'normal'}`"><img v-if="product.image_url" :src="product.image_url" :alt="product.name" /><span v-else>{{ itemSymbol(product) }}</span></div>
+            <div :class="`rarity-${product.rarity || 'normal'}`"><img v-if="product.image_url" :src="assetUrl(product.image_url)" :alt="product.name" /><span v-else>{{ itemSymbol(product) }}</span></div>
             <div><span class="escape-rarity">{{ product.category_label || rarityText(product.rarity) }}</span><h3>{{ product.name }}</h3><p>库存 {{ product.stock == null ? '不限' : product.stock }} · {{ product.product_type === 'expansion' ? '购买后立即生效' : '进入缓冲区' }}</p></div>
             <button type="button" :disabled="product.stock === 0 || purchasingId === product.id" @click="purchase(product)">{{ purchasingId === product.id ? '购买中…' : `¥${money(product.price)}` }}</button>
           </article>
@@ -215,6 +215,11 @@ export default {
   methods: {
     setState(view, patch) {
       this.states[view] = { ...this.states[view], ...patch }
+    },
+    assetUrl(url) {
+      const value = String(url || '')
+      if (!value || /^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('blob:')) return value
+      return value.startsWith('/uploads/') ? `http://8.160.183.48:575${value}` : value
     },
     async request(view, task) {
       this.setState(view, { loading: true, error: '' })

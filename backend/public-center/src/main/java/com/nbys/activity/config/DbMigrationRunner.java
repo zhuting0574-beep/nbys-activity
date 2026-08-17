@@ -64,6 +64,9 @@ public class DbMigrationRunner implements ApplicationRunner {
             runSqlResource("db/migration/V20260723__escape_from_xp_domain.sql");
             runSqlResource("db/migration/V20260810__escape_warehouse_dimensions.sql");
             runSqlResource("db/migration/V20260810__escape_match_item_stock.sql");
+            runSqlResource("db/migration/V20260812__training_room_mvp.sql");
+            addColumn("training_devices", "target_name", "varchar(40) DEFAULT NULL COMMENT '当前靶纸名称'", "name");
+            addColumn("training_devices", "owner_user_id", "bigint DEFAULT NULL COMMENT '最后登录的设备所属用户'", "calibration_status");
         } catch (Exception e) {
             throw new IllegalStateException("Escape from XP database migration failed", e);
         }

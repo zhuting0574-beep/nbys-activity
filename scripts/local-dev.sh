@@ -37,7 +37,7 @@ export EUREKA_INSTANCE_PREFER_IP_ADDRESS="${EUREKA_INSTANCE_PREFER_IP_ADDRESS:-f
 export AUTH_TOKEN_SECRET="${AUTH_TOKEN_SECRET:-nbys-local-development-secret}"
 export APOLLO_BOOTSTRAP_ENABLED="${APOLLO_BOOTSTRAP_ENABLED:-false}"
 
-services="h5-web admin-web api-gateway escape-center public-center user-center activity-center eureka-server"
+services="h5-web admin-web api-gateway training-center escape-center public-center user-center activity-center eureka-server"
 
 pid_file() { printf '%s/%s.pid' "$RUNTIME_DIR" "$1"; }
 log_file() { printf '%s/%s.log' "$RUNTIME_DIR" "$1"; }
@@ -135,6 +135,7 @@ start_all() {
   assert_port_free user-center 8082
   assert_port_free public-center 8083
   assert_port_free escape-center 8084
+  assert_port_free training-center 8085
   assert_port_free admin-web 5173
   assert_port_free h5-web 5174
   start_java eureka-server 8761 backend/eureka-server/target/eureka-server-0.1.0.jar
@@ -142,6 +143,7 @@ start_all() {
   start_java user-center 8082 backend/user-center/target/user-center-0.1.0.jar
   start_java public-center 8083 backend/public-center/target/public-center-0.1.0.jar
   start_java escape-center 8084 backend/escape-center/target/escape-center-0.1.0.jar
+  start_java training-center 8085 backend/training-center/target/training-center-0.1.0.jar
   start_java api-gateway 8080 backend/api-gateway/target/api-gateway-0.1.0.jar
   start_web admin-web 5173 admin-web
   start_web h5-web 5174 h5-web
@@ -160,7 +162,7 @@ stop_all() {
 
 status_all() {
   local spec name port pid source
-  for spec in "eureka-server:8761" "api-gateway:8080" "activity-center:8081" "user-center:8082" "public-center:8083" "escape-center:8084" "admin-web:5173" "h5-web:5174"; do
+  for spec in "eureka-server:8761" "api-gateway:8080" "activity-center:8081" "user-center:8082" "public-center:8083" "escape-center:8084" "training-center:8085" "admin-web:5173" "h5-web:5174"; do
     name="${spec%%:*}"
     port="${spec##*:}"
     pid="$(port_pid "$port")"

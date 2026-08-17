@@ -40,6 +40,7 @@ public class PermissionController {
         add(pages, "escape:weapon", "逃离-武器", "view,create,update,delete");
         add(pages, "escape:userAsset", "逃离-用户资产", "view,adjust");
         add(pages, "escape:itemGrant", "逃离-物品入库", "create");
+        add(pages, "training", "激光训练屋", "view,update,delete");
         return ApiResponse.ok(pages);
     }
 
@@ -51,6 +52,7 @@ public class PermissionController {
         role(roles, "activity_admin", "活动管理员");
         role(roles, "attendance_admin", "出勤管理员");
         role(roles, "escape_admin", "逃离西撇镇管理员");
+        role(roles, "training_admin", "训练屋管理员");
         role(roles, "superadmin", "超级管理员");
         return ApiResponse.ok(roles);
     }

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>NBYS 激光训练屋 UX 原型</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="review-bar">
+    <div class="review-brand"><span>NBYS / PRODUCT REVIEW 02</span><strong>激光训练屋 · 三端交互原型</strong></div>
+    <div class="review-controls">
+      <label>终端<select id="productPicker"><option value="h5">H5 会员端</option><option value="android">Android 靶机</option><option value="admin">Web 后管</option></select></label>
+      <label>页面<select id="screenPicker"></select></label>
+      <label>状态<select id="statePicker"></select></label>
+    </div>
+  </header>
+  <main class="review-stage">
+    <aside class="review-panel">
+      <span>REVIEW GATE / UX</span>
+      <h1 id="reviewTitle">正式队员的日常训练入口</h1>
+      <p id="reviewDescription">验证导航分流、房间流程、实时看板和完整成绩层级。</p>
+      <div class="review-facts" id="reviewFacts"></div>
+      <div class="safe-mode"><i></i><div><b>PROTOTYPE SAFE MODE</b><small>所有写操作仅在浏览器中模拟，不连接正式 API。</small></div></div>
+    </aside>
+    <section id="device" class="device h5-device"><div id="app"></div></section>
+  </main>
+  <dialog id="dialog"><div id="dialogBody"></div></dialog>
+  <div id="toast" class="toast"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

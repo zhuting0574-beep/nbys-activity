@@ -3,6 +3,10 @@
 node_modules/
 dist/
 target/
+**/target/
+**/.gradle/
+**/build/
+**/local.properties
 uploads/
 .env.local
 .DS_Store

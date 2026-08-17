@@ -1,0 +1,1 @@
+ALTER TABLE training_devices ADD COLUMN IF NOT EXISTS target_name VARCHAR(40) NULL;
