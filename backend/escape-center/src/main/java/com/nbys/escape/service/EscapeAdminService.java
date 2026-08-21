@@ -90,9 +90,10 @@ public class EscapeAdminService {
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("venues", Rows.list(jdbc, "select id,name,address from venues order by name,id"));
         result.put("seasons", Rows.list(jdbc, "select id,name,start_date,end_date from escape_seasons " +
+                "where enabled=1 and deleted_at is null and current_date between start_date and end_date " +
                 "order by start_date desc,id desc"));
-        result.put("items", Rows.list(jdbc, "select id,name,rarity,category,image_url,stock_quantity " +
-                "from escape_items where enabled=1 and deleted_at is null order by name,id"));
+        result.put("items", Rows.list(jdbc, "select id,name,rarity,category,weapon_type,image_url,stock_quantity,material_type " +
+                "from escape_items where enabled=1 and deleted_at is null and material_type='activity' order by name,id"));
         return result;
     }
 
@@ -102,10 +103,12 @@ public class EscapeAdminService {
                 "from escape_matches m left join venues v on v.id=m.venue_id " +
                 "left join escape_seasons s on s.id=m.season_id where m.id=?", matchId));
         result.put("participants", Rows.list(jdbc, "select p.*,coalesce(nullif(u.callsign,''),u.username) callsign," +
-                "pr.name profession_name,pr.maintenance_fee,w.name weapon_name,w.weapon_type,w.usage_fee " +
+                "pr.name profession_name,pr.maintenance_fee,case when w.weapon_type='special' then coalesce(si.name,w.name) else w.name end weapon_name,w.weapon_type,w.usage_fee " +
                 "from escape_match_participants p join users u on u.id=p.user_id " +
                 "left join escape_professions pr on pr.id=p.profession_id " +
-                "left join escape_weapons w on w.id=p.weapon_id where p.match_id=? order by p.team_no,p.id", matchId));
+                "left join escape_weapons w on w.id=p.weapon_id " +
+                "left join escape_inventory_instances inv on inv.id=p.special_inventory_id " +
+                "left join escape_items si on si.id=inv.item_id where p.match_id=? order by p.team_no,p.id", matchId));
         result.put("match_items", matchItems(matchId, false));
         Map<String, Object> settlement = Rows.one(jdbc, "select s.*,coalesce(nullif(u.callsign,''),u.username) settled_by_name " +
                 "from escape_match_settlements s left join users u on u.id=s.settled_by " +
@@ -124,6 +127,14 @@ public class EscapeAdminService {
     }
 
     @Transactional
+    public Map<String, Object> confirmSpecialWeapon(long matchId, long participantId, EscapeAccessService.UserContext actor) {
+        int changed = jdbc.update("update escape_match_participants p join escape_weapons w on w.id=p.weapon_id set p.special_weapon_confirmed=1,p.version=p.version+1 where p.id=? and p.match_id=? and w.weapon_type='special' and p.loadout_status='locked'", participantId, matchId);
+        if (changed != 1) throw new IllegalArgumentException("该成员不是待确认的特殊武器配装");
+        audit(actor, "escape:match", "confirm-special-weapon", "participant", participantId, Collections.emptyMap());
+        return match(matchId);
+    }
+
+    @Transactional
     public Map<String, Object> createMatch(Map<String, Object> body, EscapeAccessService.UserContext actor) {
         String name = text(body, "name", 100);
         int teamCount = atLeast(first(body, "team_count", "squad_count"), 2, "小队数量不能少于2个");
@@ -132,7 +143,8 @@ public class EscapeAdminService {
         Integer seasonId = nullableInt(body.get("season_id"));
         if (seasonId == null) throw new IllegalArgumentException("请选择赛季");
         if (venueId != null) requiredOne("select id from venues where id=?", venueId);
-        requiredOne("select id from escape_seasons where id=?", seasonId);
+        requiredOne("select id from escape_seasons where id=? and enabled=1 and deleted_at is null " +
+                "and current_date between start_date and end_date", seasonId);
         long id = insert("insert into escape_matches(season_id,name,venue_id,team_count,team_capacity,status,created_by) " +
                 "values(?,?,?,?,?,'preparing',?)", seasonId, name, venueId, teamCount, teamCapacity, actor.userId);
         replaceMatchItems(id, body.get("match_items"));
@@ -185,6 +197,27 @@ public class EscapeAdminService {
     }
 
     @Transactional
+    public int closeExpiredSeasonMatches() {
+        List<Map<String, Object>> matches = Rows.list(jdbc,
+                "select m.id from escape_matches m join escape_seasons s on s.id=m.season_id " +
+                        "where (s.end_date<current_date or s.enabled=0) and m.status in ('preparing','in_progress') for update");
+        for (Map<String, Object> match : matches) {
+            long matchId = ((Number) match.get("id")).longValue();
+            List<Map<String, Object>> participants = Rows.list(jdbc,
+                    "select special_inventory_id from escape_match_participants " +
+                            "where match_id=? and special_inventory_id is not null for update", matchId);
+            for (Map<String, Object> participant : participants) {
+                jdbc.update("update escape_inventory_instances set status='available',version=version+1 " +
+                                "where id=? and status in ('loadout_locked','in_match')",
+                        participant.get("special_inventory_id"));
+            }
+            returnUnusedMatchItems(matchId);
+            jdbc.update("update escape_matches set status='cancelled',version=version+1 where id=?", matchId);
+        }
+        return matches.size();
+    }
+
+    @Transactional
     public void deleteCancelledMatch(long matchId, EscapeAccessService.UserContext actor) {
         Map<String, Object> match = requiredOne("select status from escape_matches where id=? for update", matchId);
         if (!"cancelled".equals(String.valueOf(match.get("status")))) {
@@ -228,6 +261,7 @@ public class EscapeAdminService {
         if (total == null || total.intValue() != participants.size()) throw new IllegalArgumentException("存在无效兵种或武器配置");
         for (Map<String, Object> p : participants) {
             if (!"locked".equals(String.valueOf(p.get("loadout_status")))) throw new IllegalArgumentException("仍有成员未锁定配装");
+            if ("special".equals(String.valueOf(p.get("weapon_type"))) && !truthy(p.get("special_weapon_confirmed"))) throw new IllegalArgumentException("存在特殊武器尚未确认，无法开始战局");
             int userId = number(p.get("user_id"));
             ensureAsset(userId);
             BigDecimal fee = decimal(p.get("maintenance_fee")).add(decimal(p.get("usage_fee")));
@@ -276,9 +310,13 @@ public class EscapeAdminService {
         Map<String, Object> match = requiredOne("select * from escape_matches where id=? for update", matchId);
         if (!"in_progress".equals(String.valueOf(match.get("status")))) throw new IllegalArgumentException("只有进行中的战局可以结算");
         List<Map<String, Object>> participants = Rows.list(jdbc, "select p.*,coalesce(nullif(u.callsign,''),u.username) callsign_snapshot," +
-                "pr.name profession_name_snapshot,pr.maintenance_fee,w.name weapon_name_snapshot,w.weapon_type," +
-                "w.durability_loss_percent from escape_match_participants p join users u on u.id=p.user_id " +
+                "pr.name profession_name_snapshot,pr.maintenance_fee," +
+                "case when w.weapon_type='special' then si.name else w.name end weapon_name_snapshot,w.weapon_type," +
+                "coalesce(si.durability_loss_percent,0) durability_loss_percent " +
+                "from escape_match_participants p join users u on u.id=p.user_id " +
                 "join escape_professions pr on pr.id=p.profession_id join escape_weapons w on w.id=p.weapon_id " +
+                "left join escape_inventory_instances sinv on sinv.id=p.special_inventory_id " +
+                "left join escape_items si on si.id=sinv.item_id " +
                 "where p.match_id=? order by p.id for update", matchId);
         List<Map<String, Object>> inputs = maps(body.get("participants"), "participants不能为空");
         Map<Long, Map<String, Object>> byParticipant = indexSettlementInputs(inputs);
@@ -355,17 +393,27 @@ public class EscapeAdminService {
         List<Object> args = new ArrayList<Object>();
         if (!blank(keyword)) {
             String value = "%" + keyword.trim() + "%";
-            conditions.add("(cast(" + alias + "id as char) like ? or " + alias + "name like ?)");
-            args.add(value);
-            args.add(value);
+            if ("weapons".equals(type)) {
+                conditions.add("(case weapon_type when 'knife' then '近战武器' when 'regular' then '普通武器' when 'special' then '特殊武器' else '' end like ?)");
+                args.add(value);
+            } else {
+                conditions.add("(cast(" + alias + "id as char) like ? or " + alias + "name like ?)");
+                args.add(value);
+                args.add(value);
+            }
         }
         if ("items".equals(type) && !blank(rarity)) {
             conditions.add("rarity=?");
             args.add(normalizeRarityFilter(rarity));
         }
+        if ("seasons".equals(type)) conditions.add("deleted_at is null");
+        if ("weapons".equals(type)) {
+            conditions.add("item_id is null");
+            conditions.add("id=(select min(canonical.id) from escape_weapons canonical where canonical.item_id is null and canonical.weapon_type=escape_weapons.weapon_type)");
+        }
         String where = conditions.isEmpty() ? "" : " where " + String.join(" and ", conditions);
         if ("products".equals(type)) {
-            return decorate(type, Rows.list(jdbc, "select p.*,i.name item_name,i.current_price item_current_price," +
+            return decorate(type, Rows.list(jdbc, "select p.*,i.name item_name,i.current_price item_current_price,i.weapon_type item_weapon_type," +
                     "i.stock_quantity item_stock_quantity,i.enabled item_enabled,i.deleted_at item_deleted_at " +
                     "from escape_shop_products p left join escape_items i on i.id=p.item_id" + where +
                     " order by p.id desc", args.toArray()));
@@ -390,7 +438,7 @@ public class EscapeAdminService {
         if (!normalized.isEmpty() && !Arrays.asList("regular", "weapon").contains(normalized)) {
             throw new IllegalArgumentException("物品分类无效");
         }
-        StringBuilder sql = new StringBuilder("select * from escape_items where ");
+        StringBuilder sql = new StringBuilder("select * from escape_items where material_type='product' and ");
         List<Object> args = new ArrayList<Object>();
         if (normalized.isEmpty()) {
             sql.append("1=1");
@@ -476,6 +524,9 @@ public class EscapeAdminService {
             if (!expectedCategory.equals(String.valueOf(item.get("category")))) {
                 throw new IllegalArgumentException("关联物品分类与商品类型不匹配");
             }
+            if ("weapon".equals(type) && item.get("weapon_type") == null) {
+                throw new IllegalArgumentException("关联武器物品缺少武器分类");
+            }
             int itemStock = number(item.get("stock_quantity"));
             int stock = nonNegative(input.get("stock"), "商品库存不能为负");
             if (stock > itemStock) throw new IllegalArgumentException("商品库存不能超过物品配置数量");
@@ -503,6 +554,7 @@ public class EscapeAdminService {
             itemBody.put("name", text(input, "name", 100));
             itemBody.put("rarity", rarity);
             itemBody.put("category", "weapon".equals(type) ? "weapon" : "regular");
+            if ("weapon".equals(type)) itemBody.put("weapon_type", input.get("weapon_type"));
             itemBody.put("min_price", price); itemBody.put("max_price", price); itemBody.put("current_price", price);
             itemBody.put("width", width); itemBody.put("height", height); itemBody.put("stock_quantity", stock);
             itemBody.put("image_url", input.get("item_image_url")); itemBody.put("enabled", true);
@@ -552,6 +604,8 @@ public class EscapeAdminService {
         if ("items".equals(type)) {
             jdbc.update("update escape_items set enabled=0,deleted_at=coalesce(deleted_at,now()),version=version+1 where id=?", id);
             jdbc.update("update escape_shop_products set enabled=0,version=version+1 where item_id=?", id);
+        } else if ("seasons".equals(type)) {
+            jdbc.update("update escape_seasons set enabled=0,deleted_at=coalesce(deleted_at,now()),version=version+1 where id=?", id);
         } else {
             jdbc.update("update " + c.table + " set enabled=0" + (c.versioned ? ",version=version+1" : "") + " where id=?", id);
         }
@@ -572,7 +626,7 @@ public class EscapeAdminService {
 
     @Transactional
     public Map<String, Object> enableSeason(long id, EscapeAccessService.UserContext actor) {
-        requiredOne("select id from escape_seasons where id=? for update", id);
+        requiredOne("select id from escape_seasons where id=? and deleted_at is null for update", id);
         jdbc.update("update escape_seasons set enabled=0,version=version+1 where enabled=1 and id<>?", id);
         jdbc.update("update escape_seasons set enabled=1,version=version+1 where id=?", id);
         audit(actor, "escape:config", "enable", "seasons", id, Collections.emptyMap());
@@ -702,7 +756,7 @@ public class EscapeAdminService {
     }
 
     private List<Map<String, Object>> matchItems(long matchId, boolean lock) {
-        return Rows.list(jdbc, "select mi.id,mi.match_id,mi.item_id,i.name,i.rarity,i.category,i.image_url," +
+        return Rows.list(jdbc, "select mi.id,mi.match_id,mi.item_id,i.name,i.rarity,i.category,i.material_type,i.image_url," +
                 "i.stock_quantity,mi.allocated_quantity,mi.consumed_quantity,mi.returned_quantity," +
                 "(mi.allocated_quantity-mi.consumed_quantity-mi.returned_quantity) remaining_quantity " +
                 "from escape_match_items mi join escape_items i on i.id=mi.item_id where mi.match_id=? " +
@@ -724,19 +778,14 @@ public class EscapeAdminService {
         itemIds.addAll(existing.keySet());
         itemIds.addAll(requested.keySet());
         for (Integer itemId : itemIds) {
-            Map<String, Object> item = requiredOne("select id,name,stock_quantity,enabled,deleted_at " +
+            Map<String, Object> item = requiredOne("select id,name,stock_quantity,enabled,deleted_at,material_type " +
                     "from escape_items where id=? for update", itemId);
             int oldQuantity = existing.containsKey(itemId) ? existing.get(itemId) : 0;
             int newQuantity = requested.containsKey(itemId) ? requested.get(itemId) : 0;
-            int available = number(item.get("stock_quantity")) + oldQuantity;
+            if (!"activity".equals(String.valueOf(item.get("material_type")))) throw new IllegalArgumentException("物品“" + item.get("name") + "”不是活动物资，不能放入对局");
             if (newQuantity > oldQuantity && (!bool(item.get("enabled")) || item.get("deleted_at") != null)) {
                 throw new IllegalArgumentException("物品“" + item.get("name") + "”已停用，不能增加数量");
             }
-            if (newQuantity > available) {
-                throw new IllegalArgumentException("物品“" + item.get("name") + "”库存不足，当前可用 " + available);
-            }
-            jdbc.update("update escape_items set stock_quantity=?,version=version+1 where id=?",
-                    available - newQuantity, itemId);
         }
         jdbc.update("delete from escape_match_items where match_id=?", matchId);
         for (Map.Entry<Integer, Integer> item : requested.entrySet()) {
@@ -752,9 +801,6 @@ public class EscapeAdminService {
                     number(row.get("consumed_quantity")), number(row.get("returned_quantity")));
             if (remaining <= 0) continue;
             int itemId = number(row.get("item_id"));
-            requiredOne("select id from escape_items where id=? for update", itemId);
-            jdbc.update("update escape_items set stock_quantity=stock_quantity+?,version=version+1 where id=?",
-                    remaining, itemId);
             jdbc.update("update escape_match_items set returned_quantity=returned_quantity+?,updated_at=now() " +
                     "where match_id=? and item_id=?", remaining, matchId, itemId);
         }
@@ -916,13 +962,35 @@ public class EscapeAdminService {
         normalizeCatalogInput(type, body);
         if (!partial || body.containsKey("name")) text(body, "name", 100);
         if ("items".equals(type)) {
+            if (!partial || body.containsKey("material_type")) oneOf(body.get("material_type"), "物资类型无效", "activity", "product");
+            String materialType = String.valueOf(body.get("material_type"));
+            if (partial && !body.containsKey("material_type")) materialType = null;
             if (!partial || body.containsKey("rarity")) oneOf(body.get("rarity"), "物品品质无效",
                     "extraordinary", "epic", "fine", "normal");
             if (!partial || body.containsKey("category")) oneOf(body.get("category"), "物品分类无效", "regular", "weapon");
-            validatePriceRange(body, partial);
+            if (body.containsKey("weapon_type")) oneOf(body.get("weapon_type"), "武器分类无效", "knife", "regular", "special");
+            if (!partial && "weapon".equals(String.valueOf(body.get("category"))) && !body.containsKey("weapon_type")) {
+                throw new IllegalArgumentException("请选择武器分类");
+            }
+            if ("regular".equals(String.valueOf(body.get("category")))) body.put("weapon_type", null);
+            if (body.containsKey("durability_loss_percent") && body.get("durability_loss_percent") != null) {
+                int loss = nonNegative(body.get("durability_loss_percent"), "耐久损耗不能为负");
+                if (loss > 100) throw new IllegalArgumentException("耐久损耗不能超过100%");
+            }
+            if (!partial && "special".equals(String.valueOf(body.get("weapon_type")))
+                    && !body.containsKey("durability_loss_percent")) {
+                throw new IllegalArgumentException("请配置每局耐久损耗");
+            }
+            if (body.containsKey("weapon_type") && !"special".equals(String.valueOf(body.get("weapon_type")))) {
+                body.put("durability_loss_percent", null);
+            }
+            if ("activity".equals(materialType)) {
+                body.put("min_price", BigDecimal.ZERO); body.put("max_price", BigDecimal.ZERO);
+                body.put("current_price", BigDecimal.ZERO); body.put("stock_quantity", 0);
+            } else if (!partial || "product".equals(materialType)) validatePriceRange(body, partial);
             if (!partial || body.containsKey("width")) positive(body.get("width"), "物品宽度无效");
             if (!partial || body.containsKey("height")) positive(body.get("height"), "物品高度无效");
-            if (!partial || body.containsKey("stock_quantity")) nonNegative(body.get("stock_quantity"), "物品数量不能为负");
+            if (!"activity".equals(materialType) && (!partial || body.containsKey("stock_quantity"))) nonNegative(body.get("stock_quantity"), "物品数量不能为负");
         } else if ("products".equals(type)) {
             if (!partial || body.containsKey("product_type")) oneOf(body.get("product_type"), "商品类型无效",
                     "expansion", "regular", "weapon");
@@ -959,7 +1027,7 @@ public class EscapeAdminService {
     private Catalog catalogDef(String type) {
         if (!CATALOGS.contains(type)) throw new IllegalArgumentException("后台资源类型无效");
         if ("items".equals(type)) return new Catalog("escape_items", true,
-                "name", "rarity", "category", "min_price", "max_price", "current_price", "previous_price",
+                "name", "rarity", "category", "material_type", "weapon_type", "durability_loss_percent", "min_price", "max_price", "current_price", "previous_price",
                 "width", "height", "image_url", "stock_quantity", "enabled");
         if ("products".equals(type)) return new Catalog("escape_shop_products", true,
                 "name", "product_type", "item_id", "price", "stock", "warehouse_width", "warehouse_height",
@@ -1144,6 +1212,12 @@ public class EscapeAdminService {
 
     private int number(Object value) {
         return ((Number) value).intValue();
+    }
+
+    private boolean truthy(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) return ((Number) value).intValue() != 0;
+        return "true".equalsIgnoreCase(String.valueOf(value)) || "1".equals(String.valueOf(value));
     }
 
     private Integer nullableInt(Object value) {

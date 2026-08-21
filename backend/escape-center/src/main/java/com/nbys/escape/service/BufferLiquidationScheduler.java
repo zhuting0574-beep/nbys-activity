@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -17,12 +18,15 @@ public class BufferLiquidationScheduler {
     private final JdbcTemplate jdbc;
     private final BufferLiquidationWorker worker;
     private final EscapePriceRefreshWorker priceRefreshWorker;
+    private final EscapeShopStockWorker shopStockWorker;
 
     public BufferLiquidationScheduler(JdbcTemplate jdbc, BufferLiquidationWorker worker,
-                                      EscapePriceRefreshWorker priceRefreshWorker) {
+                                      EscapePriceRefreshWorker priceRefreshWorker,
+                                      EscapeShopStockWorker shopStockWorker) {
         this.jdbc = jdbc;
         this.worker = worker;
         this.priceRefreshWorker = priceRefreshWorker;
+        this.shopStockWorker = shopStockWorker;
     }
 
     /**
@@ -35,12 +39,25 @@ public class BufferLiquidationScheduler {
                         "where warehouse_type='buffer' and status='available' order by user_id");
         String businessDate = LocalDate.now().toString();
         priceRefreshWorker.refresh(businessDate);
+        shopStockWorker.plan(LocalDate.parse(businessDate));
         for (Map<String, Object> row : users) {
             int userId = ((Number) row.get("user_id")).intValue();
             try {
                 worker.liquidate(userId, businessDate);
             } catch (RuntimeException e) {
                 log.error("缓冲区自动出售失败，userId={}, businessDate={}", userId, businessDate, e);
+            }
+        }
+    }
+
+    /** 每分钟执行已到时间的随机上架任务，同时覆盖服务重启后的补执行。 */
+    @Scheduled(cron = "15 * * * * *", zone = "Asia/Shanghai")
+    public void replenishShopStock() {
+        for (LocalDate businessDate : shopStockWorker.dueTasks(LocalDateTime.now())) {
+            try {
+                shopStockWorker.execute(businessDate);
+            } catch (RuntimeException e) {
+                log.error("商店随机上架失败，businessDate={}", businessDate, e);
             }
         }
     }

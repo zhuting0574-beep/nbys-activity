@@ -133,8 +133,8 @@ public class AdminActivityController {
         String location = activityLocation(body, venueId);
         String bannerUrl = activityBanner(body, venueId);
         String bannerSource = activityBannerSource(body);
-        jdbc.update("update activities set name=?, banner_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, attendance_enabled=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
-                body.get("name"), bannerUrl, bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
+        jdbc.update("update activities set name=?, banner_url=?, external_miniapp_qr_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, attendance_enabled=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
+                body.get("name"), bannerUrl, body.get("external_miniapp_qr_url"), bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
                 checkinMethods(body.get("checkin_methods")), checkinOpenValue(body.get("checkin_open_value")), checkinOpenUnit(body.get("checkin_open_unit")),
                 num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
                 Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), attendanceEnabled(body), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
@@ -486,31 +486,32 @@ public class AdminActivityController {
         String bannerSource = activityBannerSource(body);
         Map<String, String> organizers = organizers(body.get("organizer_ids"), userId);
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,checkin_open_value,checkin_open_unit,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activities(record_type,name,banner_url,external_miniapp_qr_url,banner_source,activity_type,start_at,end_at,location,venue_id,checkin_methods,checkin_open_value,checkin_open_unit,open_min,camp_count,camp_limit,squad_count,squad_limit,allowed_jobs,game_modes,attendance_enabled,activity_region,visibility_type,invitee_ids,list_locked,created_by_id,organizer_ids,created_at) values('activity',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, bannerUrl);
-            ps.setObject(3, bannerSource);
-            ps.setObject(4, body.get("activity_type"));
-            ps.setObject(5, body.get("start_at"));
-            ps.setObject(6, body.get("end_at"));
-            ps.setObject(7, location);
-            ps.setObject(8, venueId);
-            ps.setObject(9, checkinMethods(body.get("checkin_methods")));
-            ps.setObject(10, checkinOpenValue(body.get("checkin_open_value")));
-            ps.setObject(11, checkinOpenUnit(body.get("checkin_open_unit")));
-            ps.setObject(12, num(body.get("open_min"), 0));
-            ps.setObject(13, num(body.get("camp_count"), 2));
-            ps.setObject(14, num(body.get("camp_limit"), 0));
-            ps.setObject(15, num(body.get("squad_count"), 1));
-            ps.setObject(16, num(body.get("squad_limit"), 0));
-            ps.setObject(17, Rows.joinValue(body.get("allowed_jobs")));
-            ps.setObject(18, Rows.joinValue(body.get("game_modes")));
-            ps.setObject(19, attendanceEnabled(body));
-            ps.setObject(20, body.get("activity_region"));
-            ps.setObject(21, body.get("visibility_type"));
-            ps.setObject(22, Rows.joinValue(body.get("invitee_ids")));
-            ps.setObject(23, userId);
-            ps.setObject(24, organizers.get("ids"));
+            ps.setObject(3, body.get("external_miniapp_qr_url"));
+            ps.setObject(4, bannerSource);
+            ps.setObject(5, body.get("activity_type"));
+            ps.setObject(6, body.get("start_at"));
+            ps.setObject(7, body.get("end_at"));
+            ps.setObject(8, location);
+            ps.setObject(9, venueId);
+            ps.setObject(10, checkinMethods(body.get("checkin_methods")));
+            ps.setObject(11, checkinOpenValue(body.get("checkin_open_value")));
+            ps.setObject(12, checkinOpenUnit(body.get("checkin_open_unit")));
+            ps.setObject(13, num(body.get("open_min"), 0));
+            ps.setObject(14, num(body.get("camp_count"), 2));
+            ps.setObject(15, num(body.get("camp_limit"), 0));
+            ps.setObject(16, num(body.get("squad_count"), 1));
+            ps.setObject(17, num(body.get("squad_limit"), 0));
+            ps.setObject(18, Rows.joinValue(body.get("allowed_jobs")));
+            ps.setObject(19, Rows.joinValue(body.get("game_modes")));
+            ps.setObject(20, attendanceEnabled(body));
+            ps.setObject(21, body.get("activity_region"));
+            ps.setObject(22, body.get("visibility_type"));
+            ps.setObject(23, Rows.joinValue(body.get("invitee_ids")));
+            ps.setObject(24, userId);
+            ps.setObject(25, organizers.get("ids"));
             return ps;
         }, kh);
         return kh.getKey().intValue();

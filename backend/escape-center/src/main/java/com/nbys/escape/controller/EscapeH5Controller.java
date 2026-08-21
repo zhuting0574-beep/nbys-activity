@@ -135,6 +135,12 @@ public class EscapeH5Controller {
                 matchId, idempotencyKey(idempotencyKey), actor));
     }
 
+    @PostMapping("/matches/{matchId}/participants/{participantId}/special-weapon-confirm")
+    public ApiResponse<Map<String, Object>> confirmSpecialWeapon(@PathVariable long matchId, @PathVariable long participantId, HttpServletRequest request) {
+        EscapeAccessService.UserContext actor = access.requireMatchController(request, matchId);
+        return ApiResponse.ok(adminService.confirmSpecialWeapon(matchId, participantId, actor));
+    }
+
     @GetMapping("/matches/{matchId}/control/settlement")
     public ApiResponse<Map<String, Object>> settlement(@PathVariable long matchId,
                                                        HttpServletRequest request) {

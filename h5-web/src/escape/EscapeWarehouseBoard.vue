@@ -46,6 +46,7 @@
             @pointermove="moveDrag"
             @pointerup="endDrag"
             @pointercancel="cancelDrag"
+            @dblclick.stop="moveBufferItem(item, type)"
           >
             <img v-if="item.image_url" :src="item.image_url" alt="" draggable="false" />
             <b v-else>{{ symbol(item) }}</b>
@@ -161,10 +162,27 @@ export default {
     usage(type) {
       return this.warehouse(type).items.reduce((sum, item) => sum + Number(item.width || 1) * Number(item.height || 1), 0)
     },
+    moveBufferItem(item, sourceWarehouse) {
+      if (sourceWarehouse !== 'buffer' || this.moving || item.status !== 'available') return
+      const target = this.warehouse('personal')
+      const width = Number(item.width || 1)
+      const height = Number(item.height || 1)
+      for (let y = 0; y <= Number(target.height || 0) - height; y += 1) {
+        for (let x = 0; x <= Number(target.width || 0) - width; x += 1) {
+          if (this.canPlace(item, 'personal', x, y)) {
+            this.$emit('move', { item, targetWarehouse: 'personal', posX: x, posY: y })
+            return
+          }
+        }
+      }
+      this.$emit('invalid', '个人仓库没有足够的连续空间')
+    },
     beginDrag(event, item, type) {
       this.selectedId = item.inventory_id
       if (this.moving || item.status !== 'available') return
       const rect = event.currentTarget.getBoundingClientRect()
+      const itemWidth = Math.max(1, Number(item.width || 1))
+      const itemHeight = Math.max(1, Number(item.height || 1))
       event.currentTarget.setPointerCapture?.(event.pointerId)
       this.pointer = {
         item,
@@ -176,6 +194,8 @@ export default {
         clientY: event.clientY,
         width: rect.width,
         height: rect.height,
+        anchorX: Math.min(itemWidth - 1, Math.floor((event.clientX - rect.left) / (rect.width / itemWidth))),
+        anchorY: Math.min(itemHeight - 1, Math.floor((event.clientY - rect.top) / (rect.height / itemHeight))),
         dragging: false
       }
     },
@@ -215,19 +235,19 @@ export default {
         return
       }
       const warehouse = grid.dataset.warehouse
-      const position = this.gridPosition(grid, warehouse, event.clientX, event.clientY)
+      const position = this.gridPosition(grid, warehouse, event.clientX, event.clientY, this.pointer?.anchorX || 0, this.pointer?.anchorY || 0)
       this.preview = {
         warehouse,
         ...position,
         valid: this.canPlace(this.pointer.item, warehouse, position.posX, position.posY)
       }
     },
-    gridPosition(grid, type, clientX, clientY) {
+    gridPosition(grid, type, clientX, clientY, anchorX = 0, anchorY = 0) {
       const rect = grid.getBoundingClientRect()
       const data = this.warehouse(type)
       return {
-        posX: Math.floor((clientX - rect.left) / (rect.width / Number(data.width || 1))),
-        posY: Math.floor((clientY - rect.top) / (rect.height / Number(data.height || 1)))
+        posX: Math.floor((clientX - rect.left) / (rect.width / Number(data.width || 1))) - anchorX,
+        posY: Math.floor((clientY - rect.top) / (rect.height / Number(data.height || 1))) - anchorY
       }
     },
     canPlace(item, type, posX, posY) {

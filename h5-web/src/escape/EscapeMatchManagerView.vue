@@ -66,11 +66,19 @@
           </div>
           <section class="escape-detail-section">
             <header><div><span>OPERATORS</span><h3>参与人员</h3></div><small>{{ details.data.participants?.length || 0 }} 人</small></header>
-            <div v-if="details.data.participants?.length" class="escape-detail-participants">
-              <article v-for="participant in details.data.participants" :key="participant.id">
-                <div><strong>{{ participant.callsign }}</strong><small>第 {{ participant.team_no || '-' }} 小队 · {{ participant.profession_name || '未选职业' }}</small></div>
-                <span v-if="details.data.match?.status === 'preparing'" :class="{ ready: participant.loadout_status === 'locked' }">{{ participant.loadout_status === 'locked' ? '已锁定' : '未锁定' }}</span>
-              </article>
+            <div v-if="details.data.participants?.length" class="escape-detail-teams">
+              <section v-for="team in detailTeams" :key="team.id" class="escape-detail-team">
+                <header><strong>{{ team.name }}</strong><small>{{ team.members.length }} 人</small></header>
+                <div class="escape-detail-participants">
+                  <article v-for="participant in team.members" :key="participant.id">
+                    <div>
+                      <strong>{{ participant.callsign }}</strong>
+                      <small>{{ participant.profession_name || '未选职业' }} · {{ participant.weapon_name || '未选武器' }}</small>
+                    </div>
+                    <span v-if="details.data.match?.status === 'preparing'" :class="{ ready: participant.loadout_status === 'locked' }">{{ participant.loadout_status === 'locked' ? '已锁定' : '未锁定' }}</span>
+                  </article>
+                </div>
+              </section>
             </div>
             <p v-else class="escape-detail-empty">暂无参与人员</p>
           </section>
@@ -119,7 +127,7 @@
                 :key="item.id"
                 :value="item.id"
                 :disabled="itemSelectedElsewhere(item.id, index)"
-              >{{ item.name }}（可用 {{ itemAvailable(item, row) }}）</option>
+              >{{ item.name }}（可用 {{ item.material_type === 'activity' ? '不限量' : itemAvailable(item, row) }}）</option>
             </select>
             <input v-model.number="row.quantity" type="number" min="1" :max="selectedItemAvailable(row)" inputmode="numeric" aria-label="带入数量" required />
             <button type="button" aria-label="移除物品" title="移除物品" @click="removeMatchItem(index)">×</button>
@@ -140,8 +148,21 @@
       @close="control.open = false"
       @retry="loadControl"
       @start="startMatch"
+      @confirm-special="confirmSpecialWeapon"
       @settle="settleMatch"
     />
+    <div v-if="confirmDialog.open" class="escape-modal escape-manager-confirm">
+      <button class="escape-modal-backdrop" type="button" aria-label="取消" @click="resolveConfirm(false)"></button>
+      <section class="escape-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="manager-confirm-title">
+        <span class="escape-confirm-kicker">OPERATION CONFIRM</span>
+        <h3 id="manager-confirm-title">{{ confirmDialog.title }}</h3>
+        <p>{{ confirmDialog.message }}</p>
+        <div class="escape-confirm-actions">
+          <button type="button" class="escape-confirm-cancel" @click="resolveConfirm(false)">取消</button>
+          <button type="button" :class="confirmDialog.danger ? 'escape-confirm-danger' : 'escape-primary'" @click="resolveConfirm(true)">{{ confirmDialog.confirmLabel }}</button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -175,7 +196,8 @@ export default {
       ],
       editor: emptyEditor(),
       details: { open: false, loading: false, error: '', match: null, data: {} },
-      control: { open: false, loading: false, saving: false, error: '', submitError: '', match: null, data: {} }
+      control: { open: false, loading: false, saving: false, error: '', submitError: '', match: null, data: {} },
+      confirmDialog: { open: false, title: '', message: '', confirmLabel: '确认', danger: false, resolve: null }
     }
   },
   computed: {
@@ -183,6 +205,17 @@ export default {
       if (this.filter === 'all') return this.matches
       if (this.filter === 'settled') return this.matches.filter(item => ['settled', 'cancelled'].includes(item.status))
       return this.matches.filter(item => item.status === this.filter)
+    },
+    detailTeams() {
+      const participants = this.details.data?.participants || []
+      const teamCount = Number(this.details.data?.match?.team_count || 0)
+      const teams = Array.from({ length: teamCount }, (_, index) => ({ id: index + 1, name: `第 ${index + 1} 小队`, members: [] }))
+      const unassigned = { id: 'unassigned', name: '未分配', members: [] }
+      participants.forEach(participant => {
+        const team = teams.find(item => Number(item.id) === Number(participant.team_no))
+        ;(team || unassigned).members.push(participant)
+      })
+      return teams.concat(unassigned.members.length ? [unassigned] : [])
     }
   },
   mounted() {
@@ -270,7 +303,7 @@ export default {
         }))
         for (const item of rows) {
           if (!this.options.items.some(option => Number(option.id) === Number(item.item_id))) {
-            this.options.items.push({ id: item.item_id, name: item.name, stock_quantity: item.stock_quantity || 0 })
+            this.options.items.push({ id: item.item_id, name: item.name, stock_quantity: item.stock_quantity || 0, material_type: item.material_type || 'activity' })
           }
         }
       } catch (error) {
@@ -293,7 +326,7 @@ export default {
     },
     selectedItemAvailable(row) {
       const item = this.options.items.find(option => Number(option.id) === Number(row.item_id))
-      return item ? Math.max(0, this.itemAvailable(item, row)) : 0
+      return item?.material_type === 'activity' ? 999999 : item ? Math.max(0, this.itemAvailable(item, row)) : 0
     },
     async saveMatch() {
       this.editor.error = ''
@@ -303,7 +336,7 @@ export default {
       }
       const invalidItem = this.editor.match_items.find(row => !row.item_id || Number(row.quantity) < 1 || Number(row.quantity) > this.selectedItemAvailable(row))
       if (invalidItem) {
-        this.editor.error = '请选择有效物品并确认带入数量不超过可用库存'
+        this.editor.error = '请选择有效的活动物资并确认带入数量大于0'
         return
       }
       this.editor.saving = true
@@ -329,7 +362,7 @@ export default {
       }
     },
     async cancelMatch(match) {
-      if (!window.confirm(`确认取消对局“${match.name}”？`)) return
+      if (!await this.requestConfirm('取消对局', `确认取消对局“${match.name}”？`, '确认取消', true)) return
       try {
         await escapeApi.cancelManagedMatch(match.id)
         this.$emit('notify', '对局已取消')
@@ -340,7 +373,7 @@ export default {
       }
     },
     async deleteMatch(match) {
-      if (!window.confirm(`确认永久删除已取消的对局“${match.name}”？此操作不可恢复。`)) return
+      if (!await this.requestConfirm('删除对局', `确认永久删除已取消的对局“${match.name}”？此操作不可恢复。`, '确认删除', true)) return
       try {
         await escapeApi.deleteManagedMatch(match.id)
         this.$emit('notify', '对局已删除')
@@ -370,7 +403,7 @@ export default {
       }
     },
     async startMatch() {
-      if (!window.confirm(`确认开始对局“${this.control.match.name}”？开始后将扣除全员费用。`)) return
+      if (!await this.requestConfirm('开始战局', `确认开始对局“${this.control.match.name}”？开始后将扣除全员费用。`, '确认开始')) return
       this.control.saving = true
       try {
         await escapeApi.startMatch(this.control.match.id)
@@ -384,8 +417,20 @@ export default {
         this.control.saving = false
       }
     },
+    async confirmSpecialWeapon(participant) {
+      if (!await this.requestConfirm('确认特殊武器', `确认已核对 ${participant.callsign} 携带的特殊武器？`, '确认')) return
+      this.control.saving = true
+      try {
+        this.control.data = await escapeApi.confirmSpecialWeapon(this.control.match.id, participant.id)
+        this.$emit('notify', '特殊武器已确认')
+      } catch (error) {
+        this.control.submitError = error.message || '特殊武器确认失败'
+      } finally {
+        this.control.saving = false
+      }
+    },
     async settleMatch(body) {
-      if (!window.confirm('最终结算不可撤销，确认提交全部参与者的结算结果？')) return
+      if (!await this.requestConfirm('最终结算', '最终结算不可撤销，确认提交全部参与者的结算结果？', '确认结算', true)) return
       this.control.saving = true
       this.control.submitError = ''
       try {
@@ -403,6 +448,16 @@ export default {
       } finally {
         this.control.saving = false
       }
+    },
+    requestConfirm(title, message, confirmLabel = '确认', danger = false) {
+      return new Promise(resolve => {
+        this.confirmDialog = { open: true, title, message, confirmLabel, danger, resolve }
+      })
+    },
+    resolveConfirm(result) {
+      const resolve = this.confirmDialog.resolve
+      this.confirmDialog = { open: false, title: '', message: '', confirmLabel: '确认', danger: false, resolve: null }
+      if (resolve) resolve(result)
     }
   }
 }

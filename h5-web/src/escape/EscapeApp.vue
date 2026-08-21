@@ -72,7 +72,20 @@
                 <span><b>{{ match.squad_count || 0 }}</b> 个小队</span>
               </div>
               <button v-if="match.status === 'preparing' && !match.loadout_locked" class="escape-primary wide" type="button" @click="openLoadout(match)">进入对局并配置装备</button>
-              <div v-else-if="match.loadout_locked" class="escape-locked">配装已锁定，等待发起人开局</div>
+              <div v-else-if="match.loadout_locked" class="escape-locked">
+                <div class="escape-locked-team-head">
+                  <strong>已锁定 · 第 {{ match.team_no || '-' }} 小队 · {{ match.team_member_count || 0 }} 人</strong>
+                  <button type="button" aria-label="刷新小队成员" title="刷新小队成员" @click="loadProfile">↻</button>
+                </div>
+                <div v-if="match.team_members?.length" class="escape-team-members">
+                  <div v-for="member in match.team_members" :key="member.user_id" class="escape-team-member">
+                    <img v-if="member.avatar_url" :src="member.avatar_url" :alt="memberDisplayName(member)" />
+                    <span v-else class="escape-team-member-avatar">{{ shortName(memberDisplayName(member)) }}</span>
+                    <span>{{ memberDisplayName(member) }}</span>
+                  </div>
+                </div>
+                <p v-else>{{ match.team_member_names || '暂无小队成员' }}</p>
+              </div>
               <div v-else class="escape-locked neutral">{{ statusText(match.status) }}</div>
             </div>
           </article>
@@ -88,17 +101,6 @@
           @invalid="$emit('notify', $event)"
         />
 
-        <section class="escape-record-section">
-          <div class="escape-section-head"><div><span>SEASON REPORT</span><h2>最近战绩</h2></div></div>
-          <EscapeState v-if="!records.length" type="empty" title="暂无战绩" description="完成第一场对局后，结算记录会保存在这里" />
-          <div v-else class="escape-records">
-            <article v-for="record in records.slice(0, 5)" :key="record.id" role="button" tabindex="0" @click="openRecord(record)" @keydown.enter="openRecord(record)">
-              <i :class="{ success: record.extracted }"></i>
-              <div><h3>{{ record.match_name }}</h3><p>{{ dateText(record.ended_at) }} · {{ record.squad_name }} · {{ record.class_name || '未配置' }}</p></div>
-              <strong :class="{ loss: Number(record.net_income) < 0 }">{{ signedMoney(record.net_income) }}<small>{{ record.extracted ? '成功撤离' : '撤离失败' }}</small></strong>
-            </article>
-          </div>
-        </section>
       </template>
 
       <template v-else-if="activeView === 'shop'">
@@ -114,6 +116,26 @@
             <button type="button" :disabled="product.stock === 0 || purchasingId === product.id" @click="purchase(product)">{{ purchasingId === product.id ? '购买中…' : `¥${money(product.price)}` }}</button>
           </article>
         </div>
+      </template>
+
+      <template v-else-if="activeView === 'records'">
+        <div class="escape-shop-hero"><span>COMBAT HISTORY</span><h2>最近战绩</h2><p>历史对局与撤离记录</p></div>
+        <label class="escape-record-season-filter">
+          <span>赛季</span>
+          <select v-model="selectedRecordSeasonId">
+            <option v-for="season in recordSeasons" :key="season.id" :value="season.id">{{ season.name }}</option>
+          </select>
+        </label>
+        <section class="escape-record-section">
+          <EscapeState v-if="!filteredRecords.length" type="empty" title="该赛季暂无战绩" description="完成对局并结算后，记录会保存在这里" />
+          <div v-else class="escape-records">
+            <article v-for="record in filteredRecords" :key="record.id" role="button" tabindex="0" @click="openRecord(record)" @keydown.enter="openRecord(record)">
+              <i :class="{ success: record.extracted }"></i>
+              <div><h3>{{ record.match_name }}</h3><p>{{ dateText(record.ended_at) }} · {{ record.squad_name }} · {{ record.class_name || '未配置' }}</p></div>
+              <strong :class="{ loss: Number(record.net_income) < 0 }">{{ signedMoney(record.net_income) }}<small>{{ record.extracted ? '成功撤离' : '撤离失败' }}</small></strong>
+            </article>
+          </div>
+        </section>
       </template>
 
       <EscapeMatchManagerView
@@ -145,6 +167,7 @@
       @close="control.open = false"
       @retry="loadMatchControl"
       @start="startControlledMatch"
+      @confirm-special="confirmSpecialWeapon"
       @settle="settleControlledMatch"
     />
   </section>
@@ -175,7 +198,8 @@ export default {
       shopCategory: 'all',
       products: [],
       records: [],
-      states: { profile: { loading: true, error: '' }, shop: { loading: false, error: '' } },
+      selectedRecordSeasonId: '',
+      states: { profile: { loading: true, error: '' }, shop: { loading: false, error: '' }, records: { loading: false, error: '' } },
       loaded: new Set(),
       purchasingId: null,
       control: { open: false, loading: false, saving: false, error: '', submitError: '', match: null, data: {} },
@@ -190,7 +214,7 @@ export default {
   },
   computed: {
     navItems() {
-      const items = [{ value: 'profile', label: '个人主页' }, { value: 'shop', label: '商店' }]
+      const items = [{ value: 'profile', label: '个人主页' }, { value: 'records', label: '最近战绩' }, { value: 'shop', label: '商店' }]
       if (this.summary.can_manage_matches) items.push({ value: 'matches', label: '对局管理' })
       return items
     },
@@ -199,6 +223,20 @@ export default {
     },
     navLabel() {
       return this.navItems.find(item => item.value === this.activeView)?.label || ''
+    },
+    recordSeasons() {
+      const seasons = new Map()
+      if (this.summary.season?.id != null) {
+        seasons.set(String(this.summary.season.id), { id: String(this.summary.season.id), name: this.summary.season.name })
+      }
+      for (const record of this.records) {
+        const id = record.season_id == null ? 'none' : String(record.season_id)
+        if (!seasons.has(id)) seasons.set(id, { id, name: record.season_name || '未关联赛季' })
+      }
+      return [...seasons.values()]
+    },
+    filteredRecords() {
+      return this.records.filter(record => (record.season_id == null ? 'none' : String(record.season_id)) === this.selectedRecordSeasonId)
     },
     rarityCards() {
       return [
@@ -228,7 +266,9 @@ export default {
       }
     },
     loadActive() {
-      return this.activeView === 'shop' ? this.loadShop() : this.loadProfile()
+      if (this.activeView === 'shop') return this.loadShop()
+      if (this.activeView === 'records') return this.loadRecords()
+      return this.loadProfile()
     },
     loadProfile() {
       return this.request('profile', async () => {
@@ -248,10 +288,16 @@ export default {
           member_count: item.participant_count,
           squad_count: item.team_count,
           capacity: Number(item.team_count || 0) * Number(item.team_capacity || 0),
-          loadout_locked: ['locked', 'in_match', 'settled'].includes(item.loadout_status)
+          loadout_locked: ['locked', 'in_match', 'settled'].includes(item.loadout_status),
+          team_members: Array.isArray(item.team_members) ? item.team_members : this.parseTeamMembers(item.team_members_json)
         }))
         this.warehouses = { buffer: this.normalizeWarehouse(buffer, 'buffer'), personal: this.normalizeWarehouse(personal, 'personal') }
-        this.records = (Array.isArray(records) ? records : records?.items || []).map(item => ({
+        this.records = this.normalizeRecords(records)
+        this.selectDefaultRecordSeason()
+      })
+    },
+    normalizeRecords(records) {
+      return (Array.isArray(records) ? records : records?.items || []).map(item => ({
           ...item,
           match_id: item.id,
           match_name: item.name,
@@ -261,7 +307,20 @@ export default {
           extracted: item.escaped === true || Number(item.escaped) === 1,
           net_income: Number(item.manual_cash || 0) + Number(item.kill_cash || 0)
         }))
-      })
+    },
+    parseTeamMembers(value) {
+      if (!value) return []
+      try { return typeof value === 'string' ? JSON.parse(value) : value } catch { return [] }
+    },
+    memberDisplayName(member) {
+      return String(member?.callsign || '').trim() || String(member?.username || '').trim() || '未知成员'
+    },
+    selectDefaultRecordSeason() {
+      const currentId = this.summary.season?.id == null ? '' : String(this.summary.season.id)
+      const available = this.recordSeasons.map(season => season.id)
+      if (!available.includes(this.selectedRecordSeasonId)) {
+        this.selectedRecordSeasonId = available.includes(currentId) ? currentId : (available[0] || '')
+      }
     },
     async loadWarehouses() {
       const [buffer, personal] = await Promise.all([escapeApi.warehouse('buffer'), escapeApi.warehouse('personal')])
@@ -275,6 +334,13 @@ export default {
         const data = await escapeApi.shop(this.shopCategory)
         const products = Array.isArray(data) ? data : data?.items || []
         this.products = this.shopCategory === 'all' ? products : products.filter(item => item.product_type === (this.shopCategory === 'item' ? 'regular' : this.shopCategory))
+      })
+    },
+    loadRecords() {
+      return this.request('records', async () => {
+        const records = await escapeApi.records()
+        this.records = this.normalizeRecords(records)
+        this.selectDefaultRecordSeason()
       })
     },
     switchView(view) {
@@ -333,15 +399,14 @@ export default {
       this.loadout.error = ''
       this.loadout.submitError = ''
       try {
-        await escapeApi.joinMatch(this.loadout.match.id)
         const data = await escapeApi.loadoutOptions(this.loadout.match.id)
         const teamCount = Number(data?.match?.team_count || 0)
         const teamCapacity = Number(data?.match?.team_capacity || 0)
         const participants = data?.participants || []
         const squads = Array.from({ length: teamCount }, (_, index) => {
           const teamNo = index + 1
-          const memberCount = participants.filter(item => Number(item.team_no) === teamNo).length
-          return { id: teamNo, name: `第 ${teamNo} 小队`, member_count: memberCount, capacity: teamCapacity, full: memberCount >= teamCapacity }
+          const members = participants.filter(item => Number(item.team_no) === teamNo)
+          return { id: teamNo, name: `第 ${teamNo} 小队`, members, member_count: members.length, capacity: teamCapacity, full: members.length >= teamCapacity }
         })
         const classes = (data?.professions || []).map(item => ({ ...item, maintenance_cost: item.maintenance_fee }))
         const allWeapons = (data?.weapons || []).map(item => ({ ...item, price: item.usage_fee, type_label: { knife: '近战武器', regular: '普通武器', special: '特殊武器' }[item.weapon_type] || item.weapon_type }))
@@ -395,6 +460,8 @@ export default {
     },
     async startControlledMatch() {
       if (!window.confirm(`确认开始对局“${this.control.match.name}”？开始后将扣除全员费用。`)) return
+      const specialUsers = (this.control.data?.participants || []).filter(item => item.weapon_type === 'special')
+      if (specialUsers.length && !window.confirm(`本局有 ${specialUsers.length} 人携带特殊武器：${specialUsers.map(item => item.callsign).join('、')}。撤离失败时特殊武器将永久销毁，确认继续开始？`)) return
       this.control.saving = true
       try {
         await escapeApi.startMatch(this.control.match.id)
@@ -403,6 +470,18 @@ export default {
         await this.loadProfile()
       } catch (error) {
         this.$emit('notify', error.message || '开始对局失败')
+      } finally {
+        this.control.saving = false
+      }
+    },
+    async confirmSpecialWeapon(participant) {
+      if (!window.confirm(`确认已核对 ${participant.callsign} 携带的特殊武器？`)) return
+      this.control.saving = true
+      try {
+        this.control.data = await escapeApi.confirmSpecialWeapon(this.control.match.id, participant.id)
+        this.$emit('notify', '特殊武器已确认')
+      } catch (error) {
+        this.$emit('notify', error.message || '特殊武器确认失败')
       } finally {
         this.control.saving = false
       }
@@ -443,7 +522,7 @@ export default {
     async openRecord(record) {
       try {
         const detail = await escapeApi.recordDetail(record.match_id || record.id)
-        const itemCount = detail?.items?.length || 0
+        const itemCount = (detail?.items || []).reduce((total, item) => total + Number(item.quantity || 0), 0)
         const participant = detail?.participants?.[0] || {}
         window.alert(`${record.match_name || '对局'}\n击杀：${participant.kills ?? record.kills ?? 0}\n结算物品：${itemCount} 件`)
       } catch (error) {

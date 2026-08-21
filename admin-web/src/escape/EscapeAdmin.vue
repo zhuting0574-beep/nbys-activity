@@ -55,7 +55,7 @@
 
       <div v-else class="escape-list-page">
         <div class="escape-filterbar">
-          <el-input v-model="filters.keyword" clearable placeholder="输入名称、编号或用户呼号" style="width: 260px" @keyup.enter="load" />
+          <el-input v-model="filters.keyword" clearable :placeholder="activeTab === 'weapons' ? '输入武器分类' : '输入名称、编号或用户呼号'" style="width: 260px" @keyup.enter="load" />
           <el-select v-if="activeTab === 'items'" v-model="filters.rarity" clearable placeholder="全部稀有度" style="width: 140px">
             <el-option v-for="rarity in rarities" :key="rarity" :label="rarity" :value="rarity" />
           </el-select>
@@ -82,6 +82,7 @@
                 <span v-else-if="column.kind === 'boolean'">{{ row[column.prop] ? '启用' : '停用' }}</span>
                 <span v-else-if="column.kind === 'category'">{{ categoryLabel(row[column.prop]) }}</span>
                 <span v-else-if="column.kind === 'product-type'">{{ productTypeLabel(row[column.prop]) }}</span>
+                <span v-else-if="column.kind === 'weapon-type'">{{ weaponTypeLabel(row[column.prop]) }}</span>
                 <span v-else>{{ displayValue(row, column) }}</span>
               </template>
             </el-table-column>
@@ -113,7 +114,11 @@
           <el-form-item :label="field.label" :required="field.required">
             <el-input v-if="field.type === 'text'" v-model="editing[field.prop]" :placeholder="field.placeholder" :disabled="activeTab === 'products' && field.prop === 'name' && Boolean(editing.item_id)" />
             <el-input v-else-if="field.type === 'textarea'" v-model="editing[field.prop]" type="textarea" :rows="3" />
-            <el-input-number v-else-if="field.type === 'number'" v-model="editing[field.prop]" :min="field.min ?? 0" :precision="field.precision" style="width: 100%" />
+            <el-input-number v-else-if="field.type === 'number'" v-model="editing[field.prop]" :min="field.min ?? 0" :max="field.max" :precision="field.precision" style="width: 100%" />
+            <el-radio-group v-else-if="field.type === 'radio'" v-model="editing[field.prop]" @change="value => handleFieldChange(field.prop, value)">
+              <el-radio-button v-for="option in field.options || []" :key="option.value" :value="option.value">{{ option.label }}</el-radio-button>
+            </el-radio-group>
+            <el-date-picker v-else-if="field.type === 'date'" v-model="editing[field.prop]" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
             <el-date-picker v-else-if="field.type === 'datetime'" v-model="editing[field.prop]" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%" />
             <div v-else-if="field.type === 'image'" class="escape-item-image-upload">
               <div class="escape-item-image-actions">
@@ -143,7 +148,7 @@
             </div>
             <el-input-number v-else-if="field.type === 'product-price'" v-model="editing[field.prop]" :min="productPriceMin" style="width: 100%" />
             <el-input-number v-else-if="field.type === 'product-stock'" v-model="editing[field.prop]" :min="0" :max="productStockMax" :disabled="editing.product_type === 'expansion'" style="width: 100%" />
-            <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable style="width: 100%" @change="value => handleFieldChange(field.prop, value)">
+            <el-select v-else-if="field.type === 'select'" v-model="editing[field.prop]" filterable :disabled="field.disabled" style="width: 100%" @change="value => handleFieldChange(field.prop, value)">
               <el-option v-for="option in field.options || []" :key="option.value ?? option" :label="option.label ?? option" :value="option.value ?? option" />
             </el-select>
             <el-switch v-else-if="field.type === 'boolean'" v-model="editing[field.prop]" />
@@ -195,9 +200,9 @@ const props = defineProps({
 
 const rarities = ['超凡', '史诗', '精品', '普通']
 const weaponTypes = [
-  { label: '近战武器', value: 'KNIFE' },
-  { label: '普通武器', value: 'REGULAR' },
-  { label: '特殊武器', value: 'SPECIAL' }
+  { label: '近战武器', value: 'knife' },
+  { label: '普通武器', value: 'regular' },
+  { label: '特殊武器', value: 'special' }
 ]
 const ITEM_IMAGE_MAX_BYTES = 100 * 1024
 
@@ -208,25 +213,31 @@ const configs = {
     columns: [
       { prop: 'id', label: '商品 ID', width: 90 },
       { prop: 'name', label: '物品名称', width: 160 },
+      { prop: 'material_type', label: '物资类型', width: 110, derive: row => row.material_type === 'product' ? '商品物资' : '活动物资' },
       { prop: 'rarity', label: '稀有度', width: 100, kind: 'rarity' },
       { prop: 'category', label: '分类', width: 110, kind: 'category' },
+      { prop: 'weapon_type', label: '武器分类', width: 110, kind: 'weapon-type' },
+      { prop: 'durability_loss_percent', label: '每局耐久损耗', width: 120, derive: row => row.weapon_type === 'special' ? `${row.durability_loss_percent || 0}%` : '-' },
       { prop: 'size', label: '仓库尺寸', width: 100, derive: row => `${row.width || 1} × ${row.height || 1}` },
-      { prop: 'stock_quantity', label: '数量', width: 90 },
-      { prop: 'today_price', label: '今日价格', width: 110, kind: 'money' },
+      { prop: 'stock_quantity', label: '数量', width: 90, derive: row => row.material_type === 'activity' ? '不限量' : row.stock_quantity },
+      { prop: 'today_price', label: '今日价格', width: 110, derive: row => row.material_type === 'activity' ? '-' : money(row.today_price) },
       { prop: 'enabled', label: '状态', width: 80, kind: 'boolean' }
     ],
     fields: [
       { prop: 'name', label: '物品名称', type: 'text', required: true },
+      { prop: 'material_type', label: '物资类型', type: 'radio', options: [{ label: '活动物资', value: 'activity' }, { label: '商品物资', value: 'product' }], required: true },
       { prop: 'rarity', label: '稀有度', type: 'select', options: rarities, required: true },
       { prop: 'category', label: '分类', type: 'select', options: [
         { label: '普通物资', value: 'regular' },
         { label: '武器', value: 'weapon' }
       ], required: true },
-      { prop: 'min_price', label: '最低价格', type: 'number', required: true },
-      { prop: 'max_price', label: '最高价格', type: 'number', required: true },
+      { prop: 'weapon_type', label: '武器分类', type: 'select', options: weaponTypes, required: true, weaponOnly: true },
+      { prop: 'durability_loss_percent', label: '每局耐久损耗', type: 'number', min: 0, max: 100, required: true, specialWeaponOnly: true },
+      { prop: 'min_price', label: '最低价格', type: 'number', required: true, productMaterialOnly: true },
+      { prop: 'max_price', label: '最高价格', type: 'number', required: true, productMaterialOnly: true },
       { prop: 'width', label: '宽度格数', type: 'number', min: 1, required: true },
       { prop: 'height', label: '高度格数', type: 'number', min: 1, required: true },
-      { prop: 'stock_quantity', label: '数量', type: 'number', min: 0, required: true },
+      { prop: 'stock_quantity', label: '库存数量', type: 'number', min: 0, required: true, productMaterialOnly: true },
       { prop: 'image_url', label: '物品图片', type: 'image' },
       { prop: 'enabled', label: '启用', type: 'boolean' }
     ]
@@ -237,6 +248,7 @@ const configs = {
     columns: [
       { prop: 'name', label: '商品名称', width: 180 },
       { prop: 'product_type', label: '类型', width: 110, kind: 'product-type' },
+      { prop: 'item_weapon_type', label: '武器分类', width: 110, kind: 'weapon-type' },
       { prop: 'price', label: '售价', width: 110, kind: 'money' },
       { prop: 'stock', label: '库存', width: 90 },
       { prop: 'offline_at', label: '下架时间', width: 160, kind: 'date' },
@@ -250,6 +262,7 @@ const configs = {
         { label: '武器', value: 'weapon' }
       ], required: true },
       { prop: 'item_id', label: '关联物品', type: 'item-picker' },
+      { prop: 'weapon_type', label: '武器分类', type: 'select', options: weaponTypes, required: true, weaponProductOnly: true },
       { prop: 'price', label: '售价', type: 'product-price', required: true },
       { prop: 'stock', label: '库存', type: 'product-stock', required: true },
       { prop: 'item_rarity', label: '物品稀有度', type: 'select', options: [
@@ -279,15 +292,15 @@ const configs = {
     ],
     fields: [
       { prop: 'name', label: '赛季名称', type: 'text', required: true },
-      { prop: 'start_at', label: '开始时间', type: 'datetime', required: true },
-      { prop: 'end_at', label: '结束时间', type: 'datetime', required: true },
+      { prop: 'start_date', label: '开始时间', type: 'date', required: true },
+      { prop: 'end_date', label: '结束时间', type: 'date', required: true },
       { prop: 'kill_reward', label: '每击杀奖励', type: 'number', required: true },
       { prop: 'enabled', label: '启用', type: 'boolean' }
     ]
   },
   classes: {
     label: '职业配置', singular: '职业', path: '/classes',
-    viewPermission: 'escape:class:view', createPermission: 'escape:class:create', updatePermission: 'escape:class:update', deletePermission: 'escape:class:delete',
+    viewPermission: 'escape:class:view', createPermission: 'escape:class:create', updatePermission: 'escape:class:update',
     columns: [
       { prop: 'name', label: '职业名称', width: 160 },
       { prop: 'health', label: '生命值', width: 100 },
@@ -297,25 +310,21 @@ const configs = {
     fields: [
       { prop: 'name', label: '职业名称', type: 'text', required: true },
       { prop: 'health', label: '生命值', type: 'number', min: 1, required: true },
-      { prop: 'maintenance_cost', label: '维护费', type: 'number', required: true },
+      { prop: 'maintenance_fee', label: '维护费', type: 'number', required: true },
       { prop: 'enabled', label: '启用', type: 'boolean' }
     ]
   },
   weapons: {
-    label: '武器配置', singular: '武器', path: '/weapons',
-    viewPermission: 'escape:weapon:view', createPermission: 'escape:weapon:create', updatePermission: 'escape:weapon:update', deletePermission: 'escape:weapon:delete',
+    label: '武器分类', singular: '武器分类', path: '/weapons',
+    viewPermission: 'escape:weapon:view', updatePermission: 'escape:weapon:update',
     columns: [
-      { prop: 'name', label: '武器名称', width: 160 },
-      { prop: 'weapon_type', label: '类型', width: 110 },
+      { prop: 'weapon_type', label: '武器分类', width: 160, derive: row => weaponTypeLabel(row.weapon_type) },
       { prop: 'cost', label: '使用费', width: 100, kind: 'money' },
-      { prop: 'max_durability', label: '最大耐久', width: 100 },
       { prop: 'enabled', label: '状态', width: 80, kind: 'boolean' }
     ],
     fields: [
-      { prop: 'name', label: '武器名称', type: 'text', required: true },
-      { prop: 'weapon_type', label: '武器类型', type: 'select', options: weaponTypes, required: true },
-      { prop: 'cost', label: '使用费用', type: 'number' },
-      { prop: 'max_durability', label: '最大耐久', type: 'number', min: 1 },
+      { prop: 'weapon_type', label: '武器分类', type: 'select', options: weaponTypes, required: true, disabled: true },
+      { prop: 'usage_fee', label: '使用费用', type: 'number' },
       { prop: 'enabled', label: '启用', type: 'boolean' }
     ]
   },
@@ -425,6 +434,28 @@ function openEditor(type, row = null) {
   const config = configs[type]
   if (!config) return
   editing.value = row ? { ...row } : defaultValues(config)
+  if (type === 'items' && editing.value.category === 'weapon' && editing.value.weapon_type === 'special') {
+    editing.value.durability_loss_percent = Number(editing.value.durability_loss_percent || 0)
+  }
+  if (type === 'items') editing.value.material_type = editing.value.material_type || 'activity'
+  if (type === 'classes' && row) {
+    editing.value.maintenance_fee = row.maintenance_cost ?? row.maintenance_fee
+    delete editing.value.maintenance_cost
+  }
+  if (type === 'seasons' && row) {
+    editing.value.start_date = normalizeSeasonDate(row.start_date ?? row.start_at)
+    editing.value.end_date = normalizeSeasonDate(row.end_date ?? row.end_at)
+    delete editing.value.start_at
+    delete editing.value.end_at
+  }
+  if (type === 'weapons' && row) {
+    editing.value.weapon_type = String(row.weapon_type || '').toLowerCase()
+    editing.value.usage_fee = row.cost ?? row.usage_fee
+    editing.value.max_durability = row.max_durability == null
+      ? Math.max(1, 100 - Number(row.durability_loss_percent || 0))
+      : Number(row.max_durability)
+    delete editing.value.cost
+  }
   if (type === 'products') {
     editing.value.product_type = editing.value.product_type === 'item' ? 'regular' : String(editing.value.product_type || '').toLowerCase()
     editing.value.item_rarity = editing.value.item_rarity || 'normal'
@@ -438,7 +469,8 @@ function openEditor(type, row = null) {
       current_price: editing.value.item_current_price,
       stock_quantity: editing.value.item_stock_quantity ?? editing.value.stock,
       enabled: editing.value.item_enabled ?? Boolean(editing.value.enabled),
-      deleted_at: editing.value.item_deleted_at ?? null
+      deleted_at: editing.value.item_deleted_at ?? null,
+      weapon_type: editing.value.item_weapon_type || editing.value.weapon_type || null
     } : null
   } else {
     selectedItem.value = null
@@ -456,8 +488,22 @@ function defaultValues(config) {
   return result
 }
 
+function normalizeSeasonDate(value) {
+  if (!value) return ''
+  const text = String(value).trim().replace('T', ' ')
+  return text.slice(0, 10)
+}
+
 async function saveEditor() {
   const config = resourceConfig.value
+  if (activeTab.value === 'classes') delete editing.value.maintenance_cost
+  if (activeTab.value === 'weapons') {
+    if (editing.value.max_durability != null) {
+      editing.value.durability_loss_percent = Math.max(0, 100 - Number(editing.value.max_durability))
+    }
+    delete editing.value.cost
+    delete editing.value.max_durability
+  }
   if (activeTab.value === 'products') {
     if (editing.value.product_type === 'expansion') editing.value.stock = 999
     if (editing.value.product_type === 'expansion' && (!editing.value.warehouse_width || !editing.value.warehouse_height)) {
@@ -504,6 +550,10 @@ async function saveEditor() {
 }
 
 function shouldShowField(field) {
+  if (field.weaponOnly) return editing.value?.category === 'weapon'
+  if (field.specialWeaponOnly) return editing.value?.category === 'weapon' && editing.value?.weapon_type === 'special'
+  if (field.weaponProductOnly) return editing.value?.product_type === 'weapon' && !editing.value?.item_id
+  if (field.productMaterialOnly) return editing.value?.material_type === 'product'
   if (activeTab.value !== 'products') return true
   if (field.productOnly) return !editing.value?.item_id && editing.value?.product_type !== 'expansion'
   if (field.expansionOnly) return editing.value?.product_type === 'expansion'
@@ -511,8 +561,16 @@ function shouldShowField(field) {
   return true
 }
 
-function handleFieldChange(prop) {
+function handleFieldChange(prop, value) {
   if (prop === 'product_type') handleProductTypeChange()
+  if (prop === 'category' && editing.value?.category !== 'weapon') editing.value.weapon_type = ''
+  if (prop === 'weapon_type' && editing.value?.weapon_type !== 'special') editing.value.durability_loss_percent = null
+  if (prop === 'weapon_type' && editing.value?.weapon_type === 'special' && editing.value.durability_loss_percent == null) editing.value.durability_loss_percent = 0
+  if (prop === 'material_type' && value === 'activity') {
+    editing.value.min_price = 0
+    editing.value.max_price = 0
+    editing.value.stock_quantity = 0
+  }
 }
 
 function handleProductTypeChange() {
@@ -522,6 +580,7 @@ function handleProductTypeChange() {
   editing.value.stock = editing.value.product_type === 'expansion' ? 999 : 0
   selectedItem.value = null
   pendingItemId.value = null
+  editing.value.weapon_type = ''
 }
 
 const productStockMax = computed(() => {
@@ -567,6 +626,7 @@ function confirmItemSelection() {
   editing.value.name = item.name
   editing.value.price = Number(item.current_price ?? item.today_price ?? 0)
   editing.value.stock = Math.min(Number(editing.value.stock || item.stock_quantity), Number(item.stock_quantity))
+  editing.value.weapon_type = item.weapon_type || ''
   if (!item.enabled || item.deleted_at) editing.value.enabled = false
   itemPickerVisible.value = false
 }
@@ -620,6 +680,11 @@ function displayValue(row, column) {
   if (column.derive) return column.derive(row)
   const value = row[column.prop]
   return value === '' || value === null || value === undefined ? '-' : value
+}
+
+function weaponTypeLabel(type) {
+  const value = String(type || '').toLowerCase()
+  return weaponTypes.find(option => option.value === value)?.label || type || '-'
 }
 
 function statusLabel(status) {

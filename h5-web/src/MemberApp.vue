@@ -193,6 +193,7 @@
           <button class="btn secondary detail-main-action" @click="openShareDialog">分享活动</button>
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="startEnroll">报名</button>
           <button v-if="detail.display_status === '报名中' && detail.my_enrollment && isWeeklyActivity(detail)" class="btn secondary detail-main-action" @click="openEnrollmentDialog">修改人数</button>
+          <button v-if="detail.my_enrollment && detail.external_miniapp_qr_url" class="btn secondary detail-main-action" @click="openMiniProgramDialog">跳转趣动</button>
           <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
             签到
           </button>
@@ -614,6 +615,21 @@
       </div>
     </div>
 
+    <div v-if="paymentDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="趣动小程序二维码">
+      <div class="modal-backdrop" @click="paymentDialog.show = false"></div>
+      <div class="modal-panel confirm-panel checkin-modal-panel">
+        <h2>前往趣动小程序活动</h2>
+        <img class="checkin-qr-image payment-qr-image" :src="paymentDialog.url" alt="趣动小程序二维码" />
+        <template v-if="paymentDialog.isWechat">
+          <p>请长按二维码，识别后进入趣动小程序活动页面。</p>
+        </template>
+        <template v-else>
+          <p>请保存二维码后，在微信中识别进入趣动小程序活动页面。</p>
+        </template>
+        <button class="btn secondary" @click="paymentDialog.show = false">关闭</button>
+      </div>
+    </div>
+
     <div v-if="shareDialog.show" class="modal" role="dialog" aria-modal="true" aria-label="微信分享活动">
       <div class="modal-backdrop" @click="shareDialog.show = false"></div>
       <div class="modal-panel confirm-panel share-modal-panel">
@@ -703,6 +719,7 @@ export default {
       checkinQrScanner: null,
       checkinQrDialog: { show: false, dataUrl: '', expiresAt: '' },
       enrollmentDialog: { show: false, extra_count: 0, submitting: false },
+      paymentDialog: { show: false, url: '', isWechat: false },
       shareDialog: { show: false, title: '', time: '', location: '', image: '', url: '' },
       jobs: ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵'],
       joinJobs: {},
@@ -1288,9 +1305,19 @@ export default {
       this.planVoteForm = this.planVoteFormFromPlan(this.selectedPlan)
       this.showToast('已投票')
     },
-    startEnroll() {
+    async startEnroll() {
       if (this.isWeeklyActivity(this.detail)) return this.openEnrollmentDialog()
-      return this.enroll()
+      await this.enroll()
+      await this.offerMiniProgramJump()
+    },
+    openMiniProgramDialog() {
+      const isWechat = /micromessenger/i.test(navigator.userAgent || '')
+      this.paymentDialog = { show: true, url: this.detail.external_miniapp_qr_url, isWechat }
+    },
+    async offerMiniProgramJump() {
+      if (!this.detail.external_miniapp_qr_url) return
+      const shouldJump = await this.askConfirm('报名成功，是否跳转趣动小程序活动页面？')
+      if (shouldJump) this.openMiniProgramDialog()
     },
     openEnrollmentDialog() {
       const currentExtra = this.detail.my_enrollment ? this.normalizedExtraCount(this.detail.my_enrollment.extra_count) : 0
@@ -1303,11 +1330,13 @@ export default {
     async submitEnrollment() {
       if (this.enrollmentDialog.submitting) return
       const extraCount = this.normalizedExtraCount(this.enrollmentDialog.extra_count)
+      const wasEnrolled = Boolean(this.detail.my_enrollment)
       this.enrollmentDialog.submitting = true
       try {
         await this.enroll({ extra_count: extraCount })
         this.enrollmentDialog = { show: false, extra_count: 0, submitting: false }
-        this.showToast('报名人数已更新')
+        this.showToast(wasEnrolled ? '报名人数已更新' : '报名成功')
+        await this.offerMiniProgramJump()
       } catch (error) {
         this.enrollmentDialog.submitting = false
         throw error

@@ -36,6 +36,7 @@ export const escapeApi = {
   lockLoadout: matchId => api(`${base}/matches/${matchId}/loadout/lock`, writeOptions('POST')),
   matchControl: matchId => api(`${base}/matches/${matchId}/control`),
   startMatch: matchId => api(`${base}/matches/${matchId}/control/start`, writeOptions('POST')),
+  confirmSpecialWeapon: (matchId, participantId) => api(`${base}/matches/${matchId}/participants/${participantId}/special-weapon-confirm`, writeOptions('POST')),
   settlementPreview: matchId => api(`${base}/matches/${matchId}/control/settlement`),
   settleMatch: (matchId, body) => api(`${base}/matches/${matchId}/control/settle`, writeOptions('POST', body)),
   purchase: (productId, quantity = 1) => api(`${base}/shop/products/${productId}/purchase`, {

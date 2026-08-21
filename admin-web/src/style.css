@@ -384,6 +384,13 @@ body {
   background: #eef2f7;
 }
 
+.payment-qr-preview {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  background: #fff;
+}
+
 .banner-empty,
 .venue-empty {
   display: flex;

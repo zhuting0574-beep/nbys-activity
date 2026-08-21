@@ -22,6 +22,7 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("activities", "record_type", "varchar(20) NOT NULL DEFAULT 'activity' COMMENT 'activity=正式活动, plan=活动策划镜像'", "id");
             addColumn("activities", "activity_type", "varchar(20) NOT NULL DEFAULT '周常' COMMENT '周常/本地活动/外地活动'", "name");
             addColumn("activities", "banner_url", "varchar(500) DEFAULT NULL COMMENT '活动banner图'", "name");
+            addColumn("activities", "external_miniapp_qr_url", "varchar(500) DEFAULT NULL COMMENT '外部第三方小程序活动二维码'", "banner_url");
             addColumn("activities", "banner_source", "varchar(20) NOT NULL DEFAULT 'venue' COMMENT 'custom=用户上传, venue=跟随场地默认图'", "banner_url");
             addColumn("activities", "venue_id", "int DEFAULT NULL COMMENT '关联场地ID'", "location");
             addColumn("activities", "checkin_methods", "varchar(30) NOT NULL DEFAULT 'location,qr' COMMENT '签到方式：location,qr'", "venue_id");
@@ -44,6 +45,7 @@ public class DbMigrationRunner implements ApplicationRunner {
             addColumn("enrollments", "extra_count", "int NOT NULL DEFAULT 0 COMMENT '周常报名额外同行人数，不含本人'", "rent_launcher");
             addColumn("activity_launcher_rentals", "status", "varchar(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/confirmed/cancelled'", "user_id");
             addColumn("activity_launcher_rentals", "confirmed_at", "datetime DEFAULT NULL", "rented_at");
+            addColumn("escape_seasons", "deleted_at", "datetime DEFAULT NULL COMMENT '软删除时间'", "enabled");
             addColumn("attendance_events", "organizer_ids", "varchar(500) NOT NULL DEFAULT '' COMMENT '组织人用户ID，逗号分隔'", "organizer");
             jdbc.update("update attendance_events ev join users u on trim(ev.organizer)=coalesce(nullif(u.callsign,''),u.username) " +
                     "set ev.organizer_ids=cast(u.id as char) where coalesce(ev.organizer_ids,'')='' and u.disabled=0 and u.is_regular_member=1");
@@ -64,6 +66,17 @@ public class DbMigrationRunner implements ApplicationRunner {
             runSqlResource("db/migration/V20260723__escape_from_xp_domain.sql");
             runSqlResource("db/migration/V20260810__escape_warehouse_dimensions.sql");
             runSqlResource("db/migration/V20260810__escape_match_item_stock.sql");
+            runSqlResource("db/migration/V20260821__escape_shop_stock_schedule.sql");
+            addColumn("escape_items", "weapon_type", "varchar(20) DEFAULT NULL COMMENT 'knife/regular/special'", "category");
+            addColumn("escape_items", "material_type", "varchar(20) NOT NULL DEFAULT 'activity' COMMENT 'activity=活动物资,product=商品物资'", "category");
+            jdbc.update("update escape_items i set material_type=case when exists (select 1 from escape_shop_products p where p.item_id=i.id) then 'product' else 'activity' end");
+            addColumn("escape_items", "durability_loss_percent", "int DEFAULT NULL COMMENT '特殊武器每局耐久损耗百分比'", "weapon_type");
+            addColumn("escape_match_participants", "special_weapon_confirmed", "tinyint(1) NOT NULL DEFAULT 0 COMMENT '后台已确认特殊武器风险'", "special_inventory_id");
+            jdbc.update("update escape_items set durability_loss_percent=0 " +
+                    "where category='weapon' and weapon_type='special' and durability_loss_percent is null");
+            addIndex("escape_items", "idx_escape_item_weapon_type", "(category, weapon_type)");
+            addUniqueIndex("escape_shop_products", "uk_escape_shop_product_item", "(item_id)");
+            jdbc.update("update escape_weapons set enabled=0 where item_id is not null");
         } catch (Exception e) {
             throw new IllegalStateException("Escape from XP database migration failed", e);
         }
@@ -93,5 +106,10 @@ public class DbMigrationRunner implements ApplicationRunner {
     private void addIndex(String table, String index, String columns) {
         Integer exists = jdbc.queryForObject("select count(*) from information_schema.statistics where table_schema=database() and table_name=? and index_name=?", Integer.class, table, index);
         if (exists != null && exists == 0) jdbc.execute("alter table " + table + " add index " + index + " " + columns);
+    }
+
+    private void addUniqueIndex(String table, String index, String columns) {
+        Integer exists = jdbc.queryForObject("select count(*) from information_schema.statistics where table_schema=database() and table_name=? and index_name=?", Integer.class, table, index);
+        if (exists != null && exists == 0) jdbc.execute("alter table " + table + " add unique index " + index + " " + columns);
     }
 }

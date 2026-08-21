@@ -480,6 +480,16 @@
           <el-button v-if="activityBannerPreview()" @click="clearActivityBanner">清除</el-button>
         </div>
       </el-form-item>
+      <el-form-item label="趣动小程序二维码">
+        <img v-if="activityForm.external_miniapp_qr_url" class="banner-preview payment-qr-preview" :src="activityForm.external_miniapp_qr_url" alt="第三方小程序活动二维码" />
+        <div class="banner-upload-row">
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="response => activityForm.external_miniapp_qr_url = response.data.url" :on-error="handleUploadError">
+            <el-button>上传二维码</el-button>
+          </el-upload>
+          <el-button v-if="activityForm.external_miniapp_qr_url" @click="activityForm.external_miniapp_qr_url = ''">清除</el-button>
+        </div>
+        <p class="muted">配置后，H5 报名成功可选择前往趣动小程序，已报名用户也可通过“跳转趣动”按钮再次查看二维码。</p>
+      </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="activityForm.name" /></el-form-item>
       <el-form-item label="组织者">
         <el-select v-model="activityForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
@@ -1237,7 +1247,7 @@ export default {
 	    async openActivity(row) {
 	      await this.loadFormalUsers()
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+        this.activityForm = { banner_url: '', external_miniapp_qr_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activities/${row.id}`)
