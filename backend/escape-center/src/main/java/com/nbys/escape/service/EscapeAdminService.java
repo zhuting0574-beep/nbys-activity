@@ -465,6 +465,7 @@ public class EscapeAdminService {
         StringBuilder sql = new StringBuilder("insert into ").append(c.table).append("(").append(String.join(",", fields))
                 .append(") values(").append(placeholders(fields.size())).append(")");
         long id = insert(sql.toString(), values(fields, body).toArray());
+        if ("products".equals(type)) syncLinkedItemPrice(id);
         audit(actor, "escape:config", "create", type, id, body);
         return decorate(type, requiredOne("select * from " + c.table + " where id=?", id));
     }
@@ -475,6 +476,7 @@ public class EscapeAdminService {
         normalizeCatalogInput("products", input);
         Map<String, Object> prepared = prepareProduct(input);
         long id = insertProduct(prepared);
+        syncLinkedItemPrice(id);
         audit(actor, "escape:config", "create", "products", id, body);
         return decorate("products", requiredOne("select * from escape_shop_products where id=?", id));
     }
@@ -593,6 +595,7 @@ public class EscapeAdminService {
         jdbc.update("update " + c.table + " set " + String.join(",", assignments) +
                 (c.versioned ? ",version=version+1" : "") + " where id=?", args.toArray());
         if ("items".equals(type)) syncLinkedProducts(id);
+        if ("products".equals(type)) syncLinkedItemPrice(id);
         audit(actor, "escape:config", "update", type, id, body);
         return decorate(type, requiredOne("select * from " + c.table + " where id=?", id));
     }
@@ -616,6 +619,14 @@ public class EscapeAdminService {
         Map<String, Object> item = requiredOne("select current_price,stock_quantity,enabled,deleted_at from escape_items where id=?", itemId);
         jdbc.update("update escape_shop_products set price=greatest(price,?),stock=least(stock,?),enabled=case when ?=1 and ? is null then enabled else 0 end,version=version+1 where item_id=?",
                 item.get("current_price"), item.get("stock_quantity"), item.get("enabled"), item.get("deleted_at"), itemId);
+    }
+
+    private void syncLinkedItemPrice(long productId) {
+        Map<String, Object> product = Rows.one(jdbc,
+                "select item_id,price from escape_shop_products where id=?", productId);
+        if (product == null || product.get("item_id") == null || product.get("price") == null) return;
+        jdbc.update("update escape_items set previous_price=current_price,current_price=?,version=version+1 where id=?",
+                product.get("price"), product.get("item_id"));
     }
 
     static void validateLinkedProductPrice(BigDecimal productPrice, BigDecimal itemPrice) {

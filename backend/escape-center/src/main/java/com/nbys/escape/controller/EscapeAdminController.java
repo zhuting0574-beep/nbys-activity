@@ -3,22 +3,49 @@ package com.nbys.escape.controller;
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.escape.service.EscapeAccessService;
 import com.nbys.escape.service.EscapeAdminService;
+import com.nbys.escape.service.BatchRunService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/escape/admin")
 public class EscapeAdminController {
     private final EscapeAccessService access;
     private final EscapeAdminService service;
+    private final BatchRunService batches;
+
+    @Autowired
+    public EscapeAdminController(EscapeAccessService access, EscapeAdminService service, BatchRunService batches) {
+        this.access = access;
+        this.service = service;
+        this.batches = batches;
+    }
 
     public EscapeAdminController(EscapeAccessService access, EscapeAdminService service) {
         this.access = access;
         this.service = service;
+        this.batches = null;
+    }
+
+    @GetMapping("/batches")
+    public ApiResponse<List<Map<String, Object>>> batches(HttpServletRequest request) {
+        access.requireAdmin(request, "escape:view");
+        return ApiResponse.ok(batches.tasks());
+    }
+
+    @PostMapping("/batches/{taskKey}/run")
+    public ApiResponse<Map<String, Object>> runBatch(@PathVariable String taskKey,
+                                                     @RequestParam(value = "business_date", required = false) String date,
+                                                     HttpServletRequest request) {
+        EscapeAccessService.UserContext actor = access.requireAdmin(request, "escape:config");
+        LocalDate businessDate = date == null || date.trim().isEmpty() ? LocalDate.now() : LocalDate.parse(date);
+        return ApiResponse.ok(batches.run(taskKey, businessDate, actor.userId));
     }
 
     @GetMapping("/overview")

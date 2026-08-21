@@ -19,6 +19,7 @@ JOIN (
   FROM escape_shop_products
   WHERE item_id IS NOT NULL
   GROUP BY item_id
+  HAVING COUNT(*)>1
 ) canonical ON canonical.item_id=duplicate_product.item_id
 SET o.product_id=canonical.canonical_id
 WHERE duplicate_product.id<>canonical.canonical_id;
@@ -29,6 +30,7 @@ JOIN (
   FROM escape_shop_products
   WHERE item_id IS NOT NULL
   GROUP BY item_id
+  HAVING COUNT(*)>1
 ) merged ON merged.canonical_id=canonical_product.id
 JOIN escape_items item ON item.id=merged.item_id
 SET canonical_product.stock=LEAST(item.stock_quantity,merged.total_stock),
@@ -37,10 +39,6 @@ SET canonical_product.stock=LEAST(item.stock_quantity,merged.total_stock),
 
 DELETE duplicate_product
 FROM escape_shop_products duplicate_product
-JOIN (
-  SELECT item_id,MIN(id) canonical_id
-  FROM escape_shop_products
-  WHERE item_id IS NOT NULL
-  GROUP BY item_id
-) canonical ON canonical.item_id=duplicate_product.item_id
-WHERE duplicate_product.id<>canonical.canonical_id;
+JOIN escape_shop_products canonical_product
+  ON canonical_product.item_id=duplicate_product.item_id
+ AND canonical_product.id<duplicate_product.id;

@@ -474,7 +474,7 @@ public class EscapeH5Service {
     public List<Map<String, Object>> products() {
         return Rows.list(jdbc,
                 "select p.id,p.name,p.product_type,p.price," +
-                        "case when p.product_type='expansion' then p.stock else least(p.stock,i.stock_quantity) end stock," +
+                "p.stock stock," +
                         "p.warehouse_width,p.warehouse_height,p.off_shelf_at," +
                         "i.name item_name,i.rarity,i.category,i.width,i.height,i.image_url,i.weapon_type " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
@@ -493,8 +493,9 @@ public class EscapeH5Service {
                 "select p.*,i.width item_width,i.height item_height,i.name item_name,i.category item_category," +
                         "i.stock_quantity item_stock_quantity " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
-                        "where p.id=? and p.enabled=1 and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
-                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null)) for update",
+                        "where p.id=? and p.enabled=1 and p.stock>0 " +
+                        "and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
+                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null and i.stock_quantity>0)) for update",
                 productId);
         if (((Number) product.get("stock")).intValue() < quantity) throw new IllegalArgumentException("商品库存不足");
         String type = String.valueOf(product.get("product_type"));

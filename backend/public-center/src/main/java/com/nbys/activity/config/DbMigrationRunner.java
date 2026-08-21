@@ -67,9 +67,11 @@ public class DbMigrationRunner implements ApplicationRunner {
             runSqlResource("db/migration/V20260810__escape_warehouse_dimensions.sql");
             runSqlResource("db/migration/V20260810__escape_match_item_stock.sql");
             runSqlResource("db/migration/V20260821__escape_shop_stock_schedule.sql");
+            runSqlResource("db/migration/V20260821__batch_run_logs.sql");
             addColumn("escape_items", "weapon_type", "varchar(20) DEFAULT NULL COMMENT 'knife/regular/special'", "category");
             addColumn("escape_items", "material_type", "varchar(20) NOT NULL DEFAULT 'activity' COMMENT 'activity=活动物资,product=商品物资'", "category");
-            jdbc.update("update escape_items i set material_type=case when exists (select 1 from escape_shop_products p where p.item_id=i.id) then 'product' else 'activity' end");
+            jdbc.update("update escape_items i set material_type='product' " +
+                    "where material_type='activity' and exists (select 1 from escape_shop_products p where p.item_id=i.id)");
             addColumn("escape_items", "durability_loss_percent", "int DEFAULT NULL COMMENT '特殊武器每局耐久损耗百分比'", "weapon_type");
             addColumn("escape_match_participants", "special_weapon_confirmed", "tinyint(1) NOT NULL DEFAULT 0 COMMENT '后台已确认特殊武器风险'", "special_inventory_id");
             jdbc.update("update escape_items set durability_loss_percent=0 " +

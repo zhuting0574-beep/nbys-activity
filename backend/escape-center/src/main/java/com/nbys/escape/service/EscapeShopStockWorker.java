@@ -7,6 +7,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,6 +26,7 @@ public class EscapeShopStockWorker {
     private final ObjectMapper objectMapper;
     private final Random random;
 
+    @Autowired
     public EscapeShopStockWorker(JdbcTemplate jdbc, ObjectMapper objectMapper) {
         this(jdbc, objectMapper, new Random());
     }
@@ -55,7 +57,7 @@ public class EscapeShopStockWorker {
             int id = number(product.get("id"));
             int stock = number(product.get("stock"));
             jdbc.update("update escape_shop_products set stock=?,version=version+1 where id=?",
-                    Math.max(0, stock - reduction), id);
+                    reducedStock(stock, reduction), id);
         }
         return true;
     }
@@ -66,7 +68,7 @@ public class EscapeShopStockWorker {
                         "where status='planned' and scheduled_at<=? order by business_date", now);
         List<LocalDate> dates = new ArrayList<LocalDate>();
         for (Map<String, Object> row : rows) {
-            dates.add(((java.sql.Date) row.get("business_date")).toLocalDate());
+            dates.add(localDate(row.get("business_date")));
         }
         return dates;
     }
@@ -100,7 +102,7 @@ public class EscapeShopStockWorker {
         int itemId = number(item.get("id"));
         int actualStock = number(item.get("stock_quantity"));
         int currentStock = item.get("product_stock") == null ? 0 : number(item.get("product_stock"));
-        int added = Math.min(1 + random.nextInt(2), actualStock - currentStock);
+        int added = replenishmentAmount(currentStock, actualStock, 1 + random.nextInt(2));
         BigDecimal price = randomPrice(decimal(item.get("min_price")), decimal(item.get("max_price")), random);
         Object productId = item.get("product_id");
         if (productId == null) {
@@ -136,6 +138,20 @@ public class EscapeShopStockWorker {
 
     static String productType(String category) {
         return "weapon".equals(category) ? "weapon" : "regular";
+    }
+
+    static int reducedStock(int currentStock, int reduction) {
+        return Math.max(0, currentStock - reduction);
+    }
+
+    static int replenishmentAmount(int currentStock, int actualStock, int requested) {
+        return Math.max(0, Math.min(requested, actualStock - currentStock));
+    }
+
+    static LocalDate localDate(Object value) {
+        if (value instanceof LocalDate) return (LocalDate) value;
+        if (value instanceof java.sql.Date) return ((java.sql.Date) value).toLocalDate();
+        return LocalDate.parse(String.valueOf(value));
     }
 
     private String json(Object value) {

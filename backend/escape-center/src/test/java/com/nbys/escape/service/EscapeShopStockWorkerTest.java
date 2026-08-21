@@ -3,6 +3,7 @@ package com.nbys.escape.service;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,5 +34,27 @@ class EscapeShopStockWorkerTest {
     void productTypeIsInferredFromItemCategory() {
         assertEquals("weapon", EscapeShopStockWorker.productType("weapon"));
         assertEquals("regular", EscapeShopStockWorker.productType("regular"));
+    }
+
+    @Test
+    void databaseDatesAreConvertedForCatchUpExecution() {
+        LocalDate expected = LocalDate.of(2026, 8, 21);
+
+        assertEquals(expected, EscapeShopStockWorker.localDate(java.sql.Date.valueOf(expected)));
+        assertEquals(expected, EscapeShopStockWorker.localDate(expected));
+        assertEquals(expected, EscapeShopStockWorker.localDate("2026-08-21"));
+    }
+
+    @Test
+    void dailyReductionNeverMakesStockNegative() {
+        assertEquals(0, EscapeShopStockWorker.reducedStock(1, 2));
+        assertEquals(3, EscapeShopStockWorker.reducedStock(5, 2));
+    }
+
+    @Test
+    void replenishmentNeverExceedsActualItemStock() {
+        assertEquals(1, EscapeShopStockWorker.replenishmentAmount(2, 3, 2));
+        assertEquals(0, EscapeShopStockWorker.replenishmentAmount(3, 3, 2));
+        assertEquals(2, EscapeShopStockWorker.replenishmentAmount(0, 5, 2));
     }
 }
