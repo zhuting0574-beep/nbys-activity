@@ -815,6 +815,7 @@ export default {
       dashboardCharts: {},
 	      activities: [],
 	      venues: [],
+	      venueOptionsLoaded: false,
 	      modes: [],
 	      users: [],
 	      nonFormalUsers: [],
@@ -1032,7 +1033,9 @@ export default {
       this.tokenValue = token()
       if (!this.menus.some(item => item.key === this.active)) this.active = 'dashboard'
       this.roles = await api('/api/admin/roles/options')
-      await Promise.all([this.loadModes(), this.loadVenues(), this.load()])
+      const referenceLoads = [this.loadModes()]
+      if (this.active !== 'venues') referenceLoads.push(this.loadVenueOptions())
+      await Promise.all([...referenceLoads, this.load()])
       if (this.active === 'activities' && this.sourceActivityId && this.can('activity:view')) {
         await this.openActivity({ id: this.sourceActivityId })
       }
@@ -1125,7 +1128,20 @@ export default {
 	      })
 	      return api(`/api/admin/activities?${params.toString()}`).then(d => { this.activities = d })
 	    },
-    loadVenues() { return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => { this.venues = d }) },
+    loadVenues() {
+      return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => {
+        this.venues = d
+        this.venueOptionsLoaded = false
+      })
+    },
+    loadVenueOptions() {
+      if (this.venueOptionsLoaded) return Promise.resolve(this.venues)
+      return api('/api/admin/venues/options').then(d => {
+        this.venues = d
+        this.venueOptionsLoaded = true
+        return d
+      })
+    },
     loadModes() { return api(`/api/admin/game-modes?name=${this.filters.name || ''}`).then(d => { this.modes = d }) },
     loadUsers() { return api(`/api/admin/users?keyword=${this.filters.keyword || ''}`).then(d => { this.users = d }) },
     loadLaunchers() {
@@ -1248,12 +1264,16 @@ export default {
       })
     },
 	    async openActivity(row) {
-	      await this.loadFormalUsers()
+	      const referenceLoads = [this.loadFormalUsers(), this.loadVenueOptions()]
 	      if (!row) {
+        await Promise.all(referenceLoads)
         this.activityForm = { banner_url: '', external_miniapp_qr_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
-	      const detail = await api(`/api/admin/activities/${row.id}`)
+	      const [, , detail] = await Promise.all([
+          ...referenceLoads,
+          api(`/api/admin/activities/${row.id}`)
+        ])
 	      this.activityForm = {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),

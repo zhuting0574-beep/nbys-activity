@@ -2432,7 +2432,7 @@ body {
 
 .member-app .detail-banner,
 .member-app .plan-detail > .banner {
-  filter: grayscale(.7) brightness(.72);
+  filter: none;
 }
 
 .member-app .rental-grid,
