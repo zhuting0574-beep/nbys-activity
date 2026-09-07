@@ -459,6 +459,14 @@ public class EscapeAdminService {
     public Map<String, Object> createCatalog(String type, Map<String, Object> body,
                                              EscapeAccessService.UserContext actor) {
         Catalog c = catalogDef(type);
+        if ("seasons".equals(type)) {
+            clearEndedSeasonInventories();
+            Number active = jdbc.queryForObject("select count(*) from escape_seasons where enabled=1 and deleted_at is null " +
+                    "and current_date between start_date and end_date", Number.class);
+            if (active != null && active.intValue() > 0) {
+                throw new IllegalArgumentException("当前存在进行中的赛季，不允许新增赛季");
+            }
+        }
         validateCatalog(type, body, false);
         List<String> fields = presentFields(c, body);
         if (fields.isEmpty()) throw new IllegalArgumentException("没有可保存的字段");
@@ -594,10 +602,37 @@ public class EscapeAdminService {
         args.add(id);
         jdbc.update("update " + c.table + " set " + String.join(",", assignments) +
                 (c.versioned ? ",version=version+1" : "") + " where id=?", args.toArray());
+        if ("seasons".equals(type)) clearEndedSeasonInventories();
         if ("items".equals(type)) syncLinkedProducts(id);
         if ("products".equals(type)) syncLinkedItemPrice(id);
         audit(actor, "escape:config", "update", type, id, body);
         return decorate(type, requiredOne("select * from " + c.table + " where id=?", id));
+    }
+
+    @Transactional
+    public int clearEndedSeasonInventories() {
+        closeExpiredSeasonMatches();
+        List<Map<String, Object>> seasons = Rows.list(jdbc,
+                "select id from escape_seasons where end_date<current_date and inventory_cleared_at is null " +
+                        "order by end_date,id for update");
+        for (Map<String, Object> season : seasons) {
+            long seasonId = ((Number) season.get("id")).longValue();
+            jdbc.update("insert ignore into escape_season_warehouse_snapshots(" +
+                            "season_id,user_id,personal_width,personal_height,buffer_width,buffer_height) " +
+                            "select ?,user_id,personal_width,personal_height,buffer_width,buffer_height from escape_user_assets",
+                    seasonId);
+            jdbc.update("insert ignore into escape_season_inventory_snapshots(" +
+                            "season_id,user_id,inventory_instance_id,warehouse_type,pos_x,pos_y,item_id,item_name_snapshot," +
+                            "rarity_snapshot,category_snapshot,weapon_type_snapshot,current_price_snapshot,width_snapshot," +
+                            "height_snapshot,image_url_snapshot,durability_percent,status) " +
+                            "select ?,inv.user_id,inv.id,inv.warehouse_type,inv.pos_x,inv.pos_y,i.id,i.name,i.rarity,i.category," +
+                            "i.weapon_type,i.current_price,i.width,i.height,i.image_url,inv.durability_percent,inv.status " +
+                            "from escape_inventory_instances inv join escape_items i on i.id=inv.item_id",
+                    seasonId);
+            jdbc.update("delete from escape_inventory_instances");
+            jdbc.update("update escape_seasons set inventory_cleared_at=now(),version=version+1 where id=?", seasonId);
+        }
+        return seasons.size();
     }
 
     @Transactional

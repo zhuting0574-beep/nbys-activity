@@ -165,6 +165,18 @@ public class EscapeH5Controller {
         return ApiResponse.ok(service.warehouse(me.userId, type));
     }
 
+    @GetMapping("/warehouse-history/seasons")
+    public ApiResponse<List<Map<String, Object>>> warehouseHistorySeasons(HttpServletRequest request) {
+        EscapeAccessService.UserContext me = access.requireUser(request);
+        return ApiResponse.ok(service.warehouseHistorySeasons(me.userId));
+    }
+
+    @GetMapping("/warehouse-history/{seasonId}")
+    public ApiResponse<Map<String, Object>> warehouseHistory(@PathVariable int seasonId, HttpServletRequest request) {
+        EscapeAccessService.UserContext me = access.requireUser(request);
+        return ApiResponse.ok(service.warehouseHistory(me.userId, seasonId));
+    }
+
     @PostMapping("/inventory/{inventoryId}/move")
     public ApiResponse<Map<String, Object>> move(@PathVariable long inventoryId,
                                                  @RequestBody Map<String, Object> body,

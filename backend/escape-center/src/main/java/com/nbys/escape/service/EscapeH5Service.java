@@ -332,6 +332,38 @@ public class EscapeH5Service {
         return result;
     }
 
+    public List<Map<String, Object>> warehouseHistorySeasons(int userId) {
+        return Rows.list(jdbc, "select s.id,s.name,s.start_date,s.end_date from escape_seasons s " +
+                "where s.inventory_cleared_at is not null and exists (select 1 from escape_season_warehouse_snapshots w " +
+                "where w.season_id=s.id and w.user_id=?) order by s.end_date desc,s.id desc", userId);
+    }
+
+    public Map<String, Object> warehouseHistory(int userId, int seasonId) {
+        Map<String, Object> dimensions = Rows.one(jdbc, "select personal_width,personal_height,buffer_width,buffer_height " +
+                "from escape_season_warehouse_snapshots where season_id=? and user_id=?", seasonId, userId);
+        if (dimensions == null) throw new IllegalArgumentException("该赛季暂无历史仓库记录");
+        List<Map<String, Object>> rows = Rows.list(jdbc,
+                "select id inventory_id,pos_x,pos_y,durability_percent,status,item_id,item_name_snapshot name," +
+                        "rarity_snapshot rarity,category_snapshot category,current_price_snapshot current_price," +
+                        "width_snapshot width,height_snapshot height,image_url_snapshot image_url," +
+                        "weapon_type_snapshot weapon_type,warehouse_type from escape_season_inventory_snapshots " +
+                        "where season_id=? and user_id=? order by warehouse_type,pos_y,pos_x,id", seasonId, userId);
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        for (String type : WAREHOUSE_TYPES) {
+            Map<String, Object> warehouse = new LinkedHashMap<String, Object>();
+            warehouse.put("type", type);
+            warehouse.put("width", dimensions.get(type + "_width"));
+            warehouse.put("height", dimensions.get(type + "_height"));
+            List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
+            for (Map<String, Object> row : rows) {
+                if (type.equals(String.valueOf(row.get("warehouse_type")))) items.add(row);
+            }
+            warehouse.put("items", stackWarehouseItems(items));
+            result.put(type, warehouse);
+        }
+        return result;
+    }
+
     private List<Map<String, Object>> stackWarehouseItems(List<Map<String, Object>> rows) {
         Map<String, Map<String, Object>> stacks = new LinkedHashMap<String, Map<String, Object>>();
         for (Map<String, Object> row : rows) {

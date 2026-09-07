@@ -27,7 +27,7 @@ public class ExpiredSeasonMatchScheduler {
     }
 
     private void closeExpiredMatches() {
-        int closed = adminService.closeExpiredSeasonMatches();
-        if (closed > 0) log.info("已自动关闭过期赛季的未结束对局，数量={}", closed);
+        int cleared = adminService.clearEndedSeasonInventories();
+        if (cleared > 0) log.info("已归档并清空过期赛季库存，赛季数量={}", cleared);
     }
 }

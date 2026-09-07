@@ -2,7 +2,9 @@
   <section class="escape-warehouse-board">
     <header class="escape-storage-heading">
       <div><span>ASSET STORAGE</span><h2>我的仓库</h2></div>
-      <small>拖拽，或点选物品后点击目标格</small>
+      <button v-if="!readonly && showHistory" type="button" class="escape-history-entry" @click="$emit('history')">历史仓库</button>
+      <small v-else-if="!readonly">拖拽，或点选物品后点击目标格</small>
+      <small v-else>历史物资只读展示</small>
     </header>
 
     <article
@@ -31,7 +33,8 @@
             :style="cellStyle(cell, type)"
             aria-hidden="true"
           ></i>
-          <button
+          <component
+            :is="readonly ? 'div' : 'button'"
             v-for="item in warehouse(type).items"
             :key="item.inventory_id"
             type="button"
@@ -53,7 +56,7 @@
             <em>{{ item.width || 1 }}×{{ item.height || 1 }}</em>
             <small>{{ item.name }}</small>
             <strong v-if="Number(item.quantity || 1) > 1" class="escape-storage-quantity">×{{ item.quantity }}</strong>
-          </button>
+          </component>
           <div
             v-if="preview?.warehouse === type"
             class="escape-storage-preview"
@@ -64,12 +67,12 @@
         </div>
       </div>
       <footer>
-        <span>{{ type === 'buffer' ? '横向滑动查看完整仓库' : '可拖回缓冲区' }}</span>
-        <div><b>{{ usage(type) }} / {{ Number(warehouse(type).width || 0) * Number(warehouse(type).height || 0) }} 格</b><button v-if="warehouse(type).items.length" type="button" :disabled="moving" @click="$emit('sell-all', type)">全部出售</button></div>
+        <span>{{ readonly ? '历史快照' : (type === 'buffer' ? '横向滑动查看完整仓库' : '可拖回缓冲区') }}</span>
+        <div><b>{{ usage(type) }} / {{ Number(warehouse(type).width || 0) * Number(warehouse(type).height || 0) }} 格</b><button v-if="!readonly && warehouse(type).items.length" type="button" :disabled="moving" @click="$emit('sell-all', type)">全部出售</button></div>
       </footer>
     </article>
 
-    <aside v-if="selectedItem" class="escape-selected-item">
+    <aside v-if="!readonly && selectedItem" class="escape-selected-item">
       <div>
         <span>{{ rarityText(selectedItem.rarity) }} · {{ selectedItem.width || 1 }} × {{ selectedItem.height || 1 }}<template v-if="Number(selectedItem.quantity || 1) > 1"> · 共 {{ selectedItem.quantity }} 件</template></span>
         <strong>{{ selectedItem.name }}</strong>
@@ -96,9 +99,11 @@ export default {
   name: 'EscapeWarehouseBoard',
   props: {
     warehouses: { type: Object, default: () => ({}) },
-    moving: Boolean
+    moving: Boolean,
+    readonly: Boolean,
+    showHistory: { type: Boolean, default: true }
   },
-  emits: ['move', 'sell', 'sell-all', 'invalid'],
+  emits: ['move', 'sell', 'sell-all', 'invalid', 'history'],
   data() {
     return {
       warehouseTypes: ['buffer', 'personal'],
@@ -163,7 +168,7 @@ export default {
       return this.warehouse(type).items.reduce((sum, item) => sum + Number(item.width || 1) * Number(item.height || 1), 0)
     },
     moveBufferItem(item, sourceWarehouse) {
-      if (sourceWarehouse !== 'buffer' || this.moving || item.status !== 'available') return
+      if (this.readonly || sourceWarehouse !== 'buffer' || this.moving || item.status !== 'available') return
       const target = this.warehouse('personal')
       const width = Number(item.width || 1)
       const height = Number(item.height || 1)
@@ -178,6 +183,7 @@ export default {
       this.$emit('invalid', '个人仓库没有足够的连续空间')
     },
     beginDrag(event, item, type) {
+      if (this.readonly) return
       this.selectedId = item.inventory_id
       if (this.moving || item.status !== 'available') return
       const rect = event.currentTarget.getBoundingClientRect()
@@ -264,6 +270,7 @@ export default {
       })
     },
     placeSelected(event, type) {
+      if (this.readonly) return
       if (!this.selectedItem || this.moving || event.target.closest('.escape-storage-item')) return
       const grid = event.currentTarget
       const position = this.gridPosition(grid, type, event.clientX, event.clientY)

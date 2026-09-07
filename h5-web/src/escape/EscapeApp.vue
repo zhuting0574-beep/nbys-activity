@@ -99,6 +99,7 @@
           @sell="sellItem"
           @sell-all="sellAllItems"
           @invalid="$emit('notify', $event)"
+          @history="openWarehouseHistory"
         />
 
       </template>
@@ -170,6 +171,20 @@
       @confirm-special="confirmSpecialWeapon"
       @settle="settleControlledMatch"
     />
+    <div v-if="historyWarehouse.open" class="escape-modal escape-history-modal">
+      <button class="escape-modal-backdrop" type="button" aria-label="关闭" @click="historyWarehouse.open = false"></button>
+      <section class="escape-history-dialog" role="dialog" aria-modal="true" aria-labelledby="escape-history-title">
+        <header>
+          <div><span>ARCHIVE STORAGE</span><h2 id="escape-history-title">历史仓库</h2></div>
+          <button type="button" class="escape-icon-button" aria-label="关闭" @click="historyWarehouse.open = false">×</button>
+        </header>
+        <label class="escape-history-season"><span>选择赛季</span><select v-model="historyWarehouse.seasonId" :disabled="historyWarehouse.loading" @change="loadWarehouseHistory"><option v-for="season in historyWarehouse.seasons" :key="season.id" :value="String(season.id)">{{ season.name }}</option></select></label>
+        <EscapeState v-if="historyWarehouse.loading" type="loading" title="正在读取历史仓库" description="正在加载赛季物资快照" />
+        <EscapeState v-else-if="historyWarehouse.error" type="error" title="历史仓库加载失败" :description="historyWarehouse.error" action-label="重新加载" @action="loadWarehouseHistory" />
+        <EscapeState v-else-if="!historyWarehouse.seasons.length" type="empty" title="暂无历史仓库" description="赛季结束后会在这里保留物资快照" />
+        <EscapeWarehouseBoard v-else :warehouses="historyWarehouse.warehouses" readonly :show-history="false" />
+      </section>
+    </div>
   </section>
 </template>
 
@@ -195,6 +210,7 @@ export default {
       matches: [],
       warehouses: { buffer: emptyWarehouse('buffer'), personal: emptyWarehouse('personal') },
       warehouseMoving: false,
+      historyWarehouse: { open: false, loading: false, error: '', seasons: [], seasonId: '', warehouses: { buffer: emptyWarehouse('buffer'), personal: emptyWarehouse('personal') } },
       shopCategory: 'all',
       products: [],
       records: [],
@@ -325,6 +341,37 @@ export default {
     async loadWarehouses() {
       const [buffer, personal] = await Promise.all([escapeApi.warehouse('buffer'), escapeApi.warehouse('personal')])
       this.warehouses = { buffer: this.normalizeWarehouse(buffer, 'buffer'), personal: this.normalizeWarehouse(personal, 'personal') }
+    },
+    async openWarehouseHistory() {
+      this.historyWarehouse.open = true
+      this.historyWarehouse.loading = true
+      this.historyWarehouse.error = ''
+      try {
+        const seasons = await escapeApi.warehouseHistorySeasons()
+        this.historyWarehouse.seasons = Array.isArray(seasons) ? seasons : []
+        this.historyWarehouse.seasonId = String(this.historyWarehouse.seasons[0]?.id || '')
+        if (this.historyWarehouse.seasonId) await this.loadWarehouseHistory()
+      } catch (error) {
+        this.historyWarehouse.error = error.message || '历史仓库加载失败'
+      } finally {
+        this.historyWarehouse.loading = false
+      }
+    },
+    async loadWarehouseHistory() {
+      if (!this.historyWarehouse.seasonId) return
+      this.historyWarehouse.loading = true
+      this.historyWarehouse.error = ''
+      try {
+        const data = await escapeApi.warehouseHistory(this.historyWarehouse.seasonId)
+        this.historyWarehouse.warehouses = {
+          buffer: this.normalizeWarehouse(data?.buffer, 'buffer'),
+          personal: this.normalizeWarehouse(data?.personal, 'personal')
+        }
+      } catch (error) {
+        this.historyWarehouse.error = error.message || '历史仓库加载失败'
+      } finally {
+        this.historyWarehouse.loading = false
+      }
     },
     normalizeWarehouse(data, type) {
       return { ...emptyWarehouse(type), ...(data || {}), items: data?.items || [] }

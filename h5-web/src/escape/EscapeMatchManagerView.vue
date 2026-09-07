@@ -279,6 +279,10 @@ export default {
       this.details.open = false
     },
     async openEditor(match) {
+      if (!match && !this.options.seasons.length) {
+        await this.requestConfirm('暂无进行中赛季', '当前没有进行中的赛季，请先去后管创建新赛季。', '我知道了')
+        return
+      }
       this.editor = {
         ...emptyEditor(),
         open: true,

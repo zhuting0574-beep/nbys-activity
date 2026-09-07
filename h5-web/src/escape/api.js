@@ -28,6 +28,8 @@ export const escapeApi = {
   matchDetail: matchId => api(`${base}/matches/${matchId}`),
   joinMatch: matchId => api(`${base}/matches/${matchId}/join`, { method: 'POST' }),
   warehouse: type => api(`${base}/warehouses/${encodeURIComponent(type)}`, { silent: true }),
+  warehouseHistorySeasons: () => api(`${base}/warehouse-history/seasons`, { silent: true }),
+  warehouseHistory: seasonId => api(`${base}/warehouse-history/${encodeURIComponent(seasonId)}`, { silent: true }),
   shop: category => api(`${base}/shop/products?category=${encodeURIComponent(category)}`, { silent: true }),
   records: () => api(`${base}/records`, { silent: true }),
   recordDetail: matchId => api(`${base}/records/${matchId}`),
