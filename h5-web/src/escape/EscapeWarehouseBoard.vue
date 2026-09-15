@@ -2,19 +2,18 @@
   <section class="escape-warehouse-board">
     <header class="escape-storage-heading">
       <div><span>ASSET STORAGE</span><h2>我的仓库</h2></div>
-      <button v-if="!readonly && showHistory" type="button" class="escape-history-entry" @click="$emit('history')">历史仓库</button>
-      <small v-else-if="!readonly">拖拽，或点选物品后点击目标格</small>
+      <small v-if="!readonly">拖拽，或点选物品后点击目标格</small>
       <small v-else>历史物资只读展示</small>
     </header>
 
     <article
-      v-for="type in warehouseTypes"
+      v-for="type in visibleWarehouseTypes"
       :key="type"
       class="escape-warehouse-zone"
       :class="`${type}-zone`"
     >
       <header>
-        <div><strong>{{ type === 'buffer' ? '缓冲区仓库' : '个人仓库' }}</strong><span>{{ warehouse(type).height }} × {{ warehouse(type).width }}</span></div>
+        <div><strong>{{ type === 'buffer' ? '缓冲区仓库' : '个人仓库' }}</strong><span>{{ warehouse(type).height }} × {{ warehouse(type).width }}</span><button v-if="!readonly && type === 'personal' && showHistory" type="button" class="escape-history-entry" @click.stop="$emit('history')">历史仓库</button></div>
         <small>{{ type === 'buffer' ? '每日 05:00 自动出售过夜物品' : '永久保存，不参与自动出售' }}</small>
       </header>
       <div class="escape-storage-scroll">
@@ -119,6 +118,9 @@ export default {
         if (item) return item
       }
       return null
+    },
+    visibleWarehouseTypes() {
+      return this.readonly ? ['personal'] : this.warehouseTypes
     },
     previewStyle() {
       if (!this.preview || !this.pointer) return {}
