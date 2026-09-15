@@ -630,6 +630,8 @@ public class EscapeAdminService {
                             "from escape_inventory_instances inv join escape_items i on i.id=inv.item_id",
                     seasonId);
             jdbc.update("delete from escape_inventory_instances");
+            // 赛季资产不跨赛季继承，结束时统一清零甬士币。
+            jdbc.update("update escape_user_assets set cash_balance=0,version=version+1 where cash_balance<>0");
             jdbc.update("update escape_seasons set inventory_cleared_at=now(),version=version+1 where id=?", seasonId);
         }
         return seasons.size();
