@@ -334,14 +334,18 @@ public class EscapeH5Service {
 
     public List<Map<String, Object>> warehouseHistorySeasons(int userId) {
         return Rows.list(jdbc, "select s.id,s.name,s.start_date,s.end_date from escape_seasons s " +
-                "where s.inventory_cleared_at is not null and exists (select 1 from escape_season_warehouse_snapshots w " +
-                "where w.season_id=s.id and w.user_id=?) order by s.end_date desc,s.id desc", userId);
+                "where (s.end_date<current_date or s.enabled=0) and s.deleted_at is null " +
+                "order by s.end_date desc,s.id desc");
     }
 
     public Map<String, Object> warehouseHistory(int userId, int seasonId) {
         Map<String, Object> dimensions = Rows.one(jdbc, "select personal_width,personal_height,buffer_width,buffer_height " +
                 "from escape_season_warehouse_snapshots where season_id=? and user_id=?", seasonId, userId);
-        if (dimensions == null) throw new IllegalArgumentException("该赛季暂无历史仓库记录");
+        if (dimensions == null) {
+            dimensions = Rows.one(jdbc, "select personal_width,personal_height,buffer_width,buffer_height " +
+                    "from escape_user_assets where user_id=?", userId);
+        }
+        if (dimensions == null) throw new IllegalArgumentException("该用户暂无仓库记录");
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select id inventory_id,pos_x,pos_y,durability_percent,status,item_id,item_name_snapshot name," +
                         "rarity_snapshot rarity,category_snapshot category,current_price_snapshot current_price," +
