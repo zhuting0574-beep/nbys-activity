@@ -27,6 +27,11 @@
 .escape-detail-section > header h3 { margin: 3px 0 0; font-size: 16px; }
 .escape-detail-section > header small { color: #8f9b9c; font-size: 10px; }
 .escape-detail-participants { display: grid; gap: 7px; }
+.escape-detail-teams { display: grid; gap: 14px; }
+.escape-detail-team { display: grid; gap: 7px; padding: 10px; border: 1px solid #303a3d; border-radius: 8px; background: #111719; }
+.escape-detail-team > header { display: flex; align-items: center; justify-content: space-between; color: #dcecae; }
+.escape-detail-team > header small { color: #8f9b9c; font-size: 10px; }
+.escape-detail-team .escape-detail-participants article { background: #182123; }
 .escape-detail-participants article, .escape-extraction-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px; border: 1px solid #303a3d; border-radius: 8px; background: #182123; }
 .escape-detail-participants article > div, .escape-extraction-row > div:first-child { display: grid; gap: 3px; }
 .escape-detail-participants small, .escape-extraction-row small { color: #8f9b9c; font-size: 10px; }

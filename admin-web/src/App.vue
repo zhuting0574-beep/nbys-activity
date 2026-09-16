@@ -123,6 +123,7 @@
       </section>
 
       <EscapeAdmin v-if="active === 'escape'" :can="can" />
+      <BatchAdmin v-if="active === 'batches'" :can="can" />
 
       <section v-if="active === 'activities'" class="card">
         <div class="toolbar">
@@ -480,6 +481,16 @@
           <el-button v-if="activityBannerPreview()" @click="clearActivityBanner">清除</el-button>
         </div>
       </el-form-item>
+      <el-form-item label="趣动小程序二维码">
+        <img v-if="activityForm.external_miniapp_qr_url" class="banner-preview payment-qr-preview" :src="activityForm.external_miniapp_qr_url" alt="第三方小程序活动二维码" />
+        <div class="banner-upload-row">
+          <el-upload action="/api/admin/files/upload" accept="image/*" :http-request="uploadAdminFile" :show-file-list="false" :on-success="response => activityForm.external_miniapp_qr_url = response.data.url" :on-error="handleUploadError">
+            <el-button>上传二维码</el-button>
+          </el-upload>
+          <el-button v-if="activityForm.external_miniapp_qr_url" @click="activityForm.external_miniapp_qr_url = ''">清除</el-button>
+        </div>
+        <p class="muted">配置后，H5 报名成功可选择前往趣动小程序，已报名用户也可通过“跳转趣动”按钮再次查看二维码。</p>
+      </el-form-item>
       <el-form-item label="活动名称"><el-input v-model="activityForm.name" /></el-form-item>
       <el-form-item label="组织者">
         <el-select v-model="activityForm.organizer_ids" multiple filterable collapse-tags collapse-tags-tooltip placeholder="选择正式队员" style="width: 100%">
@@ -699,6 +710,7 @@ import { api, setToken, token } from './api'
 import defaultActivityBanner from './assets/activity-default.jpg'
 import { compressImageFile, DEFAULT_MAX_BYTES } from './imageCompression'
 import EscapeAdmin from './escape/EscapeAdmin.vue'
+import BatchAdmin from './BatchAdmin.vue'
 
 const jobs = ['突击兵', '支援兵', '医疗兵', '狙击手', '弹药兵', '填线兵']
 const activityStatuses = ['报名中', '活动进行中', '活动结束', '活动取消', '投票中', '已生成活动']
@@ -783,7 +795,7 @@ const PlanForm = {
 }
 
 export default {
-  components: { ActivityForm, PlanForm, EscapeAdmin },
+  components: { ActivityForm, PlanForm, EscapeAdmin, BatchAdmin },
   data() {
     const query = new URLSearchParams(location.search)
     return {
@@ -803,6 +815,7 @@ export default {
       dashboardCharts: {},
 	      activities: [],
 	      venues: [],
+	      venueOptionsLoaded: false,
 	      modes: [],
 	      users: [],
 	      nonFormalUsers: [],
@@ -855,6 +868,7 @@ export default {
       const topItems = [
         { key: 'dashboard', name: '数据看板' },
         { key: 'escape', name: '逃离西撇镇', permission: 'escape:view' },
+        { key: 'batches', name: '跑批管理', permission: 'escape:view' },
         { key: 'activities', name: '活动管理', permission: 'activity:view' },
         { key: 'venues', name: '场地管理', permission: 'venue:view' },
         { key: 'modes', name: '模式管理', permission: 'gameMode:view' },
@@ -1019,7 +1033,9 @@ export default {
       this.tokenValue = token()
       if (!this.menus.some(item => item.key === this.active)) this.active = 'dashboard'
       this.roles = await api('/api/admin/roles/options')
-      await Promise.all([this.loadModes(), this.loadVenues(), this.load()])
+      const referenceLoads = [this.loadModes()]
+      if (this.active !== 'venues') referenceLoads.push(this.loadVenueOptions())
+      await Promise.all([...referenceLoads, this.load()])
       if (this.active === 'activities' && this.sourceActivityId && this.can('activity:view')) {
         await this.openActivity({ id: this.sourceActivityId })
       }
@@ -1039,7 +1055,7 @@ export default {
       window.location.href = `${this.h5Base()}?returnTo=${encodeURIComponent(current)}#/app`
     },
     load() {
-      return ({ dashboard: this.loadDashboard, escape: () => Promise.resolve(), activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
+      return ({ dashboard: this.loadDashboard, escape: () => Promise.resolve(), batches: () => Promise.resolve(), activities: this.loadActivities, venues: this.loadVenues, modes: this.loadModes, users: this.loadUsers, attendance: this.loadAttendance, launchers: this.loadLaunchers, system: this.loadSystem }[this.active] || this.loadActivities)()
     },
     loadSystem() {
       if (!this.systemMenus.some(item => item.key === this.systemActive)) {
@@ -1112,7 +1128,20 @@ export default {
 	      })
 	      return api(`/api/admin/activities?${params.toString()}`).then(d => { this.activities = d })
 	    },
-    loadVenues() { return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => { this.venues = d }) },
+    loadVenues() {
+      return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => {
+        this.venues = d
+        this.venueOptionsLoaded = false
+      })
+    },
+    loadVenueOptions() {
+      if (this.venueOptionsLoaded) return Promise.resolve(this.venues)
+      return api('/api/admin/venues/options').then(d => {
+        this.venues = d
+        this.venueOptionsLoaded = true
+        return d
+      })
+    },
     loadModes() { return api(`/api/admin/game-modes?name=${this.filters.name || ''}`).then(d => { this.modes = d }) },
     loadUsers() { return api(`/api/admin/users?keyword=${this.filters.keyword || ''}`).then(d => { this.users = d }) },
     loadLaunchers() {
@@ -1235,12 +1264,16 @@ export default {
       })
     },
 	    async openActivity(row) {
-	      await this.loadFormalUsers()
+	      const referenceLoads = [this.loadFormalUsers(), this.loadVenueOptions()]
 	      if (!row) {
-	        this.activityForm = { banner_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
+        await Promise.all(referenceLoads)
+        this.activityForm = { banner_url: '', external_miniapp_qr_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
-	      const detail = await api(`/api/admin/activities/${row.id}`)
+	      const [, , detail] = await Promise.all([
+          ...referenceLoads,
+          api(`/api/admin/activities/${row.id}`)
+        ])
 	      this.activityForm = {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),

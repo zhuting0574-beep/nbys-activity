@@ -1981,6 +1981,12 @@ select option {
   border-radius: 12px;
 }
 
+.payment-qr-image {
+  max-height: min(55vh, 360px);
+  object-fit: contain;
+  background: #fff;
+}
+
 .share-modal-panel {
   width: min(460px, 100%);
   background: #111827;
@@ -2426,7 +2432,7 @@ body {
 
 .member-app .detail-banner,
 .member-app .plan-detail > .banner {
-  filter: grayscale(.7) brightness(.72);
+  filter: none;
 }
 
 .member-app .rental-grid,
@@ -2437,7 +2443,7 @@ body {
 .member-app .rental-photo,
 .member-app .rental-photo img {
   border-radius: 5px;
-  filter: grayscale(.8);
+  filter: none;
 }
 
 .member-app .notice-card {

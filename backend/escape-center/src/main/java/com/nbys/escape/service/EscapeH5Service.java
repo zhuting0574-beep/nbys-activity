@@ -83,7 +83,14 @@ public class EscapeH5Service {
         List<Map<String, Object>> matches = Rows.list(jdbc,
                 "select m.id,m.name,m.status,m.team_count,m.team_capacity,m.created_by,m.created_at,m.started_at," +
                         "v.name venue_name,p.team_no,p.loadout_status," +
-                        "(select count(*) from escape_match_participants x where x.match_id=m.id) participant_count " +
+                        "(select count(*) from escape_match_participants x where x.match_id=m.id and x.team_no is not null) participant_count," +
+                        "(select count(*) from escape_match_participants t where t.match_id=m.id and t.team_no=p.team_no) team_member_count," +
+                        "(select group_concat(coalesce(nullif(tu.callsign,''),tu.username) order by t.id separator '、') " +
+                        "from escape_match_participants t join users tu on tu.id=t.user_id " +
+                        "where t.match_id=m.id and t.team_no=p.team_no) team_member_names," +
+                        "(select concat('[',group_concat(json_object('user_id',tu.id,'avatar_url',tu.avatar_url,'callsign',tu.callsign,'username',tu.username) order by t.id separator ','),']') " +
+                        "from escape_match_participants t join users tu on tu.id=t.user_id " +
+                        "where t.match_id=m.id and t.team_no=p.team_no) team_members_json " +
                         "from escape_matches m left join venues v on v.id=m.venue_id " +
                         "left join escape_match_participants p on p.match_id=m.id and p.user_id=? " +
                         "where m.status in ('preparing','in_progress') and m.season_id=(select id from escape_seasons " +
@@ -92,6 +99,15 @@ public class EscapeH5Service {
         for (Map<String, Object> match : matches) {
             boolean owner = ((Number) match.get("created_by")).intValue() == me.userId;
             match.put("can_control", owner || "superadmin".equals(me.role));
+            Object teamNo = match.get("team_no");
+            if (teamNo != null) {
+                match.put("team_members", Rows.list(jdbc,
+                        "select u.id user_id,u.avatar_url,u.callsign,u.username " +
+                                "from escape_match_participants p join users u on u.id=p.user_id " +
+                                "where p.match_id=? and p.team_no=? order by p.id", match.get("id"), teamNo));
+            } else {
+                match.put("team_members", java.util.Collections.emptyList());
+            }
         }
         return matches;
     }
@@ -123,7 +139,8 @@ public class EscapeH5Service {
             Map<String, Object> participant = new LinkedHashMap<String, Object>();
             participant.put("user_id", rowUserId);
             participant.put("callsign", row.get("callsign"));
-            participant.put("team_no", full ? rowTeam : null);
+            // Before lock, members need to see squad composition to choose a team.
+            participant.put("team_no", full || "preparing".equals(status) ? rowTeam : null);
             participant.put("loadout_status", full ? row.get("loadout_status") : null);
             participant.put("profession", full ? row.get("profession_name") : null);
             participant.put("weapon", full ? row.get("weapon_name") : null);
@@ -138,14 +155,16 @@ public class EscapeH5Service {
         result.put("professions", Rows.list(jdbc,
                 "select id,name,health,maintenance_fee,knife_only from escape_professions where enabled=1 order by sort_order,id"));
         result.put("weapons", Rows.list(jdbc,
-                "select id,name,weapon_type,usage_fee,durability_loss_percent from escape_weapons where enabled=1 order by sort_order,id"));
+                "select id,case weapon_type when 'knife' then '近战武器' when 'regular' then '普通武器' " +
+                        "when 'special' then '特殊武器' end name,weapon_type,usage_fee,durability_loss_percent " +
+                        "from escape_weapons where enabled=1 and item_id is null order by sort_order,id"));
         result.put("special_weapons", Rows.list(jdbc,
                 "select inv.id inventory_id,i.id item_id,i.name,i.image_url,inv.durability_percent," +
-                        "w.id weapon_id,w.name weapon_name " +
+                        "w.id weapon_id,i.name weapon_name " +
                         "from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
-                        "join escape_weapons w on w.item_id=i.id and w.weapon_type='special' and w.enabled=1 " +
+                        "join escape_weapons w on w.item_id is null and w.weapon_type='special' and w.enabled=1 " +
                         "where inv.user_id=? and inv.warehouse_type='personal' and inv.status='available' " +
-                        "and i.enabled=1 and i.deleted_at is null and i.category='weapon' order by inv.id", me.userId));
+                        "and i.enabled=1 and i.deleted_at is null and i.category='weapon' and i.weapon_type='special' order by inv.id", me.userId));
         return result;
     }
 
@@ -189,8 +208,22 @@ public class EscapeH5Service {
         if (!"preparing".equals(String.valueOf(match.get("status")))) {
             throw new IllegalArgumentException("对局已开始，不能修改整备");
         }
-        Map<String, Object> participant = requiredOne(
+        Map<String, Object> participant = Rows.one(jdbc,
                 "select * from escape_match_participants where match_id=? and user_id=? for update", matchId, userId);
+        if (participant == null) {
+            Number participantCount = jdbc.queryForObject(
+                    "select count(*) from escape_match_participants where match_id=? and team_no is not null",
+                    Number.class, matchId);
+            int capacity = ((Number) match.get("team_count")).intValue()
+                    * ((Number) match.get("team_capacity")).intValue();
+            if (participantCount != null && participantCount.intValue() >= capacity) {
+                throw new IllegalArgumentException("该战局人数已满");
+            }
+            jdbc.update("insert into escape_match_participants(match_id,user_id,loadout_status,joined_at) " +
+                    "values(?,?,'draft',now())", matchId, userId);
+            participant = requiredOne(
+                    "select * from escape_match_participants where match_id=? and user_id=? for update", matchId, userId);
+        }
         if ("locked".equals(String.valueOf(participant.get("loadout_status")))) {
             throw new IllegalArgumentException("整备已锁定");
         }
@@ -213,13 +246,17 @@ public class EscapeH5Service {
         if (truthy(profession.get("knife_only")) && !"knife".equals(weaponType)) {
             throw new IllegalArgumentException("跑刀仔只能选择刀");
         }
+        if (!truthy(profession.get("knife_only")) && "knife".equals(weaponType)) {
+            throw new IllegalArgumentException("非跑刀仔不能选择近战武器");
+        }
         Long specialInventoryId = nullableLong(body.get("special_inventory_id"));
         if ("special".equals(weaponType)) {
             if (specialInventoryId == null) throw new IllegalArgumentException("请选择个人仓库中的特殊武器");
             requiredOne("select inv.id from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
-                            "join escape_weapons w on w.id=? and w.item_id=i.id " +
+                            "join escape_weapons w on w.id=? and w.item_id is null " +
                             "where inv.id=? and inv.user_id=? and inv.warehouse_type='personal' and inv.status='available' " +
-                            "and i.enabled=1 and i.deleted_at is null and i.category='weapon' and w.weapon_type='special'",
+                            "and i.enabled=1 and i.deleted_at is null and i.category='weapon' " +
+                            "and i.weapon_type='special' and w.weapon_type='special'",
                     weaponId, specialInventoryId, userId);
         } else if (specialInventoryId != null) {
             throw new IllegalArgumentException("当前武器类型不能绑定仓库武器");
@@ -288,11 +325,46 @@ public class EscapeH5Service {
         List<Map<String, Object>> rows = Rows.list(jdbc,
                 "select inv.id inventory_id,inv.pos_x,inv.pos_y,inv.durability_percent,inv.status," +
                         "i.id item_id,i.name,i.rarity,i.category,i.current_price,i.previous_price,i.width,i.height,i.image_url," +
-                        "w.weapon_type from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
-                        "left join escape_weapons w on w.item_id=i.id and w.enabled=1 " +
+                        "i.weapon_type from escape_inventory_instances inv join escape_items i on i.id=inv.item_id " +
                         "where inv.user_id=? and inv.warehouse_type=? order by inv.pos_y,inv.pos_x,inv.id",
                 userId, type);
         result.put("items", stackWarehouseItems(rows));
+        return result;
+    }
+
+    public List<Map<String, Object>> warehouseHistorySeasons(int userId) {
+        return Rows.list(jdbc, "select s.id,s.name,s.start_date,s.end_date from escape_seasons s " +
+                "where (s.end_date<current_date or s.enabled=0) and s.deleted_at is null " +
+                "order by s.end_date desc,s.id desc");
+    }
+
+    public Map<String, Object> warehouseHistory(int userId, int seasonId) {
+        Map<String, Object> dimensions = Rows.one(jdbc, "select personal_width,personal_height,buffer_width,buffer_height " +
+                "from escape_season_warehouse_snapshots where season_id=? and user_id=?", seasonId, userId);
+        if (dimensions == null) {
+            dimensions = Rows.one(jdbc, "select personal_width,personal_height,buffer_width,buffer_height " +
+                    "from escape_user_assets where user_id=?", userId);
+        }
+        if (dimensions == null) throw new IllegalArgumentException("该用户暂无仓库记录");
+        List<Map<String, Object>> rows = Rows.list(jdbc,
+                "select id inventory_id,pos_x,pos_y,durability_percent,status,item_id,item_name_snapshot name," +
+                        "rarity_snapshot rarity,category_snapshot category,current_price_snapshot current_price," +
+                        "width_snapshot width,height_snapshot height,image_url_snapshot image_url," +
+                        "weapon_type_snapshot weapon_type,warehouse_type from escape_season_inventory_snapshots " +
+                        "where season_id=? and user_id=? order by warehouse_type,pos_y,pos_x,id", seasonId, userId);
+        Map<String, Object> result = new LinkedHashMap<String, Object>();
+        for (String type : WAREHOUSE_TYPES) {
+            Map<String, Object> warehouse = new LinkedHashMap<String, Object>();
+            warehouse.put("type", type);
+            warehouse.put("width", dimensions.get(type + "_width"));
+            warehouse.put("height", dimensions.get(type + "_height"));
+            List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
+            for (Map<String, Object> row : rows) {
+                if (type.equals(String.valueOf(row.get("warehouse_type")))) items.add(row);
+            }
+            warehouse.put("items", stackWarehouseItems(items));
+            result.put(type, warehouse);
+        }
         return result;
     }
 
@@ -438,11 +510,10 @@ public class EscapeH5Service {
     public List<Map<String, Object>> products() {
         return Rows.list(jdbc,
                 "select p.id,p.name,p.product_type,p.price," +
-                        "case when p.product_type='expansion' then p.stock else least(p.stock,i.stock_quantity) end stock," +
+                "p.stock stock," +
                         "p.warehouse_width,p.warehouse_height,p.off_shelf_at," +
-                        "i.name item_name,i.rarity,i.category,i.width,i.height,i.image_url,w.weapon_type " +
+                        "i.name item_name,i.rarity,i.category,i.width,i.height,i.image_url,i.weapon_type " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
-                        "left join escape_weapons w on w.item_id=i.id and w.enabled=1 " +
                         "where p.enabled=1 and p.stock>0 and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
                         "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null and i.stock_quantity>0)) " +
                         "order by p.id desc");
@@ -458,8 +529,9 @@ public class EscapeH5Service {
                 "select p.*,i.width item_width,i.height item_height,i.name item_name,i.category item_category," +
                         "i.stock_quantity item_stock_quantity " +
                         "from escape_shop_products p left join escape_items i on i.id=p.item_id " +
-                        "where p.id=? and p.enabled=1 and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
-                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null)) for update",
+                        "where p.id=? and p.enabled=1 and p.stock>0 " +
+                        "and (p.off_shelf_at is null or p.off_shelf_at>now()) " +
+                        "and (p.product_type='expansion' or (i.enabled=1 and i.deleted_at is null and i.stock_quantity>0)) for update",
                 productId);
         if (((Number) product.get("stock")).intValue() < quantity) throw new IllegalArgumentException("商品库存不足");
         String type = String.valueOf(product.get("product_type"));
@@ -548,15 +620,17 @@ public class EscapeH5Service {
     public List<Map<String, Object>> records(int userId, boolean administrator, boolean onlyMine) {
         if (administrator && !onlyMine) {
             return Rows.list(jdbc,
-                    "select m.id,m.name,m.started_at,m.settled_at,count(p.id) participant_count," +
+                    "select m.id,m.name,m.season_id,s.name season_name,m.started_at,m.settled_at,count(p.id) participant_count," +
                             "sum(case when p.`escaped`=1 then 1 else 0 end) escaped_count " +
                             "from escape_matches m join escape_match_participants p on p.match_id=m.id " +
-                            "where m.status='settled' group by m.id order by m.id desc");
+                            "left join escape_seasons s on s.id=m.season_id " +
+                            "where m.status='settled' group by m.id,s.name order by m.id desc");
         }
         return Rows.list(jdbc,
-                "select m.id,m.name,m.started_at,m.settled_at,p.team_no,p.`escaped`,p.kills," +
+                "select m.id,m.name,m.season_id,s.name season_name,m.started_at,m.settled_at,p.team_no,p.`escaped`,p.kills," +
                         "p.manual_cash,p.kill_cash,pr.name profession_name,w.name weapon_name " +
                         "from escape_match_participants p join escape_matches m on m.id=p.match_id " +
+                        "left join escape_seasons s on s.id=m.season_id " +
                         "left join escape_professions pr on pr.id=p.profession_id left join escape_weapons w on w.id=p.weapon_id " +
                         "where p.user_id=? and m.status='settled' order by m.id desc", userId);
     }
@@ -570,7 +644,7 @@ public class EscapeH5Service {
                 "select m.*,v.name venue_name,s.name season_name from escape_matches m " +
                         "left join venues v on v.id=m.venue_id left join escape_seasons s on s.id=m.season_id " +
                         "where m.id=? and m.status='settled'", matchId));
-        if (me.administrator) {
+        if (own == null && me.administrator) {
             result.put("participants", Rows.list(jdbc,
                     "select p.*,coalesce(nullif(u.callsign,''),u.username) callsign,pr.name profession_name,w.name weapon_name " +
                             "from escape_match_participants p join users u on u.id=p.user_id " +

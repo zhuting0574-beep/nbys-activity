@@ -2,17 +2,18 @@
   <section class="escape-warehouse-board">
     <header class="escape-storage-heading">
       <div><span>ASSET STORAGE</span><h2>我的仓库</h2></div>
-      <small>拖拽，或点选物品后点击目标格</small>
+      <small v-if="!readonly">拖拽，或点选物品后点击目标格</small>
+      <small v-else>历史物资只读展示</small>
     </header>
 
     <article
-      v-for="type in warehouseTypes"
+      v-for="type in visibleWarehouseTypes"
       :key="type"
       class="escape-warehouse-zone"
       :class="`${type}-zone`"
     >
       <header>
-        <div><strong>{{ type === 'buffer' ? '缓冲区仓库' : '个人仓库' }}</strong><span>{{ warehouse(type).height }} × {{ warehouse(type).width }}</span></div>
+        <div><strong>{{ type === 'buffer' ? '缓冲区仓库' : '个人仓库' }}</strong><span>{{ warehouse(type).height }} × {{ warehouse(type).width }}</span><button v-if="!readonly && type === 'personal' && showHistory" type="button" class="escape-history-entry" @click.stop="$emit('history')">历史仓库</button></div>
         <small>{{ type === 'buffer' ? '每日 05:00 自动出售过夜物品' : '永久保存，不参与自动出售' }}</small>
       </header>
       <div class="escape-storage-scroll">
@@ -31,7 +32,8 @@
             :style="cellStyle(cell, type)"
             aria-hidden="true"
           ></i>
-          <button
+          <component
+            :is="readonly ? 'div' : 'button'"
             v-for="item in warehouse(type).items"
             :key="item.inventory_id"
             type="button"
@@ -46,13 +48,14 @@
             @pointermove="moveDrag"
             @pointerup="endDrag"
             @pointercancel="cancelDrag"
+            @dblclick.stop="moveBufferItem(item, type)"
           >
             <img v-if="item.image_url" :src="item.image_url" alt="" draggable="false" />
             <b v-else>{{ symbol(item) }}</b>
             <em>{{ item.width || 1 }}×{{ item.height || 1 }}</em>
             <small>{{ item.name }}</small>
             <strong v-if="Number(item.quantity || 1) > 1" class="escape-storage-quantity">×{{ item.quantity }}</strong>
-          </button>
+          </component>
           <div
             v-if="preview?.warehouse === type"
             class="escape-storage-preview"
@@ -63,12 +66,12 @@
         </div>
       </div>
       <footer>
-        <span>{{ type === 'buffer' ? '横向滑动查看完整仓库' : '可拖回缓冲区' }}</span>
-        <div><b>{{ usage(type) }} / {{ Number(warehouse(type).width || 0) * Number(warehouse(type).height || 0) }} 格</b><button v-if="warehouse(type).items.length" type="button" :disabled="moving" @click="$emit('sell-all', type)">全部出售</button></div>
+        <span>{{ readonly ? '历史快照' : (type === 'buffer' ? '横向滑动查看完整仓库' : '可拖回缓冲区') }}</span>
+        <div><b>{{ usage(type) }} / {{ Number(warehouse(type).width || 0) * Number(warehouse(type).height || 0) }} 格</b><button v-if="!readonly && warehouse(type).items.length" type="button" :disabled="moving" @click="$emit('sell-all', type)">全部出售</button></div>
       </footer>
     </article>
 
-    <aside v-if="selectedItem" class="escape-selected-item">
+    <aside v-if="!readonly && selectedItem" class="escape-selected-item">
       <div>
         <span>{{ rarityText(selectedItem.rarity) }} · {{ selectedItem.width || 1 }} × {{ selectedItem.height || 1 }}<template v-if="Number(selectedItem.quantity || 1) > 1"> · 共 {{ selectedItem.quantity }} 件</template></span>
         <strong>{{ selectedItem.name }}</strong>
@@ -95,9 +98,11 @@ export default {
   name: 'EscapeWarehouseBoard',
   props: {
     warehouses: { type: Object, default: () => ({}) },
-    moving: Boolean
+    moving: Boolean,
+    readonly: Boolean,
+    showHistory: { type: Boolean, default: true }
   },
-  emits: ['move', 'sell', 'sell-all', 'invalid'],
+  emits: ['move', 'sell', 'sell-all', 'invalid', 'history'],
   data() {
     return {
       warehouseTypes: ['buffer', 'personal'],
@@ -113,6 +118,9 @@ export default {
         if (item) return item
       }
       return null
+    },
+    visibleWarehouseTypes() {
+      return this.readonly ? ['personal'] : this.warehouseTypes
     },
     previewStyle() {
       if (!this.preview || !this.pointer) return {}
@@ -161,10 +169,28 @@ export default {
     usage(type) {
       return this.warehouse(type).items.reduce((sum, item) => sum + Number(item.width || 1) * Number(item.height || 1), 0)
     },
+    moveBufferItem(item, sourceWarehouse) {
+      if (this.readonly || sourceWarehouse !== 'buffer' || this.moving || item.status !== 'available') return
+      const target = this.warehouse('personal')
+      const width = Number(item.width || 1)
+      const height = Number(item.height || 1)
+      for (let y = 0; y <= Number(target.height || 0) - height; y += 1) {
+        for (let x = 0; x <= Number(target.width || 0) - width; x += 1) {
+          if (this.canPlace(item, 'personal', x, y)) {
+            this.$emit('move', { item, targetWarehouse: 'personal', posX: x, posY: y })
+            return
+          }
+        }
+      }
+      this.$emit('invalid', '个人仓库没有足够的连续空间')
+    },
     beginDrag(event, item, type) {
+      if (this.readonly) return
       this.selectedId = item.inventory_id
       if (this.moving || item.status !== 'available') return
       const rect = event.currentTarget.getBoundingClientRect()
+      const itemWidth = Math.max(1, Number(item.width || 1))
+      const itemHeight = Math.max(1, Number(item.height || 1))
       event.currentTarget.setPointerCapture?.(event.pointerId)
       this.pointer = {
         item,
@@ -176,6 +202,8 @@ export default {
         clientY: event.clientY,
         width: rect.width,
         height: rect.height,
+        anchorX: Math.min(itemWidth - 1, Math.floor((event.clientX - rect.left) / (rect.width / itemWidth))),
+        anchorY: Math.min(itemHeight - 1, Math.floor((event.clientY - rect.top) / (rect.height / itemHeight))),
         dragging: false
       }
     },
@@ -215,19 +243,19 @@ export default {
         return
       }
       const warehouse = grid.dataset.warehouse
-      const position = this.gridPosition(grid, warehouse, event.clientX, event.clientY)
+      const position = this.gridPosition(grid, warehouse, event.clientX, event.clientY, this.pointer?.anchorX || 0, this.pointer?.anchorY || 0)
       this.preview = {
         warehouse,
         ...position,
         valid: this.canPlace(this.pointer.item, warehouse, position.posX, position.posY)
       }
     },
-    gridPosition(grid, type, clientX, clientY) {
+    gridPosition(grid, type, clientX, clientY, anchorX = 0, anchorY = 0) {
       const rect = grid.getBoundingClientRect()
       const data = this.warehouse(type)
       return {
-        posX: Math.floor((clientX - rect.left) / (rect.width / Number(data.width || 1))),
-        posY: Math.floor((clientY - rect.top) / (rect.height / Number(data.height || 1)))
+        posX: Math.floor((clientX - rect.left) / (rect.width / Number(data.width || 1))) - anchorX,
+        posY: Math.floor((clientY - rect.top) / (rect.height / Number(data.height || 1))) - anchorY
       }
     },
     canPlace(item, type, posX, posY) {
@@ -244,6 +272,7 @@ export default {
       })
     },
     placeSelected(event, type) {
+      if (this.readonly) return
       if (!this.selectedItem || this.moving || event.target.closest('.escape-storage-item')) return
       const grid = event.currentTarget
       const position = this.gridPosition(grid, type, event.clientX, event.clientY)

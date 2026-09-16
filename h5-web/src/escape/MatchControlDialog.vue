@@ -37,17 +37,19 @@
         <div v-if="isPreparing" class="escape-control-members">
           <article v-for="participant in participants" :key="participant.id">
             <div>
-              <strong>{{ participant.callsign }}</strong>
+              <strong>{{ participant.callsign }} <em v-if="participant.weapon_type === 'special'" class="escape-special-weapon-badge">特殊武器</em></strong>
               <small>第 {{ participant.team_no || '-' }} 小队 · {{ participant.profession_name || '未选职业' }}</small>
               <small>{{ participant.weapon_name || '未选武器' }}</small>
+              <button v-if="participant.weapon_type === 'special' && !Number(participant.special_weapon_confirmed)" type="button" class="escape-special-confirm" @click="$emit('confirm-special', participant)">确认特殊武器</button>
+              <small v-else-if="participant.weapon_type === 'special'" class="escape-special-confirmed">特殊武器已确认</small>
             </div>
             <span :class="{ ready: participant.loadout_status === 'locked' }">
               {{ participant.loadout_status === 'locked' ? '已锁定' : '未锁定' }}
             </span>
           </article>
           <p class="escape-warning-copy">开始后将一次性校验全员配装和余额，并扣除职业及武器费用。</p>
-          <button class="escape-primary wide" type="button" :disabled="saving || !allLocked" @click="$emit('start')">
-            {{ saving ? '正在开始…' : allLocked ? '确认开始战局' : '仍有成员未锁定' }}
+          <button class="escape-primary wide" type="button" :disabled="saving || !allLocked || !allSpecialConfirmed" @click="$emit('start')">
+            {{ saving ? '正在开始…' : !allLocked ? '仍有成员未锁定' : !allSpecialConfirmed ? '请先确认特殊武器' : '确认开始战局' }}
           </button>
         </div>
 
@@ -81,16 +83,19 @@
             <div class="escape-settlement-items" :class="{ disabled: !participant.escaped }">
               <small v-if="!participant.escaped" class="escape-settlement-hint">未撤离不能带出物资</small>
               <div class="escape-settlement-item-add">
-                <label><span>结算物品</span><select v-model.number="participant.pending_item_id" :disabled="!participant.escaped">
-                  <option value="">选择本局物品</option>
-                  <option
-                    v-for="item in matchItems"
-                    :key="item.item_id"
-                    :value="item.item_id"
-                    :disabled="itemAlreadySelected(participant, item.item_id) || poolRemaining(item.item_id) <= 0"
-                  >{{ item.name }}（剩余 {{ poolRemaining(item.item_id) }}）</option>
-                </select></label>
-                <button type="button" aria-label="添加物品" title="添加物品" :disabled="!participant.escaped || !participant.pending_item_id" @click="addSelectedItem(participant)">＋</button>
+                <div class="escape-settlement-multi">
+                  <span>结算物品</span>
+                  <details :class="{ disabled: !participant.escaped }">
+                    <summary>{{ participant.pending_item_ids.length ? `已选择 ${participant.pending_item_ids.length} 种物品` : '选择本局物品' }}</summary>
+                    <div class="escape-settlement-options">
+                      <label v-for="item in matchItems" :key="item.item_id" :class="{ disabled: itemAlreadySelected(participant, item.item_id) || poolRemaining(item.item_id) <= 0 }">
+                        <input v-model="participant.pending_item_ids" type="checkbox" :value="Number(item.item_id)" :disabled="!participant.escaped || itemAlreadySelected(participant, item.item_id) || poolRemaining(item.item_id) <= 0" />
+                        <span>{{ item.name }}</span><small>剩余 {{ poolRemaining(item.item_id) }}</small>
+                      </label>
+                    </div>
+                  </details>
+                </div>
+                <button type="button" aria-label="添加物品" title="添加物品" :disabled="!participant.escaped || !participant.pending_item_ids.length" @click="addSelectedItems(participant)">＋</button>
                 <button type="button" class="scan" aria-label="扫描物品二维码" title="扫描物品二维码" :disabled="!participant.escaped" @click="openScanner(participant)">⌗</button>
               </div>
               <div v-for="(selected, itemIndex) in participant.items" :key="selected.item_id" class="escape-settlement-item-row">
@@ -144,7 +149,7 @@ export default {
     submitError: { type: String, default: '' },
     data: { type: Object, default: () => ({}) }
   },
-  emits: ['close', 'retry', 'start', 'settle'],
+  emits: ['close', 'retry', 'start', 'settle', 'confirm-special'],
   data() {
     return {
       note: '', drafts: [], formError: '', qrScanner: null,
@@ -173,6 +178,9 @@ export default {
     allLocked() {
       return this.participants.length > 0 && this.lockedCount === this.participants.length
     },
+    allSpecialConfirmed() {
+      return this.participants.every(item => item.weapon_type !== 'special' || Number(item.special_weapon_confirmed) === 1)
+    },
     killReward() {
       return Number(this.match.kill_reward || 0)
     },
@@ -192,7 +200,7 @@ export default {
           escaped: false,
           kills: 0,
           manual_cash: 0,
-          pending_item_id: '',
+          pending_item_ids: [],
           items: []
         }))
       }
@@ -222,7 +230,7 @@ export default {
     },
     onEscapeChange(participant) {
       if (participant.escaped) return
-      participant.pending_item_id = ''
+      participant.pending_item_ids = []
       participant.items = []
       if (Number(this.scanner.participantId) === Number(participant.id)) this.closeScanner()
     },
@@ -263,11 +271,12 @@ export default {
       }
       return ''
     },
-    addSelectedItem(participant) {
-      const itemId = Number(participant.pending_item_id)
-      if (!itemId || this.itemAlreadySelected(participant, itemId) || this.poolRemaining(itemId) <= 0) return
-      participant.items.push({ item_id: itemId, quantity: 1 })
-      participant.pending_item_id = ''
+    addSelectedItems(participant) {
+      participant.pending_item_ids.forEach(value => {
+        const itemId = Number(value)
+        if (itemId && !this.itemAlreadySelected(participant, itemId) && this.poolRemaining(itemId) > 0) participant.items.push({ item_id: itemId, quantity: 1 })
+      })
+      participant.pending_item_ids = []
     },
     async openScanner(participant) {
       if (!participant.escaped) return

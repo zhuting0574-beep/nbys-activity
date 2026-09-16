@@ -28,6 +28,8 @@ export const escapeApi = {
   matchDetail: matchId => api(`${base}/matches/${matchId}`),
   joinMatch: matchId => api(`${base}/matches/${matchId}/join`, { method: 'POST' }),
   warehouse: type => api(`${base}/warehouses/${encodeURIComponent(type)}`, { silent: true }),
+  warehouseHistorySeasons: () => api(`${base}/warehouse-history/seasons`, { silent: true }),
+  warehouseHistory: seasonId => api(`${base}/warehouse-history/${encodeURIComponent(seasonId)}`, { silent: true }),
   shop: category => api(`${base}/shop/products?category=${encodeURIComponent(category)}`, { silent: true }),
   records: () => api(`${base}/records`, { silent: true }),
   recordDetail: matchId => api(`${base}/records/${matchId}`),
@@ -36,6 +38,7 @@ export const escapeApi = {
   lockLoadout: matchId => api(`${base}/matches/${matchId}/loadout/lock`, writeOptions('POST')),
   matchControl: matchId => api(`${base}/matches/${matchId}/control`),
   startMatch: matchId => api(`${base}/matches/${matchId}/control/start`, writeOptions('POST')),
+  confirmSpecialWeapon: (matchId, participantId) => api(`${base}/matches/${matchId}/participants/${participantId}/special-weapon-confirm`, writeOptions('POST')),
   settlementPreview: matchId => api(`${base}/matches/${matchId}/control/settlement`),
   settleMatch: (matchId, body) => api(`${base}/matches/${matchId}/control/settle`, writeOptions('POST', body)),
   purchase: (productId, quantity = 1) => api(`${base}/shop/products/${productId}/purchase`, {
