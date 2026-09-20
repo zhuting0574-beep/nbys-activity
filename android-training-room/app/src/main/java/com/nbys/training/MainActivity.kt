@@ -743,6 +743,8 @@ class MainActivity : AppCompatActivity() {
                   sceneCheckFrames = 0
                   if (SceneMonitor.moved(frame, crop)) {
                     calibrated = false
+                    calibrationConfirmed = false
+                    calibrationConfirmationOpen = false
                     calibrationStableFrames = 0
                     previousCalibrationPoints = emptyList()
                     latestPoints = emptyList()
