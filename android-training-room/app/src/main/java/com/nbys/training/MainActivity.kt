@@ -59,7 +59,7 @@ class MainActivity : AppCompatActivity() {
   private var loginButton: Button? = null
   private var loginSpinner: ProgressBar? = null
   private lateinit var calibrationOverlay: CalibrationOverlay
-  private var targetName = "NBYS Laser Precision A4"
+  private var targetName = "精度靶"
   private var latestPoints = emptyList<CalibrationPoint>()
   private var previousCalibrationPoints = emptyList<CalibrationPoint>()
   @Volatile private var manualCalibration = false
@@ -77,6 +77,8 @@ class MainActivity : AppCompatActivity() {
   private var calibrationStableFrames = 0
   private var sceneCheckFrames = 0
   private var calibrated = false
+  private var calibrationConfirmed = false
+  @Volatile private var calibrationConfirmationOpen = false
   private var lastCalibrationText = ""
   @Volatile private var activeSessionId: Long? = null
   @Volatile private var activeTargetNo = 1
@@ -302,23 +304,43 @@ class MainActivity : AppCompatActivity() {
   }
 
   private fun chooseTarget() {
-    val targetOptions =
-        arrayOf(
-            "NBYS Laser Precision A4",
-            "NBYS Laser Precision A3",
-            "NBYS Human Silhouette A4",
-            "NBYS Human Silhouette A3")
-    var selected = targetOptions.indexOf(targetName).coerceAtLeast(0)
-    AlertDialog.Builder(this)
-        .setTitle("选择靶纸")
-        .setSingleChoiceItems(targetOptions, selected) { _, which -> selected = which }
-        .setNegativeButton("取消", null)
-        .setPositiveButton("确认") { dialog, _ ->
-          targetName = targetOptions[selected]
-          dialog.dismiss()
-          showCamera()
+    val options = listOf(
+        "精度靶" to R.drawable.target_precision,
+        "人形精度靶" to R.drawable.target_human_precision,
+        "人形靶" to R.drawable.target_human)
+    var selected = options.indexOfFirst { it.first == targetName }.coerceAtLeast(0)
+    val list = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(dp(18), dp(8), dp(18), 0)
+    }
+    var selectedRow: View? = null
+    val dialog = AlertDialog.Builder(this).setTitle("选择靶纸").setView(list)
+        .setCancelable(false)
+        .setPositiveButton("确认") { _, _ -> targetName = options[selected].first; showCamera() }
+        .create()
+    options.forEachIndexed { index, option ->
+      val row = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        setOnClickListener {
+          selected = index
+          selectedRow?.background = rounded(Color.TRANSPARENT, "#3b494c", 6f)
+          background = rounded(Color.rgb(35, 49, 25), "#b7dd43", 6f)
+          selectedRow = this
         }
-        .show()
+      }
+      val image = ImageView(this).apply {
+        setImageResource(option.second)
+        scaleType = ImageView.ScaleType.CENTER_CROP
+      }
+      row.addView(image, LinearLayout.LayoutParams(dp(58), dp(82)))
+      row.addView(TextView(this).apply { text = option.first; textSize = 16f; setPadding(dp(14), 0, 0, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
+      row.background = rounded(if (index == selected) Color.rgb(35, 49, 25) else Color.TRANSPARENT, "#3b494c", 6f)
+      if (index == selected) selectedRow = row
+      list.addView(row, LinearLayout.LayoutParams(-1, dp(94)))
+    }
+    dialog.show()
   }
 
   private fun loginInput(hintText: String, type: Int) =
@@ -540,6 +562,7 @@ class MainActivity : AppCompatActivity() {
     manualButton?.text = "手动定位"
     autoLocateRequested = true
     calibrated = false
+    calibrationConfirmed = false
     calibrationStableFrames = 0
     previousCalibrationPoints = emptyList()
     latestPoints = emptyList()
@@ -557,6 +580,7 @@ class MainActivity : AppCompatActivity() {
     setManualFocusMode(manualCalibration)
     manualPoints = emptyList()
     calibrated = false
+    calibrationConfirmed = false
     autoLocateRequested = false
     calibrationStableFrames = 0
     manualButton?.text = if (manualCalibration) "恢复自动" else "手动定位"
@@ -616,7 +640,7 @@ class MainActivity : AppCompatActivity() {
           calibrationOverlay.points=emptyList();calibrationOverlay.invalidate();updateCameraStatus("手动定位：请点击左上定位点")
         }
         .setPositiveButton("确认") { _,_ ->
-          calibrated=true;calibrationStableFrames=8;manualCalibration=false;manualButton?.text="手动定位";setManualFocusMode(false)
+          calibrated=true;calibrationConfirmed=true;calibrationStableFrames=8;manualCalibration=false;manualButton?.text="手动定位";setManualFocusMode(false)
           updateCameraStatus("手动四点定位完成，等待网页开始训练")
           actionLog("手动定位完成：${manualPoints.joinToString { "(%.3f, %.3f)".format(it.x,it.y) }}");heartbeat()
         }.show()
@@ -669,7 +693,7 @@ class MainActivity : AppCompatActivity() {
               } else if (activeSessionId == null || !calibrated || latestPoints.size != 4) {
                 val sceneStill = SceneMonitor.observe(frame, crop)
                 val calibration =
-                    if (sceneStill) CalibrationDetector.detect(frame, crop)
+                    if (sceneStill) CalibrationDetector.detectTargetSheet(frame, crop)
                     else CalibrationResult(emptyList())
                 if (sceneStill && calibration.points.size != lastLocatedPointCount) {
                   lastLocatedPointCount = calibration.points.size
@@ -700,7 +724,7 @@ class MainActivity : AppCompatActivity() {
                             "训练中 · 已记录 $shotNo 发 · ${actualFps.toInt()}fps"
                         else "四点定位完成，等待网页开始训练"
                     else if (!sceneStill) "请保持手机和靶纸静止，正在保存定位画面"
-                    else "正在识别黑白定位标记 ${calibration.points.size}/4，请让四个方形标记完整入镜"
+                    else "正在识别四角黄黑定位球 ${calibration.points.size}/4，请让四个定位球完整入镜"
                 if (text != lastCalibrationText) {
                   lastCalibrationText = text
                   updateCameraStatus(text)
@@ -711,7 +735,7 @@ class MainActivity : AppCompatActivity() {
                   autoLocateRequested = false
                   autoLocateButton?.post { autoLocateButton?.text = "重新定位" }
                   actionLog("自动定位完成：${latestPoints.joinToString { "(%.3f, %.3f)".format(it.x,it.y) }}")
-                  heartbeat()
+                  confirmAutomaticCalibration()
                 }
               } else {
                 sceneCheckFrames++
@@ -735,7 +759,7 @@ class MainActivity : AppCompatActivity() {
                 }
               }
               val hit =
-                  if (calibrated && activeSessionId != null && !localTrainingComplete && System.currentTimeMillis() >= detectionEnabledAt)
+                  if (calibrated && calibrationConfirmed && activeSessionId != null && !localTrainingComplete && System.currentTimeMillis() >= detectionEnabledAt)
                       LaserDetector.detect(frame, crop)
                   else {
                     LaserDetector.updateBackground(frame, crop)
@@ -757,6 +781,29 @@ class MainActivity : AppCompatActivity() {
     setCameraZoom(1f)
   }
 
+  private fun confirmAutomaticCalibration() {
+    if (calibrationConfirmationOpen) return
+    calibrationConfirmationOpen = true
+    runOnUiThread {
+      AlertDialog.Builder(this)
+          .setTitle("确认靶纸范围")
+          .setMessage("请检查红框是否准确覆盖靶纸四边。确认后等待训练开始，相机会在开始时自动调至最低亮度。")
+          .setCancelable(false)
+          .setNegativeButton("重新定位") { _, _ ->
+            calibrationConfirmationOpen = false
+            requestAutoLocate()
+          }
+          .setPositiveButton("确认定位") { _, _ ->
+            calibrationConfirmationOpen = false
+            calibrationConfirmed = true
+            updateCameraStatus("定位已确认，等待网页开始训练")
+            actionLog("用户已确认靶纸四边范围")
+            heartbeat()
+          }
+          .show()
+    }
+  }
+
   private fun heartbeat() {
     post(
         "/api/training/h5/devices/heartbeat",
@@ -765,7 +812,7 @@ class MainActivity : AppCompatActivity() {
             .put("name", "Android 靶机")
             .put("target_name", targetName)
             .put("frame_rate", actualFps.toInt())
-            .put("calibration_status", if (calibrated) "calibrated" else "pending")) { device ->
+            .put("calibration_status", if (calibrationConfirmed) "calibrated" else "pending")) { device ->
           val data = device.optJSONObject("data")
           activeTargetNo = data?.optInt("target_no", 1) ?: 1
           targetHitLimit = data?.optInt("target_hit_limit", 5)?.coerceAtLeast(1) ?: 5
@@ -939,7 +986,8 @@ class MainActivity : AppCompatActivity() {
 
     private val paint =
         Paint(Paint.ANTI_ALIAS_FLAG).apply {
-          color = Color.rgb(183, 221, 67)
+          // The four-corner target bounds are the primary calibration result.
+          color = Color.rgb(235, 62, 62)
           style = Paint.Style.STROKE
           strokeWidth = dp(3).toFloat()
         }

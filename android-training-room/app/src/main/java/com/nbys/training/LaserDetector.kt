@@ -41,6 +41,9 @@ object CalibrationDetector {
         return latestResult
     }
 
+    /** New target sheets use the yellow/black four-quadrant registration balls. */
+    fun detectTargetSheet(image: Image, crop: Rect): CalibrationResult = detectLegacy(image, crop)
+
     private fun processWorkingImage(imageWidth:Int,imageHeight:Int,crop:Rect):CalibrationResult {
         val reference=if(stableSamples.size>=2)robustAverage(stableSamples.toList()) else emptyList()
         val rois=arrayOf(

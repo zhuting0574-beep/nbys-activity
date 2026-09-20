@@ -98,7 +98,9 @@ class Camera2Controller(
         val range=c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE) ?: return
         val step=c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: return
         if(step<=0f || range.lower==range.upper) return
-        val compensation=(-2f/step).roundToInt().coerceIn(range.lower,range.upper)
+        // The laser is easiest to isolate after calibration, so use the darkest
+        // compensation supported by this camera rather than a fixed -2 EV.
+        val compensation=range.lower
         builder.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION,compensation)
         onStatus("训练曝光 ${String.format("%.1f",compensation*step)} EV")
     }
