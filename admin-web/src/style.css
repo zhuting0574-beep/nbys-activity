@@ -443,13 +443,73 @@ body {
   width: 100%;
 }
 
-.plan-date-row,
 .invitee-tags,
 .invitee-option-list {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.plan-date-list {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.plan-date-row {
+  display: grid;
+  grid-template-columns: 190px 180px minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 720px;
+  --el-component-size: 40px;
+}
+
+.plan-date-row > .el-date-editor,
+.plan-date-row > .plan-venue-select,
+.plan-date-row > .el-input {
+  width: 100% !important;
+}
+
+.plan-date-row .el-input__wrapper {
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.plan-add-option {
+  justify-self: start;
+}
+
+.plan-venue-select,
+.plan-visibility-select {
+  width: 180px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  outline: none;
+  background: #fff;
+  color: #606266;
+  font: inherit;
+  transition: border-color 0.2s;
+}
+
+.plan-visibility-select {
+  width: 100%;
+}
+
+.plan-venue-select:hover,
+.plan-visibility-select:hover {
+  border-color: #c0c4cc;
+}
+
+.plan-venue-select:focus,
+.plan-visibility-select:focus {
+  border-color: #409eff;
+}
+
+.plan-venue-select.is-placeholder {
+  color: #a8abb2;
 }
 
 .invitee-option-list {
@@ -690,25 +750,81 @@ body {
 }
 
 .attendance-filter-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+  min-width: 0;
+  margin: 18px 0 14px;
+  padding: 16px 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.attendance-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.attendance-filter-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.attendance-filter-field > span {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.attendance-filter-field .el-date-editor,
+.attendance-filter-field .el-select,
+.attendance-filter-field .el-input {
+  width: 100%;
+}
+
+.attendance-filter-field .el-checkbox.is-bordered {
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  padding: 0 10px;
+}
+
+.attendance-filter-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.attendance-filter-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+.user-attendance-filter {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   align-items: end;
-  min-width: 460px;
-  padding: 14px;
-  background: #f8fafc;
-  border: 1px solid #dbe4f0;
-  border-radius: 12px;
+  margin-bottom: 16px;
 }
 
-.attendance-filter-card label {
+.user-attendance-filter label {
   display: grid;
   gap: 6px;
 }
 
-.attendance-filter-card label > span {
+.user-attendance-filter label > span {
   color: #475569;
   font-weight: 600;
+}
+
+.user-attendance-table-scroll {
+  min-height: 180px;
+  max-height: 560px;
 }
 
 .attendance-summary-grid {
@@ -750,17 +866,81 @@ body {
 }
 
 .attendance-matrix {
-  margin-top: 14px;
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #1f2937;
+  font-size: 14px;
+}
+
+.attendance-name-col {
+  width: 112px;
+}
+
+.attendance-count-col {
+  width: 76px;
+}
+
+.attendance-event-col {
+  width: 105px;
 }
 
 .attendance-table-scroll {
   width: 100%;
-  max-width: calc(100vw - 300px);
+  max-width: 100%;
+  max-height: 560px;
+  overflow: auto;
   padding-bottom: 8px;
+  overscroll-behavior: contain;
 }
 
-.attendance-table-scroll .attendance-matrix {
-  width: 100%;
+.attendance-matrix th,
+.attendance-matrix td {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid #dcdfe6;
+  border-bottom: 1px solid #dcdfe6;
+  background: #fff;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.attendance-matrix tr > :first-child {
+  border-left: 1px solid #dcdfe6;
+}
+
+.attendance-matrix thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  border-top: 1px solid #dcdfe6;
+  background: #f5f7fa;
+}
+
+.attendance-matrix .attendance-sticky {
+  position: sticky;
+  z-index: 2;
+}
+
+.attendance-matrix .attendance-sticky-name {
+  left: 0;
+  text-align: left;
+}
+
+.attendance-matrix .attendance-sticky-count {
+  left: 112px;
+}
+
+.attendance-matrix thead .attendance-sticky {
+  z-index: 4;
+  background: #f5f7fa;
+}
+
+.attendance-mark-cell {
+  height: 44px;
 }
 
 .attendance-event-head {
@@ -815,6 +995,12 @@ body {
   font-weight: 700;
 }
 
+@media (max-width: 1500px) {
+  .attendance-filter-fields {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
   .dashboard-hero,
   .dashboard-panel-head {
@@ -837,7 +1023,11 @@ body {
   }
 
   .attendance-filter-card {
-    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .attendance-filter-actions {
+    justify-content: flex-end;
   }
 
   .attendance-summary-grid {
@@ -845,7 +1035,21 @@ body {
   }
 }
 
+@media (max-width: 720px) {
+  .attendance-filter-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .attendance-filter-actions .el-button {
+    flex: 1;
+  }
+}
+
 @media (max-width: 520px) {
+  .attendance-filter-fields {
+    grid-template-columns: 1fr;
+  }
+
   .invitee-search-row {
     align-items: stretch;
     flex-direction: column;

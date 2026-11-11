@@ -34,6 +34,8 @@ public class DbMigrationRunner implements ApplicationRunner {
             jdbc.update("update activities set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
             jdbc.update("update activity_plans set organizer_ids=cast(created_by_id as char) where coalesce(organizer_ids,'')='' and created_by_id is not null");
             addColumn("plan_date_options", "remark", "varchar(200) DEFAULT NULL COMMENT '日期备注'", "date");
+            addColumn("activity_plans", "vote_mode", "varchar(20) NOT NULL DEFAULT 'legacy' COMMENT 'legacy=旧式分开投票, grouped=日期场地成组投票'", "vote_deadline");
+            addColumn("plan_date_options", "venue_id", "int DEFAULT NULL COMMENT '成组选项关联场地ID'", "remark");
             addColumn("venues", "image_url", "varchar(500) DEFAULT NULL COMMENT '场地图片'", "address");
             addColumn("venues", "longitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 longitude for check-in'", "address");
             addColumn("venues", "latitude", "decimal(10,7) DEFAULT NULL COMMENT 'WGS84/GCJ02 latitude for check-in'", "longitude");
@@ -63,11 +65,19 @@ public class DbMigrationRunner implements ApplicationRunner {
             System.err.println("Database migration skipped: " + e.getMessage());
         }
         try {
+            runSqlResource("db/migration/V20261020__backfill_activity_attendance_events.sql");
+            runSqlResource("db/migration/V20261109__admin_optimizations.sql");
+        } catch (Exception e) {
+            throw new IllegalStateException("Attendance event backfill failed", e);
+        }
+        try {
             runSqlResource("db/migration/V20260723__escape_from_xp_domain.sql");
             runSqlResource("db/migration/V20260810__escape_warehouse_dimensions.sql");
             runSqlResource("db/migration/V20260810__escape_match_item_stock.sql");
             runSqlResource("db/migration/V20260821__escape_shop_stock_schedule.sql");
             runSqlResource("db/migration/V20260821__batch_run_logs.sql");
+            addColumn("batch_run_logs", "schedule_slot", "varchar(40) DEFAULT NULL COMMENT '定时计划周期唯一键'", "business_date");
+            addUniqueIndex("batch_run_logs", "uk_batch_schedule_slot", "(task_key,schedule_slot)");
             addColumn("escape_items", "weapon_type", "varchar(20) DEFAULT NULL COMMENT 'knife/regular/special'", "category");
             addColumn("escape_items", "material_type", "varchar(20) NOT NULL DEFAULT 'activity' COMMENT 'activity=活动物资,product=商品物资'", "category");
             jdbc.update("update escape_items i set material_type='product' " +

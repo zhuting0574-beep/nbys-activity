@@ -30,6 +30,7 @@ public class ProfileController {
         String callsign = text(body.get("callsign"));
         String password = text(body.get("password"));
         if (username.isEmpty() || password.isEmpty()) throw new IllegalArgumentException("用户名、密码不能为空");
+        if (callsign.isEmpty()) callsign = username;
         if (Rows.one(jdbc, "select id from users where username=?", username) != null) throw new IllegalArgumentException("用户名已存在");
         if (!callsign.isEmpty() && Rows.one(jdbc, "select id from users where callsign=?", callsign) != null) throw new IllegalArgumentException("呼号已存在");
         Integer invitedBy = null;
@@ -51,7 +52,7 @@ public class ProfileController {
         String username = text(body.get("username"));
         String callsign = text(body.get("callsign"));
         if (username.isEmpty() && current != null) username = text(current.get("username"));
-        if (callsign.isEmpty() && current != null) callsign = text(current.get("callsign"));
+        if (callsign.isEmpty()) callsign = username;
         String avatar = body.containsKey("avatar_url") ? text(body.get("avatar_url")) : current == null ? "" : text(current.get("avatar_url"));
         if (username.isEmpty()) throw new IllegalArgumentException("用户名不能为空");
         if (Rows.one(jdbc, "select id from users where id<>? and username=?", userId, username) != null) throw new IllegalArgumentException("用户名已存在");

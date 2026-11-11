@@ -113,7 +113,15 @@
         <span class="status inline planning">策划中</span>
       </div>
 
-      <section class="vote-section">
+      <section v-if="selectedPlan.vote_mode === 'grouped'" class="vote-section">
+        <h3>日期、场地和备注</h3>
+        <label v-for="option in selectedPlan.dates" :key="option.id" class="option-tile">
+          <input v-model="planVoteForm.grouped_option_ids" type="checkbox" :value="option.id" :disabled="selectedPlan.voted" />
+          <span><strong>{{ option.date }}{{ option.venue_name ? ` · ${option.venue_name}` : ' · 场地待定' }}</strong><small v-if="option.remark">{{ option.remark }}</small><small v-if="selectedPlan.voted">{{ option.vote_count || 0 }} 票</small></span>
+        </label>
+        <p v-if="!selectedPlan.dates?.length" class="muted">暂无日期和场地选项</p>
+      </section>
+      <section v-else class="vote-section">
         <h3>可选日期</h3>
         <label v-for="option in selectedPlan.dates" :key="option.id" class="option-tile">
           <input v-model="planVoteForm.date_option_ids" type="checkbox" :value="option.id" :disabled="selectedPlan.voted" />
@@ -126,7 +134,7 @@
         <p v-if="!selectedPlan.dates?.length" class="muted">暂无日期选项</p>
       </section>
 
-      <section class="vote-section">
+      <section v-if="selectedPlan.vote_mode !== 'grouped'" class="vote-section">
         <h3>可选场地</h3>
         <label v-for="venue in selectedPlan.venues" :key="venue.id" class="option-tile">
           <input v-model="planVoteForm.venue_ids" type="checkbox" :value="venue.id" :disabled="selectedPlan.voted" />
@@ -186,7 +194,7 @@
         </div>
         <p class="detail-copy">开放职业：{{ detail.allowed_jobs || '未配置' }}</p>
         <p class="detail-copy">人员列表：{{ detail.my_enrollment ? '已加入' : '未加入' }}　游戏模式：{{ detail.game_modes || '未配置' }}</p>
-        <p class="detail-copy">我的状态：{{ detail.checkin?.present ? '已签到' : detail.my_enrollment ? '已报名' : '未报名' }}</p>
+        <p class="detail-copy">我的状态：{{ isCheckinPresent(detail) ? '已签到' : detail.my_enrollment ? '已报名' : '未报名' }}</p>
 
         <div class="detail-actions">
           <button v-if="canManageActivities" class="btn secondary detail-main-action admin-entry" @click="goAdminActivity">活动管理</button>
@@ -194,13 +202,13 @@
           <button v-if="detail.display_status === '报名中' && !detail.my_enrollment" class="btn detail-main-action" @click="startEnroll">报名</button>
           <button v-if="detail.display_status === '报名中' && detail.my_enrollment && isWeeklyActivity(detail)" class="btn secondary detail-main-action" @click="openEnrollmentDialog">修改人数</button>
           <button v-if="detail.my_enrollment && detail.external_miniapp_qr_url" class="btn secondary detail-main-action" @click="openMiniProgramDialog">跳转趣动</button>
-          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !detail.checkin?.present" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
+          <button v-if="canCheckinActivity(detail) && detail.my_enrollment && !isCheckinPresent(detail)" class="btn detail-main-action" :disabled="checkinSubmitting" @click="openCheckinDialog()">
             签到
           </button>
           <button v-if="detail.can_show_checkin_qr && canCheckinActivity(detail) && canUseQrCheckin(detail)" class="btn secondary detail-main-action" @click="showCheckinQr">签到二维码</button>
-          <button v-if="detail.checkin?.present" class="btn secondary detail-main-action" disabled>已签到</button>
+          <button v-if="isCheckinPresent(detail)" class="btn secondary detail-main-action" disabled>已签到</button>
           <button v-if="detail.my_enrollment" class="btn secondary detail-main-action" @click="openActivityRentals">发射器租赁</button>
-          <button v-if="detail.my_enrollment && !detail.checkin?.present" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
+          <button v-if="detail.my_enrollment && !isCheckinPresent(detail)" class="btn danger detail-main-action" @click="cancelEnroll">取消报名</button>
         </div>
       </section>
 
@@ -223,7 +231,7 @@
 
       <section v-if="(detail.my_enrollment || detail.is_activity_creator) && !isWeeklyActivity(detail)" class="squad-panel">
         <h3>阵营 / 小队 / 人员列表</h3>
-        <p class="muted">发起人管理全部小队；队长管理本队；普通成员只能在未锁定时修改自己或更换小队。</p>
+        <p class="muted">发起人管理全部小队；队长管理本队并可转让队长；普通成员只能在未锁定时修改自己或更换小队。</p>
         <div v-for="camp in camps" :key="camp" class="camp-block">
           <div class="camp-head">
             <span>阵营 {{ camp }}</span>
@@ -248,11 +256,11 @@
                   {{ isSquadLocked(squad) ? '解除锁定' : '锁定小队' }}
                 </button>
               </div>
-              <div v-if="detail.is_activity_creator && membersBySquad(camp, squad.squad_no).length" class="leader-setting">
+              <div v-if="canTransferSquadLeader(squad) && membersBySquad(camp, squad.squad_no).length" class="leader-setting">
                 <select v-model="squadEdits[squad.id].leaderUserId" class="compact-select">
                   <option v-for="member in membersBySquad(camp, squad.squad_no)" :key="member.user_id" :value="String(member.user_id)">{{ member.callsign || member.username }} / {{ member.job || '未选职业' }}</option>
                 </select>
-                <button class="btn secondary compact-action" @click="saveSquadLeader(squad)">设置队长</button>
+                <button class="btn secondary compact-action" @click="saveSquadLeader(squad)">{{ squad.leader_user_id ? '转让队长' : '设置队长' }}</button>
               </div>
               <div v-if="detail.my_enrollment && !detail.is_activity_creator && !isMySquad(squad)" class="join-squad-row">
                 <select v-model="joinJobs[squad.id]" class="compact-select" :disabled="cannotSelfJoin(squad)">
@@ -270,13 +278,13 @@
                     </select>
                     <select v-model="memberAssignments[member.user_id].job" class="compact-select"><option value="" disabled>请选择职业</option><option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option></select>
                     <button class="btn secondary compact-action" @click="saveMemberAssignment(member)">保存</button>
-                    <button class="btn danger compact-action" :disabled="isMemberLeader(squad, member)" @click="removeMember(squad, member)">踢出</button>
+                    <button class="btn danger compact-action" @click="removeMember(squad, member)">{{ isMemberLeader(squad, member) ? '移出并交接' : '踢出' }}</button>
                   </template>
                   <template v-else-if="canEditMemberJob(squad, member)">
                     <select v-model="memberAssignments[member.user_id].job" class="compact-select" :disabled="selfMemberLocked(squad, member)"><option value="" disabled>请选择职业</option><option v-for="job in availableJobs" :key="job" :value="job">{{ job }}</option></select>
                     <button class="btn secondary compact-action" :disabled="selfMemberLocked(squad, member)" @click="saveMemberJob(member)">保存职业</button>
                     <button v-if="isSquadLeader(squad) && !isSelf(member)" class="btn danger compact-action" @click="removeMember(squad, member)">踢出</button>
-                    <button v-if="isSelf(member) && !isSquadLeader(squad)" class="btn danger compact-action" :disabled="isSquadLocked(squad)" @click="removeMember(squad, member, true)">退出小队</button>
+                    <button v-if="isSelf(member)" class="btn danger compact-action" :disabled="isSquadLocked(squad) && !isSquadLeader(squad)" @click="removeMember(squad, member, true)">退出小队</button>
                   </template>
                   <span v-else class="member-job-text">{{ member.job || '未选职业' }}</span>
                 </div>
@@ -712,7 +720,7 @@ export default {
       attendanceDrag: { active: false, pointerId: null, startX: 0, scrollLeft: 0 },
       selectedActivity: null,
       selectedPlan: null,
-      planVoteForm: { date_option_ids: [], venue_ids: [], game_mode_ids: [] },
+      planVoteForm: { grouped_option_ids: [], date_option_ids: [], venue_ids: [], game_mode_ids: [] },
       detail: {},
       checkinSubmitting: false,
       checkinDialog: { show: false, qrToken: '', mode: 'choice' },
@@ -1000,7 +1008,7 @@ export default {
         await this.openPlanById(planId)
       }
       const qrToken = params.get('checkinToken') || ''
-      if (this.view === 'app' && this.selectedActivity && qrToken && !this.detail.checkin?.present) this.openCheckinDialog(qrToken)
+      if (this.view === 'app' && this.selectedActivity && qrToken && !this.isCheckinPresent(this.detail)) this.openCheckinDialog(qrToken)
     },
     redirectAfterLogin() {
       const target = new URLSearchParams(location.search).get('returnTo')
@@ -1057,6 +1065,7 @@ export default {
     },
     planVoteFormFromPlan(plan) {
       return {
+        grouped_option_ids: [...(plan.my_grouped_option_ids || [])],
         date_option_ids: [...(plan.my_date_option_ids || [])],
         venue_ids: [...(plan.my_venue_ids || [])],
         game_mode_ids: [...(plan.my_game_mode_ids || [])]
@@ -1110,6 +1119,9 @@ export default {
     },
     canUseQrCheckin(activity) {
       return this.checkinMethods(activity).includes('qr')
+    },
+    isCheckinPresent(activity) {
+      return Number(activity?.checkin?.present) === 1
     },
     amapUrl(keyword) {
       return `https://uri.amap.com/search?keyword=${encodeURIComponent(keyword || '')}`
@@ -1295,7 +1307,7 @@ export default {
     },
     async submitPlanVote() {
       const body = this.planVoteForm
-      if (!body.date_option_ids.length && !body.venue_ids.length && !body.game_mode_ids.length) {
+      if (!body.grouped_option_ids.length && !body.date_option_ids.length && !body.venue_ids.length && !body.game_mode_ids.length) {
         return this.showToast('请至少选择一个投票选项')
       }
       if (!(await this.askConfirm('确认提交投票吗？提交后不得修改。'))) return
@@ -1486,6 +1498,9 @@ export default {
     canManageSquad(squad) {
       return !!this.detail.is_activity_creator || this.isSquadLeader(squad)
     },
+    canTransferSquadLeader(squad) {
+      return !!this.detail.is_activity_creator || this.isSquadLeader(squad)
+    },
     isSelf(member) {
       return Number(member?.user_id) === Number(this.me.id)
     },
@@ -1558,9 +1573,9 @@ export default {
       this.showToast('职业已保存')
     },
     async removeMember(squad, member, self = false) {
-      if (this.isMemberLeader(squad, member)) return this.showToast('请先设置新的队长')
       const action = self ? '退出小队' : `将 ${member.callsign || member.username} 踢出小队`
-      if (!(await this.askConfirm(`确认${action}吗？职业和所属阵营将一并清空。`))) return
+      const leaderHint = this.isMemberLeader(squad, member) ? ' 队长将自动转让给本队下一顺位成员。' : ''
+      if (!(await this.askConfirm(`确认${action}吗？职业和所属阵营将一并清空。${leaderHint}`))) return
       await api(`/api/h5/activities/${this.selectedActivity}/members/${member.user_id}/squad`, { method: 'DELETE' })
       await this.openActivity(this.selectedActivity)
       this.showToast(self ? '已退出小队' : '成员已移至未分配')
@@ -1568,13 +1583,12 @@ export default {
     cannotSelfJoin(squad) {
       const mine = this.detail.my_enrollment || {}
       const source = (this.detail.squads || []).find(item => Number(item.camp_no) === Number(mine.camp_no) && Number(item.squad_no) === Number(mine.squad_no))
-      return this.isSquadLocked(squad) || !!(source && this.isSquadLocked(source)) || !!(source && this.isSquadLeader(source))
+      return this.isSquadLocked(squad) || !!(source && this.isSquadLocked(source))
     },
     selfJoinLabel(squad) {
       if (this.isSquadLocked(squad)) return '目标小队已锁定'
       const mine = this.detail.my_enrollment || {}
       const source = (this.detail.squads || []).find(item => Number(item.camp_no) === Number(mine.camp_no) && Number(item.squad_no) === Number(mine.squad_no))
-      if (source && this.isSquadLeader(source)) return '请先转让队长'
       if (source && this.isSquadLocked(source)) return '原小队已锁定'
       return '加入小队'
     },

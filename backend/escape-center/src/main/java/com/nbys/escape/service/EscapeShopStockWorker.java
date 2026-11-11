@@ -12,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -40,12 +39,9 @@ public class EscapeShopStockWorker {
     @Transactional
     public boolean plan(LocalDate businessDate) {
         boolean hit = random.nextInt(100) < 20;
-        LocalDateTime scheduledAt = hit
-                ? businessDate.atTime(6 + random.nextInt(18), 0)
-                : null;
         int claimed = jdbc.update(
                 "insert ignore into escape_shop_stock_tasks(business_date,draw_hit,scheduled_at,status) values(?,?,?,?)",
-                businessDate, hit, scheduledAt, hit ? "planned" : "skipped");
+                businessDate, hit, null, hit ? "planned" : "skipped");
         if (claimed == 0) return false;
 
         List<Map<String, Object>> products = Rows.list(jdbc,
@@ -62,22 +58,11 @@ public class EscapeShopStockWorker {
         return true;
     }
 
-    public List<LocalDate> dueTasks(LocalDateTime now) {
-        List<Map<String, Object>> rows = Rows.list(jdbc,
-                "select business_date from escape_shop_stock_tasks " +
-                        "where status='planned' and scheduled_at<=? order by business_date", now);
-        List<LocalDate> dates = new ArrayList<LocalDate>();
-        for (Map<String, Object> row : rows) {
-            dates.add(localDate(row.get("business_date")));
-        }
-        return dates;
-    }
-
     @Transactional
     public boolean execute(LocalDate businessDate) {
         List<Map<String, Object>> tasks = Rows.list(jdbc,
                 "select business_date from escape_shop_stock_tasks " +
-                        "where business_date=? and status='planned' and scheduled_at<=now() for update",
+                        "where business_date=? and status='planned' for update",
                 businessDate);
         if (tasks.isEmpty()) return false;
 

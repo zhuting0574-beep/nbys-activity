@@ -220,24 +220,27 @@
       <section v-if="active === 'users'" class="card">
         <div class="toolbar">
           <el-input v-model="filters.keyword" placeholder="用户名/呼号" style="width: 200px" />
-          <el-button @click="loadUsers">查询</el-button>
+          <el-checkbox v-model="userFormalOnly" border @change="searchUsers">只看正式队员</el-checkbox>
+          <el-button @click="searchUsers">查询</el-button>
         </div>
         <el-table :data="users" border>
-          <el-table-column type="index" label="序号" width="70" />
+          <el-table-column label="序号" width="70"><template #default="{ $index }">{{ (userPage - 1) * userPageSize + $index + 1 }}</template></el-table-column>
           <el-table-column prop="username" label="用户名" />
           <el-table-column prop="callsign" label="呼号" />
           <el-table-column label="状态"><template #default="{ row }">{{ row.disabled ? '禁用' : '正常' }}</template></el-table-column>
           <el-table-column label="权限"><template #default="{ row }">{{ userRoleLabel(row) }}</template></el-table-column>
           <el-table-column label="正式队员"><template #default="{ row }">{{ row.is_regular_member ? '是' : '否' }}</template></el-table-column>
           <el-table-column label="邀请人"><template #default="{ row }">{{ row.inviter_callsign || row.inviter_name || '-' }}</template></el-table-column>
-          <el-table-column label="操作" width="260">
+          <el-table-column label="操作" width="340">
             <template #default="{ row }">
+              <el-button size="small" v-if="can('attendance:view')" @click="openUserAttendance(row)">考勤查看</el-button>
               <el-button size="small" v-if="can('user:update')" @click="editUser = { ...row }">修改</el-button>
               <el-button size="small" v-if="can('user:resetPassword')" @click="resetUserPassword(row)">重置密码</el-button>
               <el-button size="small" type="danger" v-if="can('user:delete')" @click="remove(`/api/admin/users/${row.id}`, loadUsers)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
+        <div class="toolbar"><el-pagination v-model:current-page="userPage" v-model:page-size="userPageSize" :page-sizes="[10,20,50]" :total="userTotal" layout="total, sizes, prev, pager, next" @current-change="loadUsers" @size-change="changeUserPageSize" /></div>
       </section>
 
       <section v-if="active === 'attendance'" class="attendance-page">
@@ -245,21 +248,6 @@
           <div>
             <h1>出勤率统计</h1>
             <p>管理员和出勤率管理可以查看并修改完整出勤记录。</p>
-          </div>
-          <div class="attendance-filter-card">
-            <label>
-              <span>自然年度</span>
-              <el-date-picker v-model="attendanceYear" type="year" value-format="YYYY" placeholder="全部年度" />
-            </label>
-            <label>
-              <span>活动地区</span>
-              <el-select v-model="filters.region" clearable placeholder="全部地区">
-                <el-option label="宁波" value="宁波" />
-                <el-option label="外地" value="外地" />
-              </el-select>
-            </label>
-            <el-checkbox v-model="filters.formalOnly">只看正式队员</el-checkbox>
-            <el-button @click="loadAttendance">筛选</el-button>
           </div>
         </div>
 
@@ -306,12 +294,41 @@
             <h2>出勤表</h2>
             <p>实心绿点表示已签到，空心绿点表示已报名但未签到。活动横向显示：名称 / 日期 / 场地 / 组织人。</p>
           </div>
+          <div class="attendance-filter-card">
+            <div class="attendance-filter-fields">
+              <label class="attendance-filter-field"><span>概览年度</span><el-date-picker v-model="attendanceYear" type="year" value-format="YYYY" /></label>
+              <label class="attendance-filter-field"><span>开始日期</span><el-date-picker v-model="attendanceStartDate" type="date" value-format="YYYY-MM-DD" /></label>
+              <label class="attendance-filter-field"><span>结束日期</span><el-date-picker v-model="attendanceEndDate" type="date" value-format="YYYY-MM-DD" /></label>
+              <label class="attendance-filter-field">
+                <span>活动地区</span>
+                <el-select v-model="filters.region" clearable placeholder="全部地区">
+                  <el-option label="宁波" value="宁波" />
+                  <el-option label="外地" value="外地" />
+                </el-select>
+              </label>
+              <div class="attendance-filter-field">
+                <span>人员范围</span>
+                <el-checkbox v-model="filters.formalOnly" border>只看正式队员</el-checkbox>
+              </div>
+              <label class="attendance-filter-field"><span>队员搜索</span><el-input v-model="attendanceKeyword" placeholder="姓名 / 呼号" clearable @keyup.enter="loadAttendance" /></label>
+            </div>
+            <div class="attendance-filter-actions">
+              <el-button @click="loadAttendance"><el-icon><Search /></el-icon>筛选</el-button>
+              <el-button type="primary" @click="openAttendanceExport"><el-icon><Download /></el-icon>导出下场率</el-button>
+            </div>
+          </div>
           <div class="attendance-table-scroll">
-            <el-table class="attendance-matrix" :data="attendanceUsers" border height="560">
-              <el-table-column prop="callsign" label="人员" fixed="left" width="112" />
-              <el-table-column label="出勤次数" fixed="left" width="50"><template #default="{ row }">{{ countPresent(row.id) }}</template></el-table-column>
-              <el-table-column v-for="event in attendanceEvents" :key="event.id" width="105">
-                <template #header>
+            <table class="attendance-matrix">
+              <colgroup>
+                <col class="attendance-name-col" />
+                <col class="attendance-count-col" />
+                <col v-for="event in attendanceEvents" :key="event.id" class="attendance-event-col" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th class="attendance-sticky attendance-sticky-name">人员</th>
+                  <th class="attendance-sticky attendance-sticky-count">出勤次数</th>
+                  <th v-for="event in attendanceEvents" :key="event.id" class="attendance-event-cell">
                   <div class="attendance-event-head">
                     <strong>{{ event.name }}</strong>
                     <span>{{ event.event_date }}</span>
@@ -325,14 +342,21 @@
                       <el-button size="small" type="danger" v-if="event.is_manual ? can('attendance:delete') : can('activity:delete')" @click.stop="deleteAttendanceEvent(event)">删除</el-button>
                     </div>
                   </div>
-                </template>
-                <template #default="{ row }">
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in attendanceUsers" :key="row.id">
+                  <th scope="row" class="attendance-sticky attendance-sticky-name">{{ row.callsign || row.username }}</th>
+                  <td class="attendance-sticky attendance-sticky-count">{{ countPresent(row.id) }}</td>
+                  <td v-for="event in attendanceEvents" :key="event.id" class="attendance-mark-cell">
                   <button class="attendance-dot" :class="{ present: isPresent(event.id, row.id), enrolled: isEnrolled(event.id, row.id) && !isPresent(event.id, row.id) }" :disabled="!can('attendance:update')" @click="togglePresent(event.id, row.id)">
                     {{ isPresent(event.id, row.id) ? '●' : isEnrolled(event.id, row.id) ? '○' : '' }}
                   </button>
-                </template>
-              </el-table-column>
-            </el-table>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -499,8 +523,8 @@
       </el-form-item>
       <el-form-item label="活动类型"><el-select v-model="activityForm.activity_type"><el-option label="周常" value="周常" /><el-option label="接龙" value="接龙" /><el-option label="本地活动" value="本地活动" /><el-option label="外地活动" value="外地活动" /></el-select></el-form-item>
       <el-form-item label="场地">
-        <el-select v-model="activityForm.venue_id" clearable filterable placeholder="选择场地" @change="setActivityVenue">
-          <el-option v-for="venue in venues" :key="venue.id" :label="venueLabel(venue)" :value="venue.id" />
+        <el-select v-model="activityForm.venue_id" clearable filterable :teleported="false" placeholder="选择场地" @change="setActivityVenue">
+          <el-option v-for="venue in venueOptions" :key="venue.id" :label="venueLabel(venue)" :value="venue.id" />
         </el-select>
       </el-form-item>
       <el-form-item label="地点"><el-input v-model="activityForm.location" placeholder="选择场地后自动填入，也可手动修改" /></el-form-item>
@@ -546,7 +570,7 @@
         </div>
       </el-form-item>
       <el-form-item label="开放职业"><el-checkbox-group v-model="activityForm.allowed_jobs"><el-checkbox v-for="job in jobs" :key="job" :label="job" /></el-checkbox-group></el-form-item>
-      <el-form-item label="游戏模式"><el-checkbox-group v-model="activityForm.game_modes"><el-checkbox v-for="mode in modes" :key="mode.id" :label="mode.name">{{ mode.name }}/{{ mode.suitable_people }}</el-checkbox></el-checkbox-group></el-form-item>
+      <el-form-item label="游戏模式"><el-checkbox-group v-model="activityForm.game_modes"><el-checkbox v-for="mode in modeOptions" :key="mode.id" :label="mode.name">{{ mode.name }}/{{ mode.suitable_people }}</el-checkbox></el-checkbox-group></el-form-item>
       <el-form-item label="发射器租赁">
         <div class="invitee-panel">
           <el-button @click="openLauncherPicker">发射器租赁设置</el-button>
@@ -560,7 +584,7 @@
     <template #footer><el-button @click="activityForm = null">取消</el-button><el-button v-if="activityForm && (activityForm.id ? can('activity:update') : can('activity:create'))" type="primary" @click="saveActivity">保存</el-button></template>
   </el-dialog>
 
-  <el-dialog v-model="planVisible" title="活动策划" width="760px">
+  <el-dialog v-model="planVisible" title="活动策划" width="min(980px, calc(100vw - 32px))">
     <el-form v-if="planForm" label-width="130px">
       <el-form-item label="Banner图">
         <img v-if="planForm.banner_url" class="banner-preview" :src="planForm.banner_url" />
@@ -579,17 +603,27 @@
       <el-form-item label="投票截止"><el-date-picker v-model="planForm.vote_deadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :teleported="false" placement="bottom-start" /></el-form-item>
       <el-form-item label="可选日期">
         <div class="plan-date-list">
-          <div v-for="(item, i) in planForm.dates" :key="i" class="plan-date-row">
+          <div v-for="(item, i) in planForm.dates" :key="item.id ? `saved-${item.id}` : item._clientKey" class="plan-date-row">
             <el-date-picker v-model="item.date" value-format="YYYY-MM-DD" :teleported="false" placement="bottom-start" />
-            <el-input v-model="item.remark" maxlength="200" placeholder="备注" style="width: 220px" />
+            <select v-if="!planForm.id || planForm.vote_mode === 'grouped'" v-model="item.venue_id" class="plan-venue-select" :class="{ 'is-placeholder': !item.venue_id }">
+              <option :value="null">场地</option>
+              <option v-for="venue in venueOptions" :key="venue.id" :value="venue.id">{{ venueLabel(venue) }}</option>
+            </select>
+            <el-input v-model="item.remark" maxlength="200" placeholder="备注" />
             <el-button @click="planForm.dates.splice(i, 1)">删除</el-button>
           </div>
-          <el-button @click="planForm.dates.push({ date: '', remark: '' })">+</el-button>
+          <el-button class="plan-add-option" type="primary" plain @click="addPlanDateOption"><el-icon><Plus /></el-icon>新增选项</el-button>
         </div>
       </el-form-item>
-      <el-form-item label="可选场地"><el-select v-model="planForm.venue_ids" multiple><el-option v-for="venue in venues" :key="venue.id" :label="venue.name" :value="venue.id" /></el-select></el-form-item>
-      <el-form-item label="指定游戏模式"><el-select v-model="planForm.game_mode_ids" multiple><el-option v-for="mode in modes" :key="mode.id" :label="mode.name" :value="mode.id" /></el-select></el-form-item>
-      <el-form-item label="可见范围"><el-select v-model="planForm.visibility_type"><el-option label="所有人公开" value="all" /><el-option label="仅正式队员" value="official" /><el-option label="正式队员和邀请队员" value="official_plus_invite" /></el-select></el-form-item>
+      <el-form-item v-if="planForm.id && planForm.vote_mode !== 'grouped'" label="可选场地"><el-select v-model="planForm.venue_ids" multiple filterable :teleported="false"><el-option v-for="venue in venueOptions" :key="venue.id" :label="venueLabel(venue)" :value="venue.id" /></el-select></el-form-item>
+      <el-form-item label="指定游戏模式"><el-select v-model="planForm.game_mode_ids" multiple filterable :teleported="false"><el-option v-for="mode in modeOptions" :key="mode.id" :label="mode.name" :value="mode.id" /></el-select></el-form-item>
+      <el-form-item label="可见范围">
+        <select v-model="planForm.visibility_type" class="plan-visibility-select">
+          <option value="all">所有人公开</option>
+          <option value="official">仅正式队员</option>
+          <option value="official_plus_invite">正式队员和邀请队员</option>
+        </select>
+      </el-form-item>
       <el-form-item v-if="planForm.visibility_type === 'official_plus_invite'" label="邀请人员">
         <div class="invitee-panel">
           <el-button @click="openInvitePicker('plan')">选择邀请人员</el-button>
@@ -701,6 +735,59 @@
     </el-form>
     <template #footer><el-button @click="editEvent = null">取消</el-button><el-button type="primary" @click="saveEvent">保存</el-button></template>
   </el-dialog>
+  <el-dialog v-model="attendanceExportVisible" title="导出出勤统计" width="560px">
+    <el-form label-width="100px">
+      <el-form-item label="统计时间"><el-radio-group v-model="attendanceExport.periodType"><el-radio-button label="year">自然年度</el-radio-button><el-radio-button label="custom">自定义</el-radio-button></el-radio-group></el-form-item>
+      <el-form-item v-if="attendanceExport.periodType === 'year'" label="统计年度"><el-date-picker v-model="attendanceExport.year" type="year" value-format="YYYY" /></el-form-item>
+      <el-form-item v-else label="日期区间"><el-date-picker v-model="attendanceExport.dates" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" /></el-form-item>
+      <el-form-item label="统计对象"><el-select v-model="attendanceExport.objectType"><el-option label="正式队员" value="formal"/><el-option label="非正式队员" value="non_formal"/><el-option label="全员" value="all"/><el-option label="部分人员" value="selected"/></el-select></el-form-item>
+      <el-form-item v-if="attendanceExport.objectType === 'selected'" label="选择人员"><el-select v-model="attendanceExport.userIds" multiple filterable style="width:100%"><el-option v-for="user in allUsersForAttendanceExport" :key="user.id" :label="`${user.callsign || user.username}（${user.username}）`" :value="Number(user.id)"/></el-select></el-form-item>
+    </el-form>
+    <template #footer><el-button @click="attendanceExportVisible=false">取消</el-button><el-button type="primary" @click="downloadAttendanceExport">导出</el-button></template>
+  </el-dialog>
+  <el-dialog v-model="userAttendanceVisible" :title="`${userAttendance.user?.callsign || userAttendance.user?.username || '用户'} 考勤`" width="92%" class="user-attendance-dialog">
+    <div class="user-attendance-filter">
+      <label><span>开始日期</span><el-date-picker v-model="userAttendanceStartDate" type="date" value-format="YYYY-MM-DD" /></label>
+      <label><span>结束日期</span><el-date-picker v-model="userAttendanceEndDate" type="date" value-format="YYYY-MM-DD" /></label>
+      <el-button type="primary" :loading="userAttendanceLoading" @click="loadUserAttendance">查询</el-button>
+    </div>
+    <div v-loading="userAttendanceLoading" class="attendance-table-scroll user-attendance-table-scroll">
+      <table class="attendance-matrix">
+        <colgroup>
+          <col class="attendance-name-col" />
+          <col class="attendance-count-col" />
+          <col v-for="event in userAttendance.events" :key="event.id" class="attendance-event-col" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="attendance-sticky attendance-sticky-name">人员</th>
+            <th class="attendance-sticky attendance-sticky-count">出勤次数</th>
+            <th v-for="event in userAttendance.events" :key="event.id">
+              <div class="attendance-event-head">
+                <strong>{{ event.name }}</strong>
+                <span>{{ event.event_date }}</span>
+                <span>{{ event.location || '-' }}</span>
+                <span>{{ event.organizer || '-' }}</span>
+                <el-tag size="small" :type="event.activity_region === '外地' ? 'warning' : 'success'">{{ event.activity_region || '-' }}</el-tag>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody v-if="userAttendance.user">
+          <tr>
+            <th scope="row" class="attendance-sticky attendance-sticky-name">{{ userAttendance.user.callsign || userAttendance.user.username }}</th>
+            <td class="attendance-sticky attendance-sticky-count">{{ userAttendancePresentCount() }}</td>
+            <td v-for="event in userAttendance.events" :key="event.id" class="attendance-mark-cell">
+              <button class="attendance-dot" :class="{ present: isUserAttendancePresent(event.id), enrolled: isUserAttendanceEnrolled(event.id) && !isUserAttendancePresent(event.id) }" :disabled="!can('attendance:update')" @click="toggleUserAttendance(event)">
+                {{ isUserAttendancePresent(event.id) ? '●' : isUserAttendanceEnrolled(event.id) ? '○' : '' }}
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <el-empty v-if="!userAttendanceLoading && !userAttendance.events.length" description="所选时间内暂无活动" />
+    </div>
+  </el-dialog>
 </template>
 
 <script>
@@ -798,6 +885,10 @@ export default {
   components: { ActivityForm, PlanForm, EscapeAdmin, BatchAdmin },
   data() {
     const query = new URLSearchParams(location.search)
+    const today = new Date()
+    const threeMonthsAgo = new Date(today)
+    threeMonthsAgo.setMonth(today.getMonth() - 3)
+    const localDate = value => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
     return {
 	      tokenValue: token(),
 	      me: {},
@@ -815,9 +906,23 @@ export default {
       dashboardCharts: {},
 	      activities: [],
 	      venues: [],
-	      venueOptionsLoaded: false,
-	      modes: [],
-	      users: [],
+	      venueOptions: [],
+      modes: [],
+      modeOptions: [],
+      planDateKeySeed: 0,
+      users: [],
+      userPage: 1,
+      userPageSize: 10,
+      userTotal: 0,
+      userFormalOnly: false,
+      userAttendanceVisible: false,
+      userAttendanceLoading: false,
+      userAttendanceStartDate: localDate(threeMonthsAgo),
+      userAttendanceEndDate: localDate(today),
+      userAttendance: { user: null, events: [], records: [], enrollments: [] },
+      attendanceExportVisible: false,
+      attendanceExport: { periodType: 'year', year: String(new Date().getFullYear()), dates: [], objectType: 'formal', userIds: [] },
+      allUsersForAttendanceExport: [],
 	      nonFormalUsers: [],
 	      formalUsers: [],
 	      invitePickerVisible: false,
@@ -852,6 +957,9 @@ export default {
       editEvent: null,
       summary: {},
       attendanceYear: String(new Date().getFullYear()),
+      attendanceStartDate: localDate(threeMonthsAgo),
+      attendanceEndDate: localDate(today),
+      attendanceKeyword: '',
       attendanceEvents: [],
       attendanceUsers: [],
       attendanceRecords: [],
@@ -1033,7 +1141,7 @@ export default {
       this.tokenValue = token()
       if (!this.menus.some(item => item.key === this.active)) this.active = 'dashboard'
       this.roles = await api('/api/admin/roles/options')
-      const referenceLoads = [this.loadModes()]
+      const referenceLoads = [this.loadModeOptions()]
       if (this.active !== 'venues') referenceLoads.push(this.loadVenueOptions())
       await Promise.all([...referenceLoads, this.load()])
       if (this.active === 'activities' && this.sourceActivityId && this.can('activity:view')) {
@@ -1131,19 +1239,97 @@ export default {
     loadVenues() {
       return api(`/api/admin/venues?name=${this.filters.name || ''}`).then(d => {
         this.venues = d
-        this.venueOptionsLoaded = false
       })
     },
     loadVenueOptions() {
-      if (this.venueOptionsLoaded) return Promise.resolve(this.venues)
       return api('/api/admin/venues/options').then(d => {
-        this.venues = d
-        this.venueOptionsLoaded = true
+        this.venueOptions = d
         return d
       })
     },
     loadModes() { return api(`/api/admin/game-modes?name=${this.filters.name || ''}`).then(d => { this.modes = d }) },
-    loadUsers() { return api(`/api/admin/users?keyword=${this.filters.keyword || ''}`).then(d => { this.users = d }) },
+    loadModeOptions() {
+      return api('/api/admin/game-modes/options').then(d => {
+        this.modeOptions = d
+        return d
+      })
+    },
+    loadUsers() {
+      const params = new URLSearchParams({
+        keyword: this.filters.keyword || '',
+        formalOnly: String(this.userFormalOnly),
+        page: String(this.userPage),
+        pageSize: String(this.userPageSize)
+      })
+      return api(`/api/admin/users?${params.toString()}`).then(d => { this.users = d.items || []; this.userTotal = d.total || 0 })
+    },
+    searchUsers() { this.userPage = 1; return this.loadUsers() },
+    changeUserPageSize() { this.userPage = 1; return this.loadUsers() },
+    async openUserAttendance(row) {
+      const today = new Date()
+      const threeMonthsAgo = new Date(today)
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+      this.userAttendanceStartDate = this.localDateValue(threeMonthsAgo)
+      this.userAttendanceEndDate = this.localDateValue(today)
+      this.userAttendance = { user: { ...row }, events: [], records: [], enrollments: [] }
+      this.userAttendanceVisible = true
+      await this.loadUserAttendance()
+    },
+    async loadUserAttendance() {
+      const userId = this.userAttendance.user?.id
+      if (!userId || !this.validateUserAttendanceRange()) return
+      this.userAttendanceLoading = true
+      try {
+        const params = new URLSearchParams({
+          userId: String(userId),
+          startDate: this.userAttendanceStartDate,
+          endDate: this.userAttendanceEndDate
+        })
+        const matrix = await api(`/api/admin/attendance/matrix?${params.toString()}`)
+        this.userAttendance = {
+          user: matrix.users?.[0] || this.userAttendance.user,
+          events: matrix.events || [],
+          records: matrix.records || [],
+          enrollments: matrix.enrollments || []
+        }
+      } finally {
+        this.userAttendanceLoading = false
+      }
+    },
+    validateUserAttendanceRange() {
+      if (!this.userAttendanceStartDate || !this.userAttendanceEndDate) {
+        ElMessage.warning('请选择开始日期和结束日期')
+        return false
+      }
+      const start = new Date(`${this.userAttendanceStartDate}T00:00:00`)
+      const end = new Date(`${this.userAttendanceEndDate}T00:00:00`)
+      if (end < start) {
+        ElMessage.warning('结束日期不得早于开始日期')
+        return false
+      }
+      const maxEnd = new Date(start)
+      maxEnd.setFullYear(maxEnd.getFullYear() + 1)
+      maxEnd.setDate(maxEnd.getDate() - 1)
+      if (end > maxEnd) {
+        ElMessage.warning('查询时间跨度最长为一年')
+        return false
+      }
+      return true
+    },
+    isUserAttendancePresent(eventId) {
+      return this.userAttendance.records.some(record => Number(record.event_id) === Number(eventId) && !!record.present)
+    },
+    isUserAttendanceEnrolled(eventId) {
+      return this.userAttendance.enrollments.some(record => Number(record.event_id) === Number(eventId))
+    },
+    userAttendancePresentCount() {
+      return this.userAttendance.records.filter(record => !!record.present).length
+    },
+    async toggleUserAttendance(row) {
+      if (!this.can('attendance:update')) return
+      await api('/api/admin/attendance/records', { method: 'PUT', body: { event_id: row.id, user_id: this.userAttendance.user.id, present: !this.isUserAttendancePresent(row.id) } })
+      await this.loadUserAttendance()
+    },
     loadLaunchers() {
       const params = new URLSearchParams({
         name: this.launcherManageFilters.name || '',
@@ -1215,9 +1401,12 @@ export default {
 	    async loadAttendance() {
 	      const params = new URLSearchParams({
 	        region: this.filters.region || '',
-	        formalOnly: String(!!this.filters.formalOnly)
+        formalOnly: String(!!this.filters.formalOnly),
+        startDate: this.attendanceStartDate,
+        endDate: this.attendanceEndDate,
+        keyword: this.attendanceKeyword || ''
 	      })
-	      if (this.attendanceYear) params.set('year', this.attendanceYear)
+	      if (this.attendanceYear && !this.attendanceStartDate && !this.attendanceEndDate) params.set('year', this.attendanceYear)
 	      this.summary = await api(`/api/admin/attendance/summary?${params.toString()}`)
 	      const matrix = await api(`/api/admin/attendance/matrix?${params.toString()}`)
 	      this.attendanceEvents = matrix.events
@@ -1229,6 +1418,19 @@ export default {
 	      this.attendanceRecords = matrix.records
 	      this.attendanceEnrollments = matrix.enrollments || []
 	    },
+    async openAttendanceExport() {
+      if (!this.allUsersForAttendanceExport.length) this.allUsersForAttendanceExport = await api('/api/admin/users/options')
+      this.attendanceExportVisible = true
+    },
+    async downloadAttendanceExport() {
+      const e = this.attendanceExport
+      const params = new URLSearchParams({ objectType: e.objectType, periodType: e.periodType })
+      if (e.periodType === 'year') params.set('year', e.year)
+      else if (e.dates?.length === 2) { params.set('startDate', e.dates[0]); params.set('endDate', e.dates[1]) }
+      else return ElMessage.warning('请选择统计日期')
+      if (e.objectType === 'selected') e.userIds.forEach(id => params.append('userIds', id))
+      try { await this.downloadFile(`/api/admin/attendance/export?${params.toString()}`); this.attendanceExportVisible = false } catch (error) { ElMessage.error(error.message || '导出失败') }
+    },
     async loadFormalUsers() {
       if (!this.formalUsers.length) this.formalUsers = await api('/api/admin/users/formal/options')
       return this.formalUsers
@@ -1264,13 +1466,13 @@ export default {
       })
     },
 	    async openActivity(row) {
-	      const referenceLoads = [this.loadFormalUsers(), this.loadVenueOptions()]
+      const referenceLoads = [this.loadFormalUsers(), this.loadVenueOptions(), this.loadModeOptions()]
 	      if (!row) {
         await Promise.all(referenceLoads)
         this.activityForm = { banner_url: '', external_miniapp_qr_url: '', banner_source: 'venue', venue_id: null, checkin_methods: ['location', 'qr'], checkin_open_value: 3, checkin_open_unit: 'hour', organizer_ids: [Number(this.me.id)], activity_type: '周常', camp_count: 2, squad_count: 1, activity_region: '宁波', visibility_type: 'all', invitee_ids: [], launcher_ids: [], allowed_jobs: [...jobs], game_modes: [] }
 	        return
 	      }
-	      const [, , detail] = await Promise.all([
+	      const [, , , detail] = await Promise.all([
           ...referenceLoads,
           api(`/api/admin/activities/${row.id}`)
         ])
@@ -1292,7 +1494,7 @@ export default {
     activityBannerPreview() {
       if (!this.activityForm) return ''
       if (this.activityForm.banner_source === 'custom' && this.activityForm.banner_url) return this.activityForm.banner_url
-      const venue = this.venues.find(item => Number(item.id) === Number(this.activityForm.venue_id))
+      const venue = this.venueOptions.find(item => Number(item.id) === Number(this.activityForm.venue_id))
       return (venue && venue.image_url) || this.activityForm.banner_url || defaultActivityBanner
     },
     setActivityBanner(response) {
@@ -1308,15 +1510,15 @@ export default {
     },
     setActivityVenue(id) {
       if (!this.activityForm) return
-      const venue = this.venues.find(item => Number(item.id) === Number(id))
+      const venue = this.venueOptions.find(item => Number(item.id) === Number(id))
       if (!venue) return
       this.activityForm.location = venue.address || venue.name
       if (this.activityForm.banner_source !== 'custom') this.activityForm.banner_source = 'venue'
     },
 	    async openPlan(row) {
-	      await this.loadFormalUsers()
+	      await Promise.all([this.loadFormalUsers(), this.loadVenueOptions(), this.loadModeOptions()])
 	      if (!row) {
-	        this.planForm = { banner_url: '', organizer_ids: [Number(this.me.id)], visibility_type: 'all', invitee_ids: [], dates: [{ date: '', remark: '' }], venue_ids: [], game_mode_ids: [] }
+	        this.planForm = { banner_url: '', vote_mode: 'grouped', organizer_ids: [Number(this.me.id)], visibility_type: 'all', invitee_ids: [], dates: [this.createPlanDateOption()], venue_ids: [], game_mode_ids: [] }
 	        return
 	      }
 	      const detail = await api(`/api/admin/activity-plans/${row.id}`)
@@ -1324,11 +1526,27 @@ export default {
 	        ...detail,
 	        organizer_ids: this.parseIds(detail.organizer_ids).map(Number),
 	        invitee_ids: this.parseIds(detail.invitee_ids),
-	        dates: (detail.dates || []).map(item => ({ id: item.id, date: item.date || '', remark: item.remark || '' })),
+	        dates: (detail.dates || []).map(item => this.createPlanDateOption(item)),
 	        venue_ids: (detail.venues || []).map(item => item.id),
 	        game_mode_ids: (detail.game_modes || []).map(item => item.id)
 	      }
 	      if (this.planForm.invitee_ids.length) await this.loadNonFormalUsers()
+	    },
+	    createPlanDateOption(item = {}) {
+	      this.planDateKeySeed += 1
+	      return {
+	        _clientKey: `plan-date-${this.planDateKeySeed}`,
+	        id: item.id,
+	        date: item.date || '',
+	        venue_id: item.venue_id || null,
+	        remark: item.remark || ''
+	      }
+	    },
+	    async addPlanDateOption() {
+	      if (!this.planForm) return
+	      if (!this.venueOptions.length) await this.loadVenueOptions()
+	      this.planForm.dates.push(this.createPlanDateOption())
+	      await this.$nextTick()
 	    },
 	    saveActivity() {
 	      this.activityForm.invitee_ids = this.normalizedInviteeIds(this.activityForm)
@@ -1346,7 +1564,7 @@ export default {
 	    savePlan() {
 	      this.planForm.invitee_ids = this.normalizedInviteeIds(this.planForm)
 	      this.planForm.dates = (this.planForm.dates || []).map(item => typeof item === 'object'
-	        ? { id: item.id, date: item.date || '', remark: item.remark || '' }
+	        ? { id: item.id, date: item.date || '', venue_id: item.venue_id || null, remark: item.remark || '' }
 	        : { date: item, remark: '' }).filter(item => item.date)
 	      const method = this.planForm.id ? 'PUT' : 'POST'
 	      const url = `/api/admin/activity-plans${this.planForm.id ? `/${this.planForm.id}` : ''}`
@@ -1441,14 +1659,22 @@ export default {
       let dateOption = null
       let venueOption = null
       try {
-        dateOption = await this.pickConvertOption('日期', preview.top_dates || [], option => {
+        if (preview.grouped_options) {
+          dateOption = await this.pickConvertOption('日期和场地', preview.top_grouped_options || [], option => {
+            const venue = option.venue_name ? ` / ${option.venue_name}` : ' / 场地待定'
+            return `${option.date}${venue}（${option.vote_count || 0}票）`
+          })
+          venueOption = dateOption && dateOption.venue_id ? { id: dateOption.venue_id, name: dateOption.venue_name, address: dateOption.venue_address } : null
+        } else {
+          dateOption = await this.pickConvertOption('日期', preview.top_dates || [], option => {
           const remark = option.remark ? ` / ${option.remark}` : ''
           return `${option.date}${remark}（${option.vote_count || 0}票）`
-        })
-        venueOption = await this.pickConvertOption('场地', preview.top_venues || [], option => {
+          })
+          venueOption = await this.pickConvertOption('场地', preview.top_venues || [], option => {
           const address = option.address ? ` / ${option.address}` : ''
           return `${option.name}${address}（${option.vote_count || 0}票）`
-        })
+          })
+        }
       } catch (e) {
         return
       }
@@ -1523,6 +1749,9 @@ export default {
     formatNumber(value) {
       return Number(value || 0).toLocaleString()
     },
+    localDateValue(value) {
+      return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+    },
     async downloadFile(url) {
       const response = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } })
       if (!response.ok) {
@@ -1531,8 +1760,11 @@ export default {
       }
       const blob = await response.blob()
       const disposition = response.headers.get('Content-Disposition') || ''
-      const match = disposition.match(/filename\\*=UTF-8''([^;]+)/)
-      const filename = match ? decodeURIComponent(match[1]) : '导出.xlsx'
+      const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i)
+      const plainMatch = disposition.match(/filename="?([^";]+)"?/i)
+      const filename = utf8Match
+        ? decodeURIComponent(utf8Match[1])
+        : plainMatch?.[1] || '导出文件'
       const link = document.createElement('a')
       link.href = URL.createObjectURL(blob)
       link.download = filename
