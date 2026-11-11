@@ -22,14 +22,14 @@ public class PlanOptionSynchronizer {
     }
 
     public void sync(int planId, Map<String, Object> body) {
-        syncDates(planId, values(body.get("dates")));
+        syncDates(planId, values(body.get("dates")), "grouped".equals(text(body.get("vote_mode"))));
         syncReferenceOptions(planId, "venue", "plan_venue_options", "venue_id", values(body.get("venue_ids")));
         syncReferenceOptions(planId, "game_mode", "plan_game_mode_options", "game_mode_id", values(body.get("game_mode_ids")));
     }
 
-    private void syncDates(int planId, List<Object> incoming) {
+    private void syncDates(int planId, List<Object> incoming, boolean grouped) {
         List<Map<String, Object>> existing = Rows.list(jdbc,
-                "select id,date,remark from plan_date_options where plan_id=? order by id", planId);
+                "select id,date,remark,venue_id from plan_date_options where plan_id=? order by id", planId);
         Map<Integer, Map<String, Object>> byId = new HashMap<Integer, Map<String, Object>>();
         Map<String, List<Map<String, Object>>> byValue = new HashMap<String, List<Map<String, Object>>>();
         for (Map<String, Object> row : existing) {
@@ -44,6 +44,7 @@ public class PlanOptionSynchronizer {
             String date = dateValue(item);
             if (date.isEmpty()) continue;
             String remark = dateRemark(item);
+            Integer venueId = dateVenueId(item);
             Integer requestedId = dateId(item);
             Map<String, Object> matched = requestedId == null ? null : byId.get(requestedId);
             if (matched == null) {
@@ -58,14 +59,19 @@ public class PlanOptionSynchronizer {
             }
 
             if (matched == null) {
-                jdbc.update("insert into plan_date_options(plan_id,date,remark) values(?,?,?)", planId, date, remark);
+                jdbc.update("insert into plan_date_options(plan_id,date,remark,venue_id) values(?,?,?,?)", planId, date, remark, venueId);
                 continue;
             }
 
             int optionId = number(matched.get("id"), 0);
             retained.add(optionId);
-            jdbc.update("update plan_date_options set date=?,remark=? where id=? and plan_id=?",
-                    date, remark, optionId, planId);
+            if (venueId == null && !grouped) {
+                jdbc.update("update plan_date_options set date=?,remark=? where id=? and plan_id=?",
+                        date, remark, optionId, planId);
+            } else {
+                jdbc.update("update plan_date_options set date=?,remark=?,venue_id=? where id=? and plan_id=?",
+                        date, remark, venueId, optionId, planId);
+            }
         }
 
         for (Map<String, Object> row : existing) {
@@ -124,6 +130,13 @@ public class PlanOptionSynchronizer {
     private String dateRemark(Object value) {
         if (!(value instanceof Map)) return "";
         return text(((Map<?, ?>) value).get("remark"));
+    }
+
+    private Integer dateVenueId(Object value) {
+        if (!(value instanceof Map)) return null;
+        Object raw = ((Map<?, ?>) value).get("venue_id");
+        if (raw == null || String.valueOf(raw).trim().isEmpty()) return null;
+        try { return Integer.valueOf(String.valueOf(raw)); } catch (NumberFormatException ignored) { return null; }
     }
 
     private String dateKey(Object date, Object remark) {

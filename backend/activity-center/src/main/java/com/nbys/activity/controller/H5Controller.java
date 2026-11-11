@@ -2,19 +2,16 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.AttendanceEventService;
 import com.nbys.activity.service.ActivityEnrollmentCalculator;
 import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.Rows;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -33,12 +30,14 @@ public class H5Controller {
 
     private final JdbcTemplate jdbc;
     private final AuthService auth;
+    private final AttendanceEventService attendanceEventService;
     private final byte[] checkinQrSecret;
 
-    public H5Controller(JdbcTemplate jdbc, AuthService auth,
+    public H5Controller(JdbcTemplate jdbc, AuthService auth, AttendanceEventService attendanceEventService,
                         @Value("${CHECKIN_QR_SECRET:${AUTH_TOKEN_SECRET:nbys-local-development-secret-change-me}}") String checkinQrSecret) {
         this.jdbc = jdbc;
         this.auth = auth;
+        this.attendanceEventService = attendanceEventService;
         this.checkinQrSecret = checkinQrSecret.getBytes(StandardCharsets.UTF_8);
     }
 
@@ -121,13 +120,12 @@ public class H5Controller {
         int campNo = num(body.get("camp_no"), 1);
         int squadNo = num(body.get("squad_no"), 1);
         String job = text(body.get("job"));
-        ensureLeaderCanLeave(id, member, campNo, squadNo);
         validateJob(id, campNo, squadNo, targetUserId, job);
         Map<String, Object> squad = squadForUpdate(id, campNo, squadNo);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
         ensureCapacity(id, activity, squad, targetUserId);
+        transferLeadershipBeforeLeaving(id, member, campNo, squadNo);
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, targetUserId);
-        if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", targetUserId, squad.get("id"));
         return ApiResponse.ok(null);
     }
 
@@ -162,8 +160,8 @@ public class H5Controller {
         boolean leader = sameId(squad.get("leader_user_id"), userId);
         boolean self = targetUserId == userId;
         if (!creator && !leader && !self) throw new SecurityException("没有权限将该成员移出小队");
-        if (sameId(squad.get("leader_user_id"), targetUserId)) throw new IllegalArgumentException("请先转让队长，再将该成员移出小队");
         if (self && !creator && !leader && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法退出");
+        transferLeadershipBeforeLeaving(id, member, null, null);
         jdbc.update("update enrollments set camp_no=null,squad_no=null,job=null,updated_at=now() where activity_id=? and user_id=?", id, targetUserId);
         return ApiResponse.ok(null);
     }
@@ -266,16 +264,14 @@ public class H5Controller {
         if (member != null && activity != null && isManagedActivity(activity)) {
             Map<String, Object> squad = memberSquadForUpdate(id, member);
             if (squad != null && bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法取消报名");
-            if (squad != null && sameId(squad.get("leader_user_id"), userId)) {
-                if (hasOtherSquadMembers(id, squad, userId)) throw new IllegalArgumentException("请先转让队长，再取消报名");
-                jdbc.update("update squad_settings set leader_user_id=null where id=?", squad.get("id"));
-            }
+            transferLeadershipBeforeLeaving(id, member, null, null);
         }
         jdbc.update("delete from enrollments where activity_id=? and user_id=?", id, userId);
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/activities/{id}/checkin")
+    @Transactional
     public ApiResponse<Void> checkin(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         if (Rows.one(jdbc, "select id from enrollments where activity_id=? and user_id=?", id, userId) == null) throw new IllegalArgumentException("请先报名");
@@ -297,7 +293,7 @@ public class H5Controller {
             double distance = distanceMeters(latitude, longitude, venueLatitude, venueLongitude);
             if (distance > CHECKIN_RADIUS_METERS) throw new IllegalArgumentException("当前位置距离活动场地约" + Math.round(distance) + "米，超过1公里签到范围");
         }
-        Integer eventId = ensureAttendanceEvent(id, a);
+        Integer eventId = attendanceEventService.ensureForActivity(id, a);
         jdbc.update("insert into attendance_records(event_id,user_id,present,updated_by_id,updated_at) values(?,?,1,?,now()) " +
                 "on duplicate key update present=1,updated_by_id=values(updated_by_id),updated_at=now()", eventId, userId, userId);
         return ApiResponse.ok(null);
@@ -338,13 +334,12 @@ public class H5Controller {
         if (sameSquad) {
             if (bool(squad.get("locked"))) throw new IllegalArgumentException("小队已锁定，无法修改职业");
         } else {
-            if (source != null && sameId(source.get("leader_user_id"), userId)) throw new IllegalArgumentException("请先转让队长，再加入其他小队");
             if (source != null && bool(source.get("locked"))) throw new IllegalArgumentException("原小队已锁定，无法退出");
             if (bool(squad.get("locked"))) throw new IllegalArgumentException("目标小队已锁定，无法加入");
             ensureCapacity(id, activity, squad, userId);
         }
+        transferLeadershipBeforeLeaving(id, member, campNo, squadNo);
         jdbc.update("update enrollments set camp_no=?, squad_no=?, job=?, updated_at=now() where activity_id=? and user_id=?", campNo, squadNo, job, id, userId);
-        if (squad.get("leader_user_id") == null) jdbc.update("update squad_settings set leader_user_id=? where id=?", userId, squad.get("id"));
         return ApiResponse.ok(null);
     }
 
@@ -368,9 +363,11 @@ public class H5Controller {
     public ApiResponse<Void> setSquadLeader(@PathVariable int id, @PathVariable int squadId, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         Map<String, Object> activity = managedActivity(id);
-        requireCreator(activity, userId);
         Map<String, Object> squad = Rows.one(jdbc, "select * from squad_settings where id=? and activity_id=? for update", squadId, id);
         if (squad == null) throw new IllegalArgumentException("小队不存在");
+        if (!isCreator(activity, userId) && !sameId(squad.get("leader_user_id"), userId)) {
+            throw new SecurityException("只有活动发起人、组织人或本队队长可以转让队长");
+        }
         int targetId = num(body.get("user_id"), 0);
         Map<String, Object> target = enrollmentForUpdate(id, targetId);
         if (!sameSquad(target, num(squad.get("camp_no"), 0), num(squad.get("squad_no"), 0))) throw new IllegalArgumentException("队长必须是本小队成员");
@@ -396,9 +393,10 @@ public class H5Controller {
 
         String activePlans = "select id from activity_plans where hidden=0 and converted_activity_id is null and vote_deadline>=now()";
         Map<Integer, List<Map<String, Object>>> datesByPlan = groupByPlan(Rows.list(jdbc,
-                "select d.*,count(v.id) vote_count from plan_date_options d " +
-                        "left join plan_votes v on v.plan_id=d.plan_id and v.option_type='date' and v.option_id=d.id " +
-                        "where d.plan_id in (" + activePlans + ") group by d.id order by d.plan_id,d.date"));
+                "select d.*,p.vote_mode,v.name venue_name,v.address venue_address," +
+                        "(select count(*) from plan_votes pv where pv.plan_id=d.plan_id and pv.option_type=case when p.vote_mode='grouped' then 'date_group' else 'date' end and pv.option_id=d.id) vote_count " +
+                        "from plan_date_options d join activity_plans p on p.id=d.plan_id left join venues v on v.id=d.venue_id " +
+                        "where d.plan_id in (" + activePlans + ") order by d.plan_id,d.date"));
         Map<Integer, List<Map<String, Object>>> venuesByPlan = groupByPlan(Rows.list(jdbc,
                 "select o.plan_id,v.*,count(pv.id) vote_count from plan_venue_options o join venues v on v.id=o.venue_id " +
                         "left join plan_votes pv on pv.plan_id=o.plan_id and pv.option_type='venue' and pv.option_id=v.id " +
@@ -426,6 +424,7 @@ public class H5Controller {
                 Map<String, List<Integer>> myVotes = votesByPlan.getOrDefault(id, Collections.emptyMap());
                 row.put("voted", !myVotes.isEmpty());
                 row.put("my_date_option_ids", myVotes.getOrDefault("date", Collections.emptyList()));
+                row.put("my_grouped_option_ids", myVotes.getOrDefault("date_group", Collections.emptyList()));
                 row.put("my_venue_ids", myVotes.getOrDefault("venue", Collections.emptyList()));
                 row.put("my_game_mode_ids", myVotes.getOrDefault("game_mode", Collections.emptyList()));
                 applyPlanVoteSummary(row);
@@ -463,6 +462,16 @@ public class H5Controller {
     public ApiResponse<Void> vote(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         int userId = ((Number) auth.current(req).get("id")).intValue();
         if (Rows.one(jdbc, "select id from plan_votes where plan_id=? and user_id=?", id, userId) != null) throw new IllegalArgumentException("已投票");
+        Map<String, Object> plan = Rows.one(jdbc, "select vote_mode from activity_plans where id=?", id);
+        if (plan == null) throw new IllegalArgumentException("策划不存在");
+        if ("grouped".equals(text(plan.get("vote_mode")))) {
+            List<?> grouped = list(body.get("grouped_option_ids"));
+            if (grouped.isEmpty()) throw new IllegalArgumentException("请至少选择一个日期和场地组合");
+            for (Object optionId : grouped) {
+                if (Rows.one(jdbc, "select id from plan_date_options where id=? and plan_id=?", optionId, id) == null) throw new IllegalArgumentException("投票选项不存在");
+                jdbc.update("insert into plan_votes(plan_id,user_id,option_type,option_id,created_at) values(?,?, 'date_group', ?,now())", id, userId, optionId);
+            }
+        }
         for (Object dateId : list(body.get("date_option_ids"))) jdbc.update("insert into plan_votes(plan_id,user_id,option_type,option_id,created_at) values(?,?,?, ?,now())", id, userId, "date", dateId);
         for (Object venueId : list(body.get("venue_ids"))) jdbc.update("insert into plan_votes(plan_id,user_id,option_type,option_id,created_at) values(?,?,?, ?,now())", id, userId, "venue", venueId);
         for (Object modeId : list(body.get("game_mode_ids"))) jdbc.update("insert into plan_votes(plan_id,user_id,option_type,option_id,created_at) values(?,?,?, ?,now())", id, userId, "game_mode", modeId);
@@ -527,13 +536,6 @@ public class H5Controller {
         return squadForUpdate(activityId, num(member.get("camp_no"), 0), num(member.get("squad_no"), 0));
     }
 
-    private boolean hasOtherSquadMembers(int activityId, Map<String, Object> squad, int userId) {
-        Integer count = jdbc.queryForObject(
-                "select count(*) from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?",
-                Integer.class, activityId, squad.get("camp_no"), squad.get("squad_no"), userId);
-        return count != null && count > 0;
-    }
-
     private boolean sameSquad(Map<String, Object> member, int campNo, int squadNo) {
         return member != null && member.get("camp_no") != null && member.get("squad_no") != null
                 && num(member.get("camp_no"), -1) == campNo && num(member.get("squad_no"), -1) == squadNo;
@@ -543,11 +545,15 @@ public class H5Controller {
         return value != null && String.valueOf(value).equals(String.valueOf(userId));
     }
 
-    private void ensureLeaderCanLeave(int activityId, Map<String, Object> member, int targetCamp, int targetSquad) {
-        if (sameSquad(member, targetCamp, targetSquad)) return;
+    private void transferLeadershipBeforeLeaving(int activityId, Map<String, Object> member, Integer targetCamp, Integer targetSquad) {
+        if (targetCamp != null && targetSquad != null && sameSquad(member, targetCamp, targetSquad)) return;
         Map<String, Object> source = memberSquadForUpdate(activityId, member);
         if (source != null && sameId(source.get("leader_user_id"), num(member.get("user_id"), 0))) {
-            throw new IllegalArgumentException("请先转让队长，再调整该成员所属小队");
+            Map<String, Object> successor = Rows.one(jdbc,
+                    "select user_id from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>? order by id asc limit 1 for update",
+                    activityId, source.get("camp_no"), source.get("squad_no"), member.get("user_id"));
+            Object successorId = successor == null ? null : successor.get("user_id");
+            jdbc.update("update squad_settings set leader_user_id=?,updated_at=now() where id=?", successorId, source.get("id"));
         }
     }
 
@@ -558,46 +564,6 @@ public class H5Controller {
                 "select count(*) from enrollments where activity_id=? and camp_no=? and squad_no=? and user_id<>?",
                 Integer.class, activityId, squad.get("camp_no"), squad.get("squad_no"), excludedUserId);
         if (members != null && members >= squadLimit) throw new IllegalArgumentException("小队已满");
-    }
-
-    private Integer ensureAttendanceEvent(int activityId, Map<String, Object> a) {
-        String organizer = activityOrganizer(a);
-        String selectedOrganizerIds = text(a.get("organizer_ids"));
-        if (selectedOrganizerIds.isEmpty() && a.get("created_by_id") != null) selectedOrganizerIds = String.valueOf(a.get("created_by_id"));
-        final String organizerId = selectedOrganizerIds;
-        Map<String, Object> existing = Rows.one(jdbc, "select id,organizer,organizer_ids from attendance_events where source_activity_id=?", activityId);
-        if (existing != null) {
-            if (text(existing.get("organizer_ids")).isEmpty() && !organizerId.isEmpty()) {
-                String displayName = text(existing.get("organizer")).isEmpty() ? organizer : text(existing.get("organizer"));
-                jdbc.update("update attendance_events set organizer=?,organizer_ids=? where id=?", displayName, organizerId, existing.get("id"));
-            }
-            return ((Number) existing.get("id")).intValue();
-        }
-        KeyHolder kh = new GeneratedKeyHolder();
-        jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into attendance_events(source_activity_id,name,event_date,location,organizer,organizer_ids,activity_region,is_manual,created_at) values(?,?,date(?),?,?,?,?,0,now())", Statement.RETURN_GENERATED_KEYS);
-            ps.setObject(1, activityId);
-            ps.setObject(2, a.get("name"));
-            ps.setObject(3, a.get("start_at"));
-            ps.setObject(4, a.get("location"));
-            ps.setObject(5, organizer);
-            ps.setObject(6, organizerId);
-            ps.setObject(7, a.get("activity_region"));
-            return ps;
-        }, kh);
-        return kh.getKey().intValue();
-    }
-
-    private String activityOrganizer(Map<String, Object> activity) {
-        String ids = text(activity.get("organizer_ids"));
-        if (ids.isEmpty() && activity.get("created_by_id") != null) ids = String.valueOf(activity.get("created_by_id"));
-        if (ids.isEmpty()) return "";
-        List<Map<String, Object>> users = Rows.list(jdbc,
-                "select coalesce(nullif(callsign,''),username) organizer from users " +
-                        "where find_in_set(cast(id as char),?)>0 order by callsign,id", ids);
-        List<String> names = new ArrayList<String>();
-        for (Map<String, Object> user : users) names.add(text(user.get("organizer")));
-        return String.join("、", names);
     }
 
     private boolean hasPermission(Map<String, Object> user, String permission) {

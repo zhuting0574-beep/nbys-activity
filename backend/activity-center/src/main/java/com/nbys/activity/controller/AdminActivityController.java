@@ -2,6 +2,7 @@ package com.nbys.activity.controller;
 
 import com.nbys.activity.dto.ApiResponse;
 import com.nbys.activity.service.AuthService;
+import com.nbys.activity.service.AttendanceEventService;
 import com.nbys.activity.service.ActivityLimitCalculator;
 import com.nbys.activity.service.PlanOptionSynchronizer;
 import com.nbys.activity.service.Rows;
@@ -34,11 +35,14 @@ public class AdminActivityController {
     private final JdbcTemplate jdbc;
     private final AuthService auth;
     private final PlanOptionSynchronizer planOptionSynchronizer;
+    private final AttendanceEventService attendanceEventService;
 
-    public AdminActivityController(JdbcTemplate jdbc, AuthService auth, PlanOptionSynchronizer planOptionSynchronizer) {
+    public AdminActivityController(JdbcTemplate jdbc, AuthService auth, PlanOptionSynchronizer planOptionSynchronizer,
+                                   AttendanceEventService attendanceEventService) {
         this.jdbc = jdbc;
         this.auth = auth;
         this.planOptionSynchronizer = planOptionSynchronizer;
+        this.attendanceEventService = attendanceEventService;
     }
 
     @GetMapping("/activities")
@@ -117,7 +121,10 @@ public class AdminActivityController {
         auth.require(req, "activity:create");
         validateActivityTime(body);
         Integer id = insertActivity(body, auth.currentUserId(req));
-        createSquads(id, num(body.get("camp_count"), 2), num(body.get("squad_count"), 1));
+        Map<String, Object> activity = Rows.one(jdbc,
+                "select id,name,start_at,location,activity_region,organizer_ids,created_by_id from activities where id=?", id);
+        attendanceEventService.ensureForActivity(id, activity);
+        createSquads(id, Math.max(1, num(body.get("camp_count"), 2)), Math.max(1, num(body.get("squad_count"), 1)));
         replaceLauncherOptions(id, body.get("launcher_ids"));
         markPlanConverted(body.get("source_plan_id"), id);
         return ApiResponse.ok(Collections.<String, Object>singletonMap("id", id));
@@ -128,6 +135,8 @@ public class AdminActivityController {
     public ApiResponse<Void> update(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "activity:update");
         validateActivityTime(body);
+        int campCount = Math.max(1, num(body.get("camp_count"), 2));
+        int squadCount = Math.max(1, num(body.get("squad_count"), 1));
         Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         Integer venueId = numOrNull(body.get("venue_id"));
         String location = activityLocation(body, venueId);
@@ -136,8 +145,9 @@ public class AdminActivityController {
         jdbc.update("update activities set name=?, banner_url=?, external_miniapp_qr_url=?, banner_source=?, activity_type=?, start_at=?, end_at=?, location=?, venue_id=?, checkin_methods=?, checkin_open_value=?, checkin_open_unit=?, open_min=?, camp_count=?, camp_limit=?, squad_count=?, squad_limit=?, allowed_jobs=?, game_modes=?, attendance_enabled=?, activity_region=?, visibility_type=?, invitee_ids=?,organizer_ids=? where id=?",
                 body.get("name"), bannerUrl, body.get("external_miniapp_qr_url"), bannerSource, body.get("activity_type"), body.get("start_at"), body.get("end_at"), location, venueId,
                 checkinMethods(body.get("checkin_methods")), checkinOpenValue(body.get("checkin_open_value")), checkinOpenUnit(body.get("checkin_open_unit")),
-                num(body.get("open_min"), 0), num(body.get("camp_count"), 2), num(body.get("camp_limit"), 0), num(body.get("squad_count"), 1), num(body.get("squad_limit"), 0),
+                num(body.get("open_min"), 0), campCount, num(body.get("camp_limit"), 0), squadCount, num(body.get("squad_limit"), 0),
                 Rows.joinValue(body.get("allowed_jobs")), Rows.joinValue(body.get("game_modes")), attendanceEnabled(body), body.get("activity_region"), body.get("visibility_type"), Rows.joinValue(body.get("invitee_ids")), organizers.get("ids"), id);
+        syncSquads(id, campCount, squadCount);
         jdbc.update("update attendance_events set organizer=?,organizer_ids=? where source_activity_id=?", organizers.get("names"), organizers.get("ids"), id);
         replaceLauncherOptions(id, body.get("launcher_ids"));
         return ApiResponse.ok(null);
@@ -379,7 +389,7 @@ public class AdminActivityController {
         Map<String, String> organizers = organizers(body.get("organizer_ids"), auth.currentUserId(req));
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(c -> {
-            PreparedStatement ps = c.prepareStatement("insert into activity_plans(name,banner_url,vote_deadline,hidden,visibility_type,invitee_ids,created_by_id,organizer_ids,created_at) values(?,?,?,0,?,?,?,?,now())", Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = c.prepareStatement("insert into activity_plans(name,banner_url,vote_deadline,hidden,visibility_type,invitee_ids,created_by_id,organizer_ids,vote_mode,created_at) values(?,?,?,0,?,?,?,?, 'grouped',now())", Statement.RETURN_GENERATED_KEYS);
             ps.setObject(1, body.get("name"));
             ps.setObject(2, planBanner(body.get("banner_url")));
             ps.setObject(3, body.get("vote_deadline"));
@@ -399,7 +409,7 @@ public class AdminActivityController {
         Map<String, Object> row = Rows.one(jdbc, "select * from activity_plans where id=?", id);
         if (row == null) throw new IllegalArgumentException("策划不存在");
         applyDefaultPlanBanner(row);
-        row.put("dates", Rows.list(jdbc, "select * from plan_date_options where plan_id=? order by date", id));
+        row.put("dates", Rows.list(jdbc, "select d.*,v.name venue_name,v.address venue_address from plan_date_options d left join venues v on v.id=d.venue_id where d.plan_id=? order by d.date,d.id", id));
         row.put("venues", Rows.list(jdbc, "select v.* from plan_venue_options o join venues v on v.id=o.venue_id where o.plan_id=?", id));
         row.put("game_modes", Rows.list(jdbc, "select g.* from plan_game_mode_options o join game_modes g on g.id=o.game_mode_id where o.plan_id=?", id));
         return ApiResponse.ok(row);
@@ -413,12 +423,26 @@ public class AdminActivityController {
         if (!canViewPlanVotes(plan, me)) throw new SecurityException("没有查看投票详情权限");
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("plan", plan);
+        if ("grouped".equals(text(plan.get("vote_mode")))) {
+            List<Map<String, Object>> options = Rows.list(jdbc,
+                    "select d.id,d.date,d.remark,d.venue_id,v.name venue_name,v.address venue_address," +
+                            "(select count(*) from plan_votes pv where pv.plan_id=d.plan_id and pv.option_type='date_group' and pv.option_id=d.id) vote_count " +
+                            "from plan_date_options d left join venues v on v.id=d.venue_id " +
+                            "where d.plan_id=? order by vote_count desc,d.date,d.id", id);
+            out.put("grouped_options", options);
+            out.put("top_grouped_options", topTiedOptions(options));
+            out.put("grouped_tied", topTiedOptions(options).size() > 1);
+        }
         out.put("total_voters", Rows.one(jdbc, "select count(distinct user_id) total from plan_votes where plan_id=?", id).get("total"));
-        out.put("sections", Arrays.asList(
-                voteSection(id, "date", "日期投票", planDateVoteOptions(id)),
-                voteSection(id, "venue", "场地投票", planVenueVoteOptions(id)),
-                voteSection(id, "game_mode", "模式投票", planModeVoteOptions(id))
-        ));
+        List<Map<String, Object>> sections = new ArrayList<Map<String, Object>>();
+        if ("grouped".equals(text(plan.get("vote_mode")))) {
+            sections.add(voteSection(id, "date_group", "日期和场地投票", planGroupedVoteOptions(id)));
+        } else {
+            sections.add(voteSection(id, "date", "日期投票", planDateVoteOptions(id)));
+            sections.add(voteSection(id, "venue", "场地投票", planVenueVoteOptions(id)));
+        }
+        sections.add(voteSection(id, "game_mode", "模式投票", planModeVoteOptions(id)));
+        out.put("sections", sections);
         out.put("voters", Rows.list(jdbc,
                 "select u.id,u.username,u.callsign,u.avatar_url,u.is_regular_member,max(v.created_at) voted_at " +
                         "from plan_votes v join users u on u.id=v.user_id where v.plan_id=? " +
@@ -436,6 +460,18 @@ public class AdminActivityController {
         if (plan.get("converted_activity_id") != null) throw new IllegalArgumentException("该策划已生成活动");
         Map<String, Object> out = new LinkedHashMap<String, Object>();
         out.put("plan", plan);
+        if ("grouped".equals(text(plan.get("vote_mode")))) {
+            List<Map<String, Object>> grouped = Rows.list(jdbc,
+                    "select d.id,d.date,d.remark,d.venue_id,v.name venue_name,v.address venue_address," +
+                            "(select count(*) from plan_votes pv where pv.plan_id=d.plan_id and pv.option_type='date_group' and pv.option_id=d.id) vote_count " +
+                            "from plan_date_options d left join venues v on v.id=d.venue_id " +
+                            "where d.plan_id=? order by vote_count desc,d.date,d.id", id);
+            out.put("grouped_options", grouped);
+            out.put("top_grouped_options", topTiedOptions(grouped));
+            out.put("grouped_tied", topTiedOptions(grouped).size() > 1);
+            out.put("game_modes", topPlanModes(id));
+            return ApiResponse.ok(out);
+        }
         List<Map<String, Object>> dates = planDateVotes(id);
         List<Map<String, Object>> venues = planVenueVotes(id);
         List<Map<String, Object>> modes = topPlanModes(id);
@@ -620,6 +656,13 @@ public class AdminActivityController {
         return rows;
     }
 
+    private List<Map<String, Object>> planGroupedVoteOptions(int planId) {
+        return Rows.list(jdbc,
+                "select d.id,concat(d.date,case when coalesce(v.name,'')='' then ' / 场地待定' else concat(' / ',v.name) end) label, " +
+                        "concat(coalesce(d.remark,''),case when coalesce(v.address,'')='' then '' else concat(' / ',v.address) end) subtitle " +
+                        "from plan_date_options d left join venues v on v.id=d.venue_id where d.plan_id=? order by d.date,d.id", planId);
+    }
+
     private List<Map<String, Object>> planVenueVoteOptions(int planId) {
         return Rows.list(jdbc,
                 "select v.id,v.name label,v.address subtitle from plan_venue_options o join venues v on v.id=o.venue_id where o.plan_id=? order by o.id",
@@ -757,6 +800,20 @@ public class AdminActivityController {
             for (int s = 1; s <= squads; s++) {
                 jdbc.update("insert into squad_settings(activity_id,camp_no,squad_no,name,radio_channel,locked,updated_at) values(?,?,?,?,?,0,now())",
                         activityId, c, s, (char) ('A' + s - 1) + "队", radioChannel(c, s));
+            }
+        }
+    }
+
+    void syncSquads(int activityId, int camps, int squads) {
+        jdbc.update("update enrollments set camp_no=null,squad_no=null,job=null,updated_at=now() " +
+                "where activity_id=? and (camp_no>? or squad_no>?)", activityId, camps, squads);
+        jdbc.update("delete from squad_settings where activity_id=? and (camp_no>? or squad_no>?)", activityId, camps, squads);
+        jdbc.update("delete from camp_settings where activity_id=? and camp_no>?", activityId, camps);
+        for (int campNo = 1; campNo <= camps; campNo++) {
+            jdbc.update("insert ignore into camp_settings(activity_id,camp_no,updated_at) values(?,?,now())", activityId, campNo);
+            for (int squadNo = 1; squadNo <= squads; squadNo++) {
+                jdbc.update("insert ignore into squad_settings(activity_id,camp_no,squad_no,name,radio_channel,locked,updated_at) values(?,?,?,?,?,0,now())",
+                        activityId, campNo, squadNo, (char) ('A' + squadNo - 1) + "队", radioChannel(campNo, squadNo));
             }
         }
     }

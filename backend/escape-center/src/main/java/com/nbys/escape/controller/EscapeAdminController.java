@@ -39,6 +39,19 @@ public class EscapeAdminController {
         return ApiResponse.ok(batches.tasks());
     }
 
+    @GetMapping("/batches/{taskKey}/logs")
+    public ApiResponse<List<Map<String, Object>>> batchLogs(@PathVariable String taskKey, HttpServletRequest request) {
+        access.requireAdmin(request, "escape:view");
+        return ApiResponse.ok(batches.logs(taskKey));
+    }
+
+    @PutMapping("/batches/{taskKey}")
+    public ApiResponse<Void> updateBatch(@PathVariable String taskKey, @RequestBody Map<String, Object> body, HttpServletRequest request) {
+        access.requireAdmin(request, "escape:config");
+        batches.updateConfig(taskKey, body);
+        return ApiResponse.ok(null);
+    }
+
     @PostMapping("/batches/{taskKey}/run")
     public ApiResponse<Map<String, Object>> runBatch(@PathVariable String taskKey,
                                                      @RequestParam(value = "business_date", required = false) String date,

@@ -3,6 +3,7 @@ package com.nbys.activity.controller;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -12,9 +13,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class AdminActivityControllerExportTest {
-    private final AdminActivityController controller = new AdminActivityController(null, null, null);
+    private final AdminActivityController controller = new AdminActivityController(null, null, null, null);
 
     @Test
     void enrollmentWorkbookUsesYesterdayFormatAndKeepsUserFieldsAuditable() throws IOException {
@@ -53,6 +56,24 @@ class AdminActivityControllerExportTest {
                 controller.enrollmentExportFilename("宁波甬士烽火头灯更换 第一批"));
         assertEquals("测试_活动______.xlsx", controller.enrollmentExportFilename("测试/活动:*?\"<>"));
         assertEquals("活动报名表.xlsx", controller.enrollmentExportFilename("..."));
+    }
+
+    @Test
+    void syncingSquadsRemovesOutOfRangeAssignmentsAndCreatesMissingStructure() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        AdminActivityController activityController = new AdminActivityController(jdbc, null, null, null);
+
+        activityController.syncSquads(7, 1, 2);
+
+        verify(jdbc).update("update enrollments set camp_no=null,squad_no=null,job=null,updated_at=now() " +
+                "where activity_id=? and (camp_no>? or squad_no>?)", 7, 1, 2);
+        verify(jdbc).update("delete from squad_settings where activity_id=? and (camp_no>? or squad_no>?)", 7, 1, 2);
+        verify(jdbc).update("delete from camp_settings where activity_id=? and camp_no>?", 7, 1);
+        verify(jdbc).update("insert ignore into camp_settings(activity_id,camp_no,updated_at) values(?,?,now())", 7, 1);
+        verify(jdbc).update("insert ignore into squad_settings(activity_id,camp_no,squad_no,name,radio_channel,locked,updated_at) values(?,?,?,?,?,0,now())",
+                7, 1, 1, "A队", "439.100");
+        verify(jdbc).update("insert ignore into squad_settings(activity_id,camp_no,squad_no,name,radio_channel,locked,updated_at) values(?,?,?,?,?,0,now())",
+                7, 1, 2, "B队", "439.200");
     }
 
     private Map<String, Object> enrollment(int userId, String username, String callsign, String displayName, int participantCount) {

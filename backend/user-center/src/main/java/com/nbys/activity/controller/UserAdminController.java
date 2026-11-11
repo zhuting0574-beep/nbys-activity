@@ -28,22 +28,39 @@ public class UserAdminController {
     }
 
     @GetMapping("/users")
-    public ApiResponse<List<Map<String, Object>>> users(@RequestParam(required = false) String keyword,
+    public ApiResponse<Map<String, Object>> users(@RequestParam(required = false) String keyword,
                                                         @RequestParam(required = false) String role,
-                                                        @RequestParam(required = false) Integer disabled) {
+                                                        @RequestParam(required = false) Integer disabled,
+                                                        @RequestParam(required = false, defaultValue = "false") Boolean formalOnly,
+                                                        @RequestParam(required = false, defaultValue = "1") Integer page,
+                                                        @RequestParam(required = false, defaultValue = "10") Integer pageSize) {
         String q = keyword == null ? "" : keyword.trim();
         String r = role == null ? "" : role.trim();
         Integer d = disabled == null ? -1 : disabled;
-        return ApiResponse.ok(Rows.list(jdbc,
+        int formal = Boolean.TRUE.equals(formalOnly) ? 1 : 0;
+        int size = pageSize == 20 || pageSize == 50 ? pageSize : 10;
+        int current = Math.max(1, page == null ? 1 : page);
+        String filter = "where (?='' or u.username like concat('%',?,'%') or u.callsign like concat('%',?,'%')) " +
+                "and u.username not like '已删除用户%' and (?='' or u.role=?) and (?=-1 or u.disabled=?) " +
+                "and (?=0 or u.is_regular_member=1)";
+        int total = jdbc.queryForObject("select count(*) from users u " + filter, Integer.class, q, q, q, r, r, d, d, formal);
+        List<Map<String, Object>> items = Rows.list(jdbc,
                 "select u.id,u.username,u.callsign,u.role,u.disabled,u.is_regular_member,u.invited_by_id,u.created_at,u.last_seen, i.username inviter_name, i.callsign inviter_callsign from users u left join users i on u.invited_by_id=i.id " +
-                "where (?='' or u.username like concat('%',?,'%') or u.callsign like concat('%',?,'%')) " +
-                        "and u.username not like '已删除用户%' and (?='' or u.role=?) and (?=-1 or u.disabled=?) order by u.id desc",
-                q, q, q, r, r, d, d));
+                        filter + " order by u.id desc limit ? offset ?",
+                q, q, q, r, r, d, d, formal, size, (current - 1) * size);
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("items", items); result.put("total", total); result.put("page", current); result.put("pageSize", size);
+        return ApiResponse.ok(result);
     }
 
     @GetMapping("/users/non-formal/options")
     public ApiResponse<List<Map<String, Object>>> nonFormalUsers() {
         return ApiResponse.ok(Rows.list(jdbc, "select id,username,callsign from users where disabled=0 and is_regular_member=0 order by id desc"));
+    }
+
+    @GetMapping("/users/options")
+    public ApiResponse<List<Map<String, Object>>> activeUserOptions() {
+        return ApiResponse.ok(Rows.list(jdbc, "select id,username,coalesce(nullif(trim(callsign),''),username) callsign,is_regular_member from users where disabled=0 and username not like '已删除用户%' order by is_regular_member desc,callsign"));
     }
 
     @GetMapping("/users/formal/options")
@@ -54,8 +71,10 @@ public class UserAdminController {
     @PutMapping("/users/{id}")
     public ApiResponse<Void> updateUser(@PathVariable int id, @RequestBody Map<String, Object> body, HttpServletRequest req) {
         auth.require(req, "user:update");
+        String callsign = body.get("callsign") == null ? "" : String.valueOf(body.get("callsign")).trim();
+        if (callsign.isEmpty()) callsign = Rows.one(jdbc, "select username from users where id=?", id).get("username").toString();
         jdbc.update("update users set callsign=?, role=?, disabled=?, is_regular_member=? where id=?",
-                body.get("callsign"), body.get("role"), bool(body.get("disabled")), bool(body.get("is_regular_member")), id);
+                callsign, body.get("role"), bool(body.get("disabled")), bool(body.get("is_regular_member")), id);
         return ApiResponse.ok(null);
     }
 
